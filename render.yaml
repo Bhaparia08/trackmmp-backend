@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: trackmmp-backend
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_PATH
+        value: /data/tracking.db
+      - key: JWT_SECRET
+        generateValue: true
+    disk:
+      name: trackmmp-data
+      mountPath: /data
+      sizeGB: 1

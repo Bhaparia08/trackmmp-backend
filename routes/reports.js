@@ -1,0 +1,134 @@
+const express = require('express');
+const db = require('../db/init');
+const { requireAuth } = require('../middleware/auth');
+
+const router = express.Router();
+router.use(requireAuth);
+
+function dateFilter(from, to) {
+  const conditions = [];
+  const values = [];
+  if (from) { conditions.push('date >= ?'); values.push(from); }
+  if (to) { conditions.push('date <= ?'); values.push(to); }
+  return { conditions, values };
+}
+
+// GET /api/reports/summary
+router.get('/summary', (req, res) => {
+  const { from, to, campaign_id, publisher_id } = req.query;
+  const { conditions, values } = dateFilter(from, to);
+  conditions.push('user_id = ?'); values.push(req.user.id);
+  if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
+  if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
+
+  const where = conditions.join(' AND ');
+  const row = db.prepare(`SELECT
+    SUM(clicks) AS clicks, SUM(installs) AS installs,
+    SUM(leads) AS leads, SUM(conversions) AS conversions,
+    ROUND(SUM(revenue),2) AS revenue
+    FROM daily_stats WHERE ${where}`).get(...values);
+
+  const total_clicks = row.clicks || 0;
+  const total_installs = row.installs || 0;
+  const cr = total_clicks > 0 ? ((total_installs / total_clicks) * 100).toFixed(2) : '0.00';
+
+  res.json({ ...row, conversion_rate: cr + '%' });
+});
+
+// GET /api/reports/by-day
+router.get('/by-day', (req, res) => {
+  const { from, to, campaign_id, publisher_id } = req.query;
+  const { conditions, values } = dateFilter(from, to);
+  conditions.push('user_id = ?'); values.push(req.user.id);
+  if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
+  if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
+
+  const rows = db.prepare(`SELECT date, SUM(clicks) AS clicks, SUM(installs) AS installs,
+    SUM(leads) AS leads, ROUND(SUM(revenue),2) AS revenue
+    FROM daily_stats WHERE ${conditions.join(' AND ')}
+    GROUP BY date ORDER BY date ASC`).all(...values);
+  res.json(rows);
+});
+
+// GET /api/reports/by-campaign
+router.get('/by-campaign', (req, res) => {
+  const { from, to } = req.query;
+  const { conditions, values } = dateFilter(from, to);
+  conditions.push('ds.user_id = ?'); values.push(req.user.id);
+
+  const rows = db.prepare(`SELECT c.name AS campaign, c.id AS campaign_id,
+    SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
+    SUM(ds.leads) AS leads, ROUND(SUM(ds.revenue),2) AS revenue
+    FROM daily_stats ds
+    LEFT JOIN campaigns c ON c.id = ds.campaign_id
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY ds.campaign_id ORDER BY revenue DESC`).all(...values);
+  res.json(rows);
+});
+
+// GET /api/reports/by-publisher
+router.get('/by-publisher', (req, res) => {
+  const { from, to } = req.query;
+  const { conditions, values } = dateFilter(from, to);
+  conditions.push('ds.user_id = ?'); values.push(req.user.id);
+
+  const rows = db.prepare(`SELECT p.name AS publisher, p.id AS publisher_id,
+    SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
+    SUM(ds.leads) AS leads, ROUND(SUM(ds.revenue),2) AS revenue
+    FROM daily_stats ds
+    LEFT JOIN publishers p ON p.id = ds.publisher_id
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY ds.publisher_id ORDER BY revenue DESC`).all(...values);
+  res.json(rows);
+});
+
+// GET /api/reports/by-country
+router.get('/by-country', (req, res) => {
+  const { from, to } = req.query;
+  const values = [req.user.id];
+  const dateC = [];
+  if (from) { dateC.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { dateC.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
+  const extra = dateC.length ? ' AND ' + dateC.join(' AND ') : '';
+
+  const rows = db.prepare(`SELECT country, COUNT(*) AS clicks,
+    SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installs
+    FROM clicks WHERE user_id = ?${extra}
+    GROUP BY country ORDER BY clicks DESC LIMIT 50`).all(...values);
+  res.json(rows);
+});
+
+// GET /api/reports/by-device
+router.get('/by-device', (req, res) => {
+  const { from, to } = req.query;
+  const values = [req.user.id];
+  const dateC = [];
+  if (from) { dateC.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { dateC.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
+  const extra = dateC.length ? ' AND ' + dateC.join(' AND ') : '';
+
+  const rows = db.prepare(`SELECT device_type, os, platform, COUNT(*) AS clicks,
+    SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installs
+    FROM clicks WHERE user_id = ?${extra}
+    GROUP BY device_type, os ORDER BY clicks DESC`).all(...values);
+  res.json(rows);
+});
+
+// GET /api/reports/by-event
+router.get('/by-event', (req, res) => {
+  const { from, to, campaign_id } = req.query;
+  const values = [req.user.id];
+  const extra = [];
+  if (from) { extra.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { extra.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
+  if (campaign_id) { extra.push('campaign_id = ?'); values.push(campaign_id); }
+  const where = extra.length ? ' AND ' + extra.join(' AND ') : '';
+
+  const rows = db.prepare(`SELECT event_type, event_name, COUNT(*) AS count,
+    SUM(revenue) AS revenue FROM postbacks
+    WHERE user_id = ? AND status = 'attributed'${where}
+    GROUP BY event_type, event_name ORDER BY count DESC`).all(...values);
+  res.json(rows);
+});
+
+module.exports = router;
