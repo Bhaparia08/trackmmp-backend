@@ -1,19 +1,15 @@
 services:
   - type: web
-    name: trackmmp-backend
+    name: trackmmp
     runtime: node
-    buildCommand: npm install
+    buildCommand: npm install && npm rebuild better-sqlite3
     startCommand: node server.js
     plan: free
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 10000
       - key: DB_PATH
         value: /data/tracking.db
-      - key: JWT_SECRET
-        generateValue: true
     disk:
       name: trackmmp-data
       mountPath: /data
