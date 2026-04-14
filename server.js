@@ -76,7 +76,9 @@ app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
 // ── In production, serve the built React frontend from Express ────────────────
 // This means NO separate web server (Nginx/LiteSpeed) is needed for the SPA.
 // The backend serves everything on one port, safe alongside Apogeemobi.com.
-const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+const frontendDist = fs.existsSync(path.join(__dirname, 'frontend', 'dist'))
+  ? path.join(__dirname, 'frontend', 'dist')
+  : path.join(__dirname, '..', 'frontend', 'dist');
 if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   // All unmatched routes → React SPA (client-side routing)
