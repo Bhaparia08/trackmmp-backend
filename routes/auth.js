@@ -15,11 +15,16 @@ function signToken(user) {
   );
 }
 
-// POST /api/auth/register  (admin self-registration — first user gets admin role)
+// POST /api/auth/register  (admin registration — restricted to integration@apogeemobi.com only)
+const ADMIN_EMAIL = 'integration@apogeemobi.com';
 router.post('/register', async (req, res, next) => {
   try {
     const { email, password, name, company_name } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'email, password and name are required' });
+
+    if (email.toLowerCase() !== ADMIN_EMAIL) {
+      return res.status(403).json({ error: 'Admin registration is not open. Use the Advertiser or Publisher signup.' });
+    }
 
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) return res.status(409).json({ error: 'Email already registered' });
