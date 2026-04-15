@@ -85,6 +85,16 @@ const migrations = [
     status        TEXT    NOT NULL DEFAULT 'active',
     created_at    INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
+
+  // Password reset tokens
+  `CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token      TEXT    NOT NULL UNIQUE,
+    expires_at INTEGER NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
 ];
 
 const IGNORABLE = [
