@@ -1,4 +1,13 @@
 require('dotenv').config();
+
+// Global crash handlers — prevent silent process exits
+process.on('uncaughtException', err => {
+  console.error('[uncaughtException]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -120,12 +129,16 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Apogeemobi TrackMMP running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
 
-  // Keep-alive self-ping every 4 minutes so Render free tier never sleeps
-  if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+  // Keep-alive ping every 4 minutes — uses custom domain so Render doesn't detect it as self-ping
+  if (process.env.NODE_ENV === 'production') {
     const fetch = require('node-fetch');
-    const pingUrl = `${process.env.RENDER_EXTERNAL_URL}/health`;
+    // Prefer custom domain (Render can't block external domain pings); fall back to internal URL
+    const pingUrl = process.env.KEEPALIVE_URL
+      || 'https://track.apogeemobi.com/health';
     setInterval(() => {
-      fetch(pingUrl).catch(() => {});
+      fetch(pingUrl, { headers: { 'User-Agent': 'ApogeeMobiKeepAlive/1.0' } })
+        .then(r => r.ok ? null : console.warn(`[keepalive] ${r.status}`))
+        .catch(e => console.warn('[keepalive] fetch error:', e.message));
     }, 4 * 60 * 1000); // every 4 minutes
     console.log(`Keep-alive pinging ${pingUrl} every 4 minutes`);
   }
