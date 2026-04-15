@@ -17,6 +17,8 @@ function campaignFilter(user) {
 
 router.get('/', (req, res) => {
   const { clause, params } = campaignFilter(req.user);
+  const { include_archived } = req.query;
+  const archivedClause = include_archived === '1' ? '' : " AND c.status != 'archived'";
   const rows = db.prepare(`
     SELECT c.*,
       COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id), 0) AS total_clicks,
@@ -26,7 +28,7 @@ router.get('/', (req, res) => {
       u.email AS advertiser_email
     FROM campaigns c
     LEFT JOIN users u ON u.id = c.advertiser_id
-    WHERE ${clause} ORDER BY c.created_at DESC
+    WHERE ${clause}${archivedClause} ORDER BY c.created_at DESC
   `).all(...params);
   res.json(rows);
 });

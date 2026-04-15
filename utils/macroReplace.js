@@ -36,7 +36,7 @@ function macroReplace(url, data) {
     '{c}':                  data.campaign_name || '',
     '{campaign_name}':      data.campaign_name || '',
     '{af_c_id}':            String(data.af_c_id || ''),
-    '{campaign_id}':        String(data.af_c_id || ''),
+    '{campaign_id}':        String(data.campaign_id || data.af_c_id || ''),
     '{af_siteid}':          data.af_siteid || '',
     '{site_id}':            data.af_siteid || '',
     '{pid}':                data.pid || '',

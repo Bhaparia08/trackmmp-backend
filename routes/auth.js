@@ -94,12 +94,16 @@ router.post('/register/publisher', async (req, res, next) => {
 
     const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
 
-    // Auto-create a publisher record linked to this user
+    // Auto-create a publisher record linked to this user.
+    // Owned by the first admin account — dynamically resolved so it works even if
+    // the admin was not the very first row inserted.
     const { nanoid } = require('nanoid');
     const pub_token = nanoid(10);
+    const adminRow = db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get();
+    const adminUserId = adminRow?.id || 1;
     db.prepare(
       'INSERT INTO publishers (user_id, publisher_user_id, name, email, pub_token) VALUES (?, ?, ?, ?, ?)'
-    ).run(1, result.lastInsertRowid, name, email, pub_token); // user_id=1 (admin owns it)
+    ).run(adminUserId, result.lastInsertRowid, name, email, pub_token);
 
     res.status(201).json({ token: signToken(user), user });
   } catch (err) { next(err); }

@@ -27,11 +27,16 @@ router.get('/', (req, res, next) => {
             event === 'install' ? 'installed' : 'converted', cid
           );
 
-          db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, leads)
+          // Resolve campaign's app_id for accurate per-app stats (don't default to 0)
+          const campaign = db.prepare('SELECT app_id FROM campaigns WHERE id = ?').get(click.campaign_id);
+          const appId = campaign?.app_id || 0;
+
+          const statsCol = event === 'install' ? 'installs' : 'leads';
+          db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, ${statsCol})
             VALUES (?,?,?,?,date('now'),1)
             ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
-            DO UPDATE SET leads = leads + 1`)
-            .run(click.user_id, 0, click.campaign_id, click.publisher_id||0);
+            DO UPDATE SET ${statsCol} = ${statsCol} + 1`)
+            .run(click.user_id, appId, click.campaign_id, click.publisher_id||0);
         }
       }
     }
