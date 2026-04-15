@@ -104,6 +104,31 @@ function toOurMacros(url, platform) {
       ['{af_sub5}',              '{sub5}'],
       ['{advertising_id}',       '{advertising_id}'],
     ],
+    swaarm: [
+      // Swaarm click-ID variations
+      ['{pub_click_id}',    '{click_id}'],
+      ['[pub_click_id]',    '{click_id}'],
+      ['{clickid}',         '{click_id}'],
+      ['[clickid]',         '{click_id}'],
+      ['{click_id}',        '{click_id}'],    // already our format
+      ['[click_id]',        '{click_id}'],
+      // Publisher ID
+      ['{pub_id}',          '{pid}'],
+      ['[pub_id]',          '{pid}'],
+      ['{publisher_id}',    '{pid}'],
+      ['[publisher_id]',    '{pid}'],
+      // Sub IDs
+      ['{sub_id}',          '{sub1}'],
+      ['{sub1}',            '{sub1}'],
+      ['{sub2}',            '{sub2}'],
+      ['{sub3}',            '{sub3}'],
+      ['[sub1]',            '{sub1}'],
+      ['[sub2]',            '{sub2}'],
+      ['[sub3]',            '{sub3}'],
+      // Offer / campaign ID
+      ['{offer_id}',        '{campaign_id}'],
+      ['[offer_id]',        '{campaign_id}'],
+    ],
   };
 
   const pairs = maps[platform] || [];
@@ -335,7 +360,118 @@ async function fetchAppsFlyer(cred) {
   });
 }
 
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact };
+async function fetchSwaarm(cred) {
+  // network_id = subdomain, e.g. "pokkt" from partner.pokkt.swaarm-clients.com
+  const rawNid    = (cred.network_id || '').trim().toLowerCase();
+  // Accept full domain ("partner.pokkt.swaarm-clients.com") or just "pokkt"
+  const networkId = rawNid.replace(/^partner\./, '').split('.')[0];
+  if (!networkId) throw new Error('Swaarm: network_id (domain subdomain) is required');
+
+  const gqlBase = `https://partner.${networkId}.swaarm-clients.com/graphql`;
+
+  // ── Step 1: login mutation → bearer token ──────────────────────────────────
+  const loginResp = await fetch(gqlBase, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      query: `mutation Login($email: String!, $password: String!) {
+        login(email: $email, password: $password) {
+          token
+          validUntil
+        }
+      }`,
+      variables: { email: cred.api_key, password: cred.api_secret },
+    }),
+  });
+  if (!loginResp.ok) {
+    const txt = await loginResp.text().catch(() => '');
+    throw new Error(`Swaarm login HTTP ${loginResp.status}: ${txt.slice(0, 200)}`);
+  }
+  const loginJson = await loginResp.json();
+  const token = loginJson?.data?.login?.token;
+  if (!token) {
+    const msg = loginJson?.errors?.[0]?.message
+      || loginJson?.data?.login?.errorMessage
+      || JSON.stringify(loginJson).slice(0, 300);
+    throw new Error(`Swaarm authentication failed: ${msg}`);
+  }
+
+  // ── Step 2: query available offers ────────────────────────────────────────
+  const offersResp = await fetch(gqlBase, {
+    method:  'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      query: `query {
+        offers {
+          id
+          name
+          description
+          status
+          payout { amount currency type }
+          trackingLink
+          previewUrl
+          countries { code }
+          advertiser { name }
+        }
+      }`,
+    }),
+  });
+  if (!offersResp.ok) {
+    const txt = await offersResp.text().catch(() => '');
+    throw new Error(`Swaarm offers HTTP ${offersResp.status}: ${txt.slice(0, 200)}`);
+  }
+  const offersJson = await offersResp.json();
+
+  // Normalise: different Swaarm versions surface offers under different query names
+  const offerList = offersJson?.data?.offers
+    || offersJson?.data?.availableOffers
+    || offersJson?.data?.publisherOffers
+    || [];
+
+  if (!Array.isArray(offerList)) {
+    const gqlErr = offersJson?.errors?.[0]?.message || JSON.stringify(offersJson).slice(0, 300);
+    throw new Error(`Swaarm: unexpected response — ${gqlErr}`);
+  }
+  if (offersJson?.errors?.length && offerList.length === 0) {
+    throw new Error(`Swaarm API error: ${offersJson.errors[0]?.message}`);
+  }
+
+  return offerList.map(o => {
+    // Build click tracking URL.
+    // Swaarm returns a pre-built trackingLink — we translate any platform macros
+    // to our format, then append pub_click_id if our {click_id} macro isn't there yet.
+    let rawTracking = o.trackingLink || o.tracking_link || '';
+    rawTracking     = toOurMacros(rawTracking, 'swaarm');
+    if (rawTracking && !rawTracking.includes('{click_id}')) {
+      rawTracking += (rawTracking.includes('?') ? '&' : '?')
+        + 'pub_click_id={click_id}&sub1={sub1}&sub2={sub2}&sub3={sub3}&pub_id={pid}';
+    }
+
+    const payout = o.payout || {};
+    return {
+      external_id:       String(o.id || ''),
+      name:              o.name || 'Unnamed',
+      description:       o.description || '',
+      payout:            parseFloat(payout.amount || 0),
+      payout_type:       normPayoutType(payout.type || 'cpa'),
+      currency:          payout.currency || 'USD',
+      status:            String(o.status || '').toLowerCase() === 'active' ? 'active' : 'paused',
+      tracking_url:      rawTracking,
+      preview_url:       o.previewUrl || o.preview_url || '',
+      allowed_countries: Array.isArray(o.countries)
+                           ? o.countries.map(c => c.code || c).join(',')
+                           : '',
+      advertiser_name:   o.advertiser?.name || '',
+      categories:        '',
+      raw: o,
+    };
+  });
+}
+
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {
