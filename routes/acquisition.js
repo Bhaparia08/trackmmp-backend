@@ -35,8 +35,9 @@ function normalise(raw) {
     event_name: raw.goal_value || raw.event_name || null,
     // goal_value present → event type is 'custom'; otherwise default install
     event: raw.goal_value ? (raw.event || 'custom') : (raw.event || 'install'),
-    // click_id can come as click_id (Trackier) or clickid (AF-style)
-    click_id: raw.click_id || raw.clickid || null,
+    // click_id / transaction_id (our platform ID) or clickid (AF-style publisher ID)
+    click_id: raw.click_id || raw.transaction_id || raw.clickid || null,
+    transaction_id: raw.transaction_id || raw.click_id || null,
     clickid: raw.clickid || raw.click_id || null,
   };
 }

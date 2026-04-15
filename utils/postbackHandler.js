@@ -43,13 +43,19 @@ function handlePostback(params, ip, io) {
     security_token,
   } = params;
 
-  const eventType   = event || 'install';
-  const pubClickId  = rawPublisherCid || irclickid || aff_click_id || transaction_id || null;
-  const deviceId    = advertising_id || gps_adid || idfa || null;
+  const eventType = event || 'install';
+  const deviceId  = advertising_id || gps_adid || idfa || null;
+
+  // transaction_id is our primary click ID (advertiser passes it back after receiving
+  // it via {click_id} macro in the destination URL). Treat it the same as click_id.
+  const primaryClickId = rawClickId || transaction_id || null;
+  const pubClickId     = rawPublisherCid || irclickid || aff_click_id || null;
 
   // ── Attribution ────────────────────────────────────────────────────────────
+  // 1. Try our platform click_id (or transaction_id which is the same thing)
+  // 2. Fall back to publisher's own click_id (secondary key)
   let click = null;
-  if (rawClickId) click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(rawClickId);
+  if (primaryClickId) click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(primaryClickId);
   if (!click && pubClickId) click = db.prepare('SELECT * FROM clicks WHERE publisher_click_id = ?').get(pubClickId);
 
   // Validate security_token against users.postback_token (account-level token)

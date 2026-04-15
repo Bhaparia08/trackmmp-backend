@@ -172,8 +172,8 @@ router.get('/:id/tracking-url', (req, res) => {
 
   // Single acquisition postback URLs (account-level token, works for ALL campaigns)
   const acquisition = {
-    install: `${base}/acquisition?click_id={click_id}&security_token=${postbackToken}&idfa={idfa}&gaid={gaid}`,
-    event:   `${base}/acquisition?click_id={click_id}&security_token=${postbackToken}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
+    install: `${base}/acquisition?transaction_id={click_id}&security_token=${postbackToken}&idfa={idfa}&gaid={gaid}`,
+    event:   `${base}/acquisition?transaction_id={click_id}&security_token=${postbackToken}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
   };
 
   res.json({ urls, acquisition, postback_macros, campaign: { id: c.id, name: c.name, token: c.campaign_token }, postback_token: postbackToken });
