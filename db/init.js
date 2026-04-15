@@ -134,4 +134,30 @@ const missingUsers = db.prepare("SELECT id FROM users WHERE postback_token IS NU
 const fillUser = db.prepare("UPDATE users SET postback_token = ? WHERE id = ?");
 for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
 
+// ── Auto-seed admin account ───────────────────────────────────────────────────
+// If SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set AND no admin
+// exists yet, create the admin account automatically on first start.
+// Safe to leave these env vars set permanently — it only runs when no admin exists.
+if (process.env.SEED_ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD) {
+  const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+  if (!existingAdmin) {
+    try {
+      const bcrypt = require('bcrypt');
+      const hash = bcrypt.hashSync(process.env.SEED_ADMIN_PASSWORD, 12);
+      const token = nanoid20hex();
+      db.prepare(
+        `INSERT INTO users (email, password, name, role, status, postback_token) VALUES (?, ?, ?, 'admin', 'active', ?)`
+      ).run(
+        process.env.SEED_ADMIN_EMAIL,
+        hash,
+        process.env.SEED_ADMIN_NAME || 'Admin',
+        token
+      );
+      console.log(`[seed] Admin account created for ${process.env.SEED_ADMIN_EMAIL}`);
+    } catch (e) {
+      console.error('[seed] Failed to create admin:', e.message);
+    }
+  }
+}
+
 module.exports = db;
