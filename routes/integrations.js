@@ -607,6 +607,7 @@ router.post('/import', (req, res, next) => {
       publisher_payout_pct,    // e.g. 80 → pub gets 80% of advertiser payout
       publisher_payout: fixedPubPayout, // fixed amount override (used when pct is not set)
       publisher_payout_type,   // payout type override (defaults to same as offer payout_type)
+      approved_publishers = [], // publisher IDs to pre-approve on every imported campaign
     } = req.body;
     if (!Array.isArray(offers) || offers.length === 0)
       return res.status(400).json({ error: 'offers array is required' });
@@ -631,6 +632,18 @@ router.post('/import', (req, res, next) => {
       : null;
 
     const resolvedVisibility = ['open','approval_required','private'].includes(visibility) ? visibility : 'open';
+
+    // Helper: pre-approve publishers for a campaign
+    const upsertApproval = db.prepare(`
+      INSERT INTO campaign_access_requests (campaign_id, publisher_id, user_id, status, reviewed_by, reviewed_at)
+      VALUES (?, ?, ?, 'approved', ?, unixepoch())
+      ON CONFLICT(campaign_id, publisher_id) DO UPDATE SET
+        status = 'approved', reviewed_by = excluded.reviewed_by, reviewed_at = unixepoch()
+    `);
+    function applyApprovedPublishers(campaignId) {
+      if (!Array.isArray(approved_publishers) || approved_publishers.length === 0) return;
+      for (const pubId of approved_publishers) upsertApproval.run(campaignId, pubId, req.user.id, req.user.id);
+    }
 
     const insertCampaign = db.prepare(`
       INSERT INTO campaigns
@@ -695,6 +708,7 @@ router.post('/import', (req, res, next) => {
             exists.id,
           );
           const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(exists.id);
+          applyApprovedPublishers(exists.id);
           imported.push({ id: exists.id, name: offer.name, campaign_token: campaign.campaign_token, campaign, reactivated: true });
         } else {
           // Active/paused campaign — skip to avoid duplicates
@@ -725,6 +739,7 @@ router.post('/import', (req, res, next) => {
         offer.external_id || null,
       );
       const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid);
+      applyApprovedPublishers(result.lastInsertRowid);
       imported.push({ id: result.lastInsertRowid, name: offer.name, campaign_token: token, campaign });
     }
 

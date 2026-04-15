@@ -31,6 +31,18 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
+// Helper: upsert approved access records for a list of publisher IDs
+function upsertApprovedPublishers(campaignId, publisherIds, userId) {
+  if (!Array.isArray(publisherIds) || publisherIds.length === 0) return;
+  const upsert = db.prepare(`
+    INSERT INTO campaign_access_requests (campaign_id, publisher_id, user_id, status, reviewed_by, reviewed_at)
+    VALUES (?, ?, ?, 'approved', ?, unixepoch())
+    ON CONFLICT(campaign_id, publisher_id) DO UPDATE SET
+      status = 'approved', reviewed_by = excluded.reviewed_by, reviewed_at = unixepoch()
+  `);
+  for (const pubId of publisherIds) upsert.run(campaignId, pubId, userId, userId);
+}
+
 router.post('/', (req, res, next) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
@@ -39,7 +51,7 @@ router.post('/', (req, res, next) => {
             publisher_payout = 0, publisher_payout_type = 'cpi',
             destination_url = '', preview_url = '', postback_url = '', cap_daily = 0, cap_total = 0,
             allowed_countries = '', click_lookback_days = 7, is_retargeting = 0,
-            visibility = 'open' } = req.body;
+            visibility = 'open', approved_publishers = [] } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const result = db.prepare(`
@@ -54,7 +66,14 @@ router.post('/', (req, res, next) => {
            destination_url, preview_url, postback_url, cap_daily, cap_total,
            allowed_countries, click_lookback_days, is_retargeting ? 1 : 0, visibility);
 
-    res.status(201).json(db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid));
+    const campaignId = result.lastInsertRowid;
+    upsertApprovedPublishers(campaignId, approved_publishers, req.user.id);
+
+    const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
+    const approvedPubs = db.prepare(
+      "SELECT publisher_id FROM campaign_access_requests WHERE campaign_id = ? AND status = 'approved'"
+    ).all(campaignId).map(r => r.publisher_id);
+    res.status(201).json({ ...campaign, approved_publishers: approvedPubs });
   } catch (err) { next(err); }
 });
 
@@ -82,7 +101,11 @@ router.get('/:id', (req, res) => {
     WHERE cl.campaign_id = ?
   `).get(req.params.id);
 
-  res.json({ ...c, stats });
+  const approvedPubs = db.prepare(
+    "SELECT publisher_id FROM campaign_access_requests WHERE campaign_id = ? AND status = 'approved'"
+  ).all(req.params.id).map(r => r.publisher_id);
+
+  res.json({ ...c, stats, approved_publishers: approvedPubs });
 });
 
 router.put('/:id', (req, res, next) => {
@@ -95,7 +118,7 @@ router.put('/:id', (req, res, next) => {
             publisher_payout, publisher_payout_type,
             destination_url, preview_url, postback_url,
             status, cap_daily, cap_total, allowed_countries, click_lookback_days,
-            is_retargeting, visibility } = req.body;
+            is_retargeting, visibility, approved_publishers } = req.body;
 
     db.prepare(`UPDATE campaigns SET
       name=COALESCE(?,name), advertiser_name=COALESCE(?,advertiser_name),
@@ -114,7 +137,15 @@ router.put('/:id', (req, res, next) => {
            click_lookback_days??null, is_retargeting!=null?+is_retargeting:null,
            visibility||null, c.id);
 
-    res.json(db.prepare('SELECT * FROM campaigns WHERE id = ?').get(c.id));
+    if (Array.isArray(approved_publishers)) {
+      upsertApprovedPublishers(c.id, approved_publishers, req.user.id);
+    }
+
+    const approvedPubs = db.prepare(
+      "SELECT publisher_id FROM campaign_access_requests WHERE campaign_id = ? AND status = 'approved'"
+    ).all(c.id).map(r => r.publisher_id);
+
+    res.json({ ...db.prepare('SELECT * FROM campaigns WHERE id = ?').get(c.id), approved_publishers: approvedPubs });
   } catch (err) { next(err); }
 });
 
