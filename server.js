@@ -54,7 +54,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/track', require('./routes/track'));
 app.use('/pixel.gif', require('./routes/pixel'));
 app.use('/pb', require('./routes/postbacks'));
-app.use('/postbacks', require('./routes/postbacks')); // friendly alias
+app.use('/postbacks', require('./routes/postbacks'));   // friendly alias
+app.use('/acquisition', require('./routes/acquisition')); // Trackier-compatible
 
 // Adjust-compatible S2S endpoints (no auth — token validated per-request)
 app.use('/adjust', require('./routes/adjust'));

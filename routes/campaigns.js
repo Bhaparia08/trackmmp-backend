@@ -1,7 +1,9 @@
 const express = require('express');
 const db = require('../db/init');
 const { requireAuth } = require('../middleware/auth');
-const { nanoid12 } = require('../utils/clickId');
+const { nanoid12, nanoid16 } = require('../utils/clickId');
+const { customAlphabet } = require('nanoid');
+const nanoid20hex = customAlphabet('0123456789abcdef', 20);
 
 const router = express.Router();
 router.use(requireAuth);
@@ -36,10 +38,11 @@ router.post('/', (req, res, next) => {
 
     const result = db.prepare(`
       INSERT INTO campaigns (user_id, advertiser_id, app_id, name, advertiser_name, campaign_token,
-        payout, payout_type, destination_url, postback_url, cap_daily, cap_total,
+        security_token, payout, payout_type, destination_url, postback_url, cap_daily, cap_total,
         allowed_countries, click_lookback_days, is_retargeting)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
+           nanoid20hex(),
            payout, payout_type, destination_url, postback_url, cap_daily, cap_total,
            allowed_countries, click_lookback_days, is_retargeting ? 1 : 0);
 
@@ -144,7 +147,13 @@ router.get('/:id/tracking-url', (req, res) => {
     { macro: '{ip}',                 desc: 'User IP address' },
   ];
 
-  res.json({ urls, postback_macros, campaign: { id: c.id, name: c.name, token: c.campaign_token } });
+  // Trackier-compatible acquisition postback URLs
+  const acquisition = {
+    install: `${base}/acquisition?click_id={click_id}&security_token=${c.security_token}&idfa={idfa}&gaid={gaid}`,
+    event:   `${base}/acquisition?click_id={click_id}&security_token=${c.security_token}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
+  };
+
+  res.json({ urls, acquisition, postback_macros, campaign: { id: c.id, name: c.name, token: c.campaign_token, security_token: c.security_token } });
 });
 
 module.exports = router;

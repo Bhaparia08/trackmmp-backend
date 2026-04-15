@@ -50,6 +50,8 @@ const migrations = [
   // postbacks: goal tracking
   `ALTER TABLE postbacks ADD COLUMN goal_id INTEGER REFERENCES campaign_goals(id)`,
   `ALTER TABLE postbacks ADD COLUMN goal_name TEXT`,
+  // campaigns: security_token for Trackier-compatible /acquisition postbacks
+  `ALTER TABLE campaigns ADD COLUMN security_token TEXT`,
 ];
 
 for (const sql of migrations) {
@@ -58,5 +60,12 @@ for (const sql of migrations) {
     if (!e.message.includes('duplicate column')) throw e;
   }
 }
+
+// Backfill security_token for any campaigns that don't have one yet
+const { customAlphabet } = require('nanoid');
+const nanoid20 = customAlphabet('0123456789abcdef', 20);
+const missing = db.prepare("SELECT id FROM campaigns WHERE security_token IS NULL OR security_token = ''").all();
+const fill = db.prepare("UPDATE campaigns SET security_token = ? WHERE id = ?");
+for (const row of missing) fill.run(nanoid20(), row.id);
 
 module.exports = db;
