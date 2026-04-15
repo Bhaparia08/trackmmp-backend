@@ -22,7 +22,7 @@ router.get('/', (req, res) => {
       COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id), 0) AS total_clicks,
       COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id AND status = 'installed'), 0) AS total_installs,
       COALESCE((SELECT SUM(revenue) FROM postbacks WHERE campaign_id = c.id AND status = 'attributed'), 0) AS total_revenue,
-      COALESCE(u.name, c.advertiser_name) AS advertiser_display,
+      COALESCE(u.name, NULLIF(c.advertiser_name,'')) AS advertiser_display,
       u.email AS advertiser_email
     FROM campaigns c
     LEFT JOIN users u ON u.id = c.advertiser_id
@@ -58,7 +58,7 @@ router.get('/:id', (req, res) => {
   const { clause, params } = campaignFilter(req.user);
   const c = db.prepare(`
     SELECT c.*,
-      COALESCE(u.name, c.advertiser_name) AS advertiser_display,
+      COALESCE(u.name, NULLIF(c.advertiser_name,'')) AS advertiser_display,
       u.email AS advertiser_email,
       u.company_name AS advertiser_company
     FROM campaigns c
