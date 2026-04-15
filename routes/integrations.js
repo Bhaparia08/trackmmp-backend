@@ -682,9 +682,9 @@ router.post('/import', (req, res, next) => {
           // Re-activate the archived campaign and refresh its details
           updateCampaign.run(
             advName,
-            advPayout || null,
+            advPayout != null ? advPayout : null,
             offer.payout_type || null,
-            pubPayout || null,
+            pubPayout != null ? pubPayout : null,
             pubPayoutType || null,
             destUrl,
             prevUrl,
