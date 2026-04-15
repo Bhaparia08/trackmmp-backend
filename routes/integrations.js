@@ -600,7 +600,14 @@ router.post('/set-campaign-status', (req, res, next) => {
 /* ─── POST /api/integrations/import ─────────────────────────────────────────── */
 router.post('/import', (req, res, next) => {
   try {
-    const { offers, advertiser_id, credential_id, advertiser_name: batchAdvName } = req.body;
+    const {
+      offers, advertiser_id, credential_id, advertiser_name: batchAdvName,
+      // Visibility + publisher payout settings applied to every imported offer
+      visibility = 'open',
+      publisher_payout_pct,    // e.g. 80 → pub gets 80% of advertiser payout
+      publisher_payout: fixedPubPayout, // fixed amount override (used when pct is not set)
+      publisher_payout_type,   // payout type override (defaults to same as offer payout_type)
+    } = req.body;
     if (!Array.isArray(offers) || offers.length === 0)
       return res.status(400).json({ error: 'offers array is required' });
 
@@ -623,12 +630,15 @@ router.post('/import', (req, res, next) => {
       ? cred.platform.charAt(0).toUpperCase() + cred.platform.slice(1)
       : null;
 
+    const resolvedVisibility = ['open','approval_required','private'].includes(visibility) ? visibility : 'open';
+
     const insertCampaign = db.prepare(`
       INSERT INTO campaigns
         (user_id, advertiser_id, name, advertiser_name, campaign_token, security_token,
-         payout, payout_type, destination_url, preview_url, allowed_countries, status,
+         payout, payout_type, publisher_payout, publisher_payout_type,
+         destination_url, preview_url, allowed_countries, visibility, status,
          source_credential_id, external_offer_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `);
 
     const updateCampaign = db.prepare(`
@@ -637,9 +647,12 @@ router.post('/import', (req, res, next) => {
         advertiser_name = COALESCE(?, advertiser_name),
         payout = COALESCE(?, payout),
         payout_type = COALESCE(?, payout_type),
+        publisher_payout = COALESCE(?, publisher_payout),
+        publisher_payout_type = COALESCE(?, publisher_payout_type),
         destination_url = COALESCE(?, destination_url),
         preview_url = COALESCE(?, preview_url),
         allowed_countries = COALESCE(?, allowed_countries),
+        visibility = COALESCE(?, visibility),
         source_credential_id = COALESCE(?, source_credential_id),
         external_offer_id = COALESCE(?, external_offer_id),
         updated_at = unixepoch()
@@ -650,6 +663,16 @@ router.post('/import', (req, res, next) => {
       const advName = batchAdvName || offer.advertiser_name || credAdvertiserName || platformFallback || null;
       const destUrl = offer.tracking_url || null;   // tracking URL only — never fall back to preview
       const prevUrl = offer.preview_url || null;
+      const advPayout = offer.payout || 0;
+
+      // Publisher payout: percentage mode takes priority, then fixed, then 0
+      let pubPayout = 0;
+      if (publisher_payout_pct != null && publisher_payout_pct !== '') {
+        pubPayout = Math.round(advPayout * Number(publisher_payout_pct) / 100 * 100) / 100;
+      } else if (fixedPubPayout != null && fixedPubPayout !== '') {
+        pubPayout = Number(fixedPubPayout);
+      }
+      const pubPayoutType = publisher_payout_type || offer.payout_type || 'cpi';
 
       // Check if a campaign with same name already exists (active OR archived)
       const exists = db.prepare('SELECT id, status FROM campaigns WHERE name = ?').get(offer.name);
@@ -659,11 +682,14 @@ router.post('/import', (req, res, next) => {
           // Re-activate the archived campaign and refresh its details
           updateCampaign.run(
             advName,
-            offer.payout || null,
+            advPayout || null,
             offer.payout_type || null,
+            pubPayout || null,
+            pubPayoutType || null,
             destUrl,
             prevUrl,
             offer.allowed_countries || null,
+            resolvedVisibility,
             credential_id || null,
             offer.external_id || null,
             exists.id,
@@ -687,11 +713,14 @@ router.post('/import', (req, res, next) => {
         advName,
         token,
         secToken,
-        offer.payout || 0,
+        advPayout,
         offer.payout_type || 'cpi',
+        pubPayout,
+        pubPayoutType,
         destUrl,
         prevUrl || '',
         offer.allowed_countries || '',
+        resolvedVisibility,
         credential_id || null,
         offer.external_id || null,
       );
