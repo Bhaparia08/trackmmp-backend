@@ -71,6 +71,63 @@ router.get('/check/:campaign_id', (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Admin: list ALL publishers with their access status for a specific campaign
+router.get('/campaign/:campaign_id', requireRole('admin', 'account_manager'), (req, res, next) => {
+  try {
+    const campaign = db.prepare('SELECT id, user_id, visibility FROM campaigns WHERE id = ?').get(req.params.campaign_id);
+    if (!campaign || campaign.user_id !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+
+    // All publishers for this account, LEFT JOIN so we see everyone regardless of request status
+    const rows = db.prepare(`
+      SELECT p.id AS publisher_id, p.name AS publisher_name, p.pub_token, p.email,
+             r.id, r.status AS access_status, r.created_at, r.reviewed_at
+      FROM publishers p
+      LEFT JOIN campaign_access_requests r ON r.campaign_id = ? AND r.publisher_id = p.id
+      WHERE p.user_id = ?
+      ORDER BY r.status ASC, p.name ASC
+    `).all(campaign.id, req.user.id);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// Admin: directly grant access to a publisher (no request required)
+router.post('/grant', requireRole('admin', 'account_manager'), (req, res, next) => {
+  try {
+    const { campaign_id, publisher_id } = req.body;
+    if (!campaign_id || !publisher_id) return res.status(400).json({ error: 'campaign_id and publisher_id required' });
+
+    const campaign = db.prepare('SELECT id, user_id FROM campaigns WHERE id = ?').get(campaign_id);
+    if (!campaign || campaign.user_id !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+
+    // Upsert: create if not exists, or update existing to approved
+    const existing = db.prepare('SELECT id FROM campaign_access_requests WHERE campaign_id = ? AND publisher_id = ?')
+      .get(campaign_id, publisher_id);
+
+    if (existing) {
+      db.prepare("UPDATE campaign_access_requests SET status='approved', reviewed_by=?, reviewed_at=unixepoch() WHERE id=?")
+        .run(req.user.id, existing.id);
+      res.json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(existing.id));
+    } else {
+      const result = db.prepare(
+        `INSERT INTO campaign_access_requests (campaign_id, publisher_id, user_id, status, reviewed_by, reviewed_at)
+         VALUES (?, ?, ?, 'approved', ?, unixepoch())`
+      ).run(campaign_id, publisher_id, req.user.id, req.user.id);
+      res.status(201).json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(result.lastInsertRowid));
+    }
+  } catch (err) { next(err); }
+});
+
+// Admin: revoke access from a publisher
+router.put('/:id/revoke', requireRole('admin', 'account_manager'), (req, res, next) => {
+  try {
+    const row = db.prepare('SELECT r.*, c.user_id FROM campaign_access_requests r JOIN campaigns c ON c.id = r.campaign_id WHERE r.id = ?').get(req.params.id);
+    if (!row || row.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
+    db.prepare("UPDATE campaign_access_requests SET status='rejected', reviewed_by=?, reviewed_at=unixepoch() WHERE id=?")
+      .run(req.user.id, row.id);
+    res.json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(row.id));
+  } catch (err) { next(err); }
+});
+
 // Admin: list all access requests
 router.get('/requests', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
