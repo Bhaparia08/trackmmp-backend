@@ -135,6 +135,23 @@ router.post('/adv-credentials', (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PUT /api/apikeys/adv-credentials/:id — update a saved credential
+router.put('/adv-credentials/:id', (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    const row = db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ?').get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    const { label, api_key, api_secret, network_id, extra } = req.body;
+    if (!api_key) return res.status(400).json({ error: 'api_key is required' });
+    db.prepare(`
+      UPDATE advertiser_api_credentials
+      SET label = ?, api_key = ?, api_secret = ?, network_id = ?, extra = ?
+      WHERE id = ?
+    `).run(label || row.label, api_key, api_secret || null, network_id || null, extra ? JSON.stringify(extra) : null, row.id);
+    res.json(db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ?').get(row.id));
+  } catch (err) { next(err); }
+});
+
 // DELETE /api/apikeys/adv-credentials/:id
 router.delete('/adv-credentials/:id', (req, res, next) => {
   try {
