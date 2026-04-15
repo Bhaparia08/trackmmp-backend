@@ -34,20 +34,31 @@ router.get('/tracking-url/:campaign_id', (req, res) => {
   const c = db.prepare('SELECT * FROM campaigns WHERE id = ? AND status = ?').get(req.params.campaign_id, 'active');
   if (!c) return res.status(404).json({ error: 'Campaign not found' });
 
-  const base = process.env.TRACKING_DOMAIN || 'http://localhost:3001';
-  const trackingUrl = `${base}/track/click/${c.campaign_token}?pid=${pub.pub_token}&clickid={your_click_id}&af_sub1={sub1}&af_sub2={sub2}`;
+  // Use configured domain, or derive from request host, fallback to production domain
+  const base = process.env.TRACKING_DOMAIN
+    || (req.hostname !== 'localhost' ? `${req.protocol}://${req.get('host')}` : null)
+    || 'https://track.apogeemobi.com';
 
-  const postbackUrl = `${base}/pb?clickid={your_click_id}&payout=${c.payout}&event=install`;
+  // Publisher's PID is pre-filled. {CLICK_ID} is their ad network's click ID macro
+  // placeholder — they replace it with the actual macro their network provides.
+  const trackingUrl = `${base}/track/click/${c.campaign_token}`
+    + `?pid=${pub.pub_token}`
+    + `&clickid={CLICK_ID}`
+    + `&sub1={SUB1}`
+    + `&sub2={SUB2}`
+    + `&sub3={SUB3}`;
+
+  const postbackUrl = `${base}/pb`
+    + `?clickid={CLICK_ID}`
+    + `&payout=${c.payout}`
+    + `&event=install`;
 
   res.json({
-    tracking_url: trackingUrl,
-    postback_url: postbackUrl,
-    pub_token: pub.pub_token,
+    tracking_url:  trackingUrl,
+    postback_url:  postbackUrl,
+    pub_token:     pub.pub_token,
+    base_domain:   base,
     campaign: { id: c.id, name: c.name, payout: c.payout, payout_type: c.payout_type },
-    instructions: {
-      step1: `Place the tracking URL in your ad creative. Replace {your_click_id} with your own unique click ID.`,
-      step2: `Configure your ad network to fire the postback URL when a conversion occurs. Replace {your_click_id} with the same ID you used in step 1.`,
-    }
   });
 });
 
