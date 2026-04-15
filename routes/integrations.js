@@ -359,9 +359,10 @@ router.post('/fetch-offers', async (req, res, next) => {
     // ── Build importedMap: offer external_id → campaign on our platform ──────────
     // Two-pass lookup so campaigns imported before source_credential_id existed
     // (those with NULL source_credential_id) are still found via name match.
-    const autoPaused  = [];
-    const autoResumed = [];
-    const importedMap = {}; // external_offer_id → { id, status, campaign_token, name }
+    const autoPaused      = [];
+    const autoResumed     = [];
+    const trackingUpdated = [];
+    const importedMap     = {}; // external_offer_id → { id, status, campaign_token, name }
 
     try {
       // Pass 1: campaigns explicitly linked to this credential
@@ -402,13 +403,19 @@ router.post('/fetch-offers', async (req, res, next) => {
         }
       }
 
-      // ── Auto-sync: pause/resume campaigns based on platform offer status ───────
+      // ── Auto-sync: pause/resume campaigns + update tracking URLs ────────────
       const activeOfferIds = new Set(
         offers.filter(o => o.status === 'active').map(o => String(o.external_id))
       );
+      // Build a map of external_id → offer so we can get tracking_url per offer
+      const offerById = {};
+      for (const o of offers) offerById[String(o.external_id)] = o;
 
       for (const [extId, camp] of Object.entries(importedMap)) {
         const nowActive = activeOfferIds.has(extId);
+        const offer     = offerById[extId];
+
+        // Status sync
         if (!nowActive && camp.status === 'active') {
           db.prepare("UPDATE campaigns SET status='paused', updated_at=unixepoch() WHERE id=?").run(camp.id);
           importedMap[extId].status = 'paused';
@@ -418,6 +425,18 @@ router.post('/fetch-offers', async (req, res, next) => {
           importedMap[extId].status = 'active';
           autoResumed.push({ id: camp.id, name: camp.name });
         }
+
+        // Tracking URL sync: update destination_url if the platform gave us a tracking URL
+        // and it differs from what is currently stored
+        if (offer && offer.tracking_url) {
+          const existing = db.prepare('SELECT destination_url FROM campaigns WHERE id=?').get(camp.id);
+          if (existing && existing.destination_url !== offer.tracking_url) {
+            db.prepare("UPDATE campaigns SET destination_url=?, updated_at=unixepoch() WHERE id=?")
+              .run(offer.tracking_url, camp.id);
+            importedMap[extId].tracking_url = offer.tracking_url;
+            trackingUpdated.push({ id: camp.id, name: camp.name, tracking_url: offer.tracking_url });
+          }
+        }
       }
     } catch (syncErr) {
       console.warn('[sync] skipped:', syncErr.message);
@@ -425,7 +444,7 @@ router.post('/fetch-offers', async (req, res, next) => {
 
     res.json({
       offers, platform: cred.platform, label: cred.label, total: offers.length,
-      sync: { paused: autoPaused, resumed: autoResumed },
+      sync: { paused: autoPaused, resumed: autoResumed, tracking_updated: trackingUpdated },
       imported_map: importedMap,
     });
   } catch (err) {
