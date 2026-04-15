@@ -106,7 +106,14 @@ router.post('/login', async (req, res, next) => {
 
 // GET /api/auth/me
 router.get('/me', requireAuth, (req, res) => {
-  const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, created_at FROM users WHERE id = ?').get(req.user.id);
+  const user = db.prepare(`
+    SELECT u.id, u.email, u.name, u.company_name, u.role, u.plan, u.status, u.created_at,
+           am.name  AS account_manager_name,
+           am.email AS account_manager_email,
+           am.phone AS account_manager_phone
+    FROM users u
+    LEFT JOIN account_managers am ON am.id = u.account_manager_id
+    WHERE u.id = ?`).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(user);
 });
