@@ -92,4 +92,16 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`TrackMMP running on port ${PORT} (${process.env.NODE_ENV || 'development'})`));
+server.listen(PORT, () => {
+  console.log(`Apogeemobi TrackMMP running on port ${PORT} (${process.env.NODE_ENV || 'development'})`);
+
+  // Keep-alive self-ping every 4 minutes so Render free tier never sleeps
+  if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_URL) {
+    const fetch = require('node-fetch');
+    const pingUrl = `${process.env.RENDER_EXTERNAL_URL}/health`;
+    setInterval(() => {
+      fetch(pingUrl).catch(() => {});
+    }, 4 * 60 * 1000); // every 4 minutes
+    console.log(`Keep-alive pinging ${pingUrl} every 4 minutes`);
+  }
+});
