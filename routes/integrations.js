@@ -36,8 +36,13 @@ router.use(requireAuth);
  *   CityAds      : {macro}       e.g. {click_id}, {webmaster_id}
  *   AppsFlyer    : {macro}       — AF macros map directly
  */
-function toOurMacros(url, platform) {
+function toOurMacros(url, platform, options = {}) {
   if (!url) return url;
+
+  // If a fixed affiliate_id is provided (e.g. Apogeemobi's registered ID in a network),
+  // embed it directly so it is never resolved as a dynamic macro.
+  // Otherwise fall back to {pid} which track.js will substitute with the publisher token.
+  const affiliateTarget = options.affiliate_id || '{pid}';
 
   // Per-platform translation tables  [ their_macro , our_macro ]
   const maps = {
@@ -74,16 +79,20 @@ function toOurMacros(url, platform) {
       ['[ip]',              '{ip}'],
     ],
     everflow: [
-      // Everflow uses {macro} format — just rename their macros to ours
+      // Everflow uses {macro} format — just rename their macros to ours.
+      // {affiliate_id} is replaced with the fixed registered affiliate ID (from credentials),
+      // or falls back to {pid} if no affiliate_id is configured.
       ['{transaction_id}',  '{click_id}'],
-      ['{affiliate_id}',    '{pid}'],
+      ['{affiliate_id}',    affiliateTarget],
       ['{offer_id}',        '{campaign_id}'],
       ['{creative_id}',     '{creative_id}'],
       // sub1-sub5 already match, advertising_id already matches
     ],
     tune: [
+      // Same treatment as Everflow: aff_id needs Apogeemobi's fixed affiliate account ID,
+      // NOT the publisher token. Use affiliateTarget (fixed value or {pid} fallback).
       ['{transaction_id}',  '{click_id}'],
-      ['{affiliate_id}',    '{pid}'],
+      ['{affiliate_id}',    affiliateTarget],
       ['{offer_id}',        '{campaign_id}'],
       // sub1-sub5 already match
     ],
@@ -151,6 +160,11 @@ function normPayoutType(raw = '') {
 }
 
 async function fetchEverflow(cred) {
+  // Parse affiliate_id from extra config — Apogeemobi's registered affiliate ID in this network.
+  let extraCfgEf = {};
+  try { extraCfgEf = JSON.parse(cred.extra || '{}'); } catch {}
+  const efAffiliateId = extraCfgEf.affiliate_id || '';
+
   const base = cred.network_id
     ? `https://${cred.network_id}.api.eflow.team`
     : 'https://api.eflow.team';
@@ -177,7 +191,7 @@ async function fetchEverflow(cred) {
       payout_type:       normPayoutType(o.payout_type || o.revenue_type?.type || 'cpi'),
       currency:          o.currency || 'USD',
       status:            o.status === 1 || o.status === 'active' ? 'active' : 'paused',
-      tracking_url:      toOurMacros(rawTracking, 'everflow'),
+      tracking_url:      toOurMacros(rawTracking, 'everflow', { affiliate_id: efAffiliateId }),
       preview_url:       o.preview_url || '',
       allowed_countries: Array.isArray(o.allowed_countries)
                            ? o.allowed_countries.join(',')
@@ -190,6 +204,14 @@ async function fetchEverflow(cred) {
 }
 
 async function fetchTune(cred) {
+  // Parse affiliate_id from the extra JSON field.
+  // This is Apogeemobi's registered affiliate account ID in this HasOffers network
+  // (e.g. the numeric ID shown in the HasOffers dashboard as "Your Affiliate ID").
+  // It is embedded directly in the aff_id param — NOT treated as a dynamic macro.
+  let extraCfg = {};
+  try { extraCfg = JSON.parse(cred.extra || '{}'); } catch {}
+  const affiliateId = extraCfg.affiliate_id || '';
+
   const rawNid = (cred.network_id || '').trim();
   const networkId = rawNid.includes('.') ? rawNid.split('.')[0] : rawNid;
   const base = `https://${networkId}.api.hasoffers.com`;
@@ -239,11 +261,15 @@ async function fetchTune(cred) {
       // Derive the click-tracking base domain from the HasOffers network subdomain.
       // e.g. networkId="surfshark" → surfshark.hasoffers.com
       const trackingDomain = `${networkId}.hasoffers.com`;
+      // aff_id: use the fixed affiliate ID from credentials if set (preferred),
+      // otherwise fall back to {pid} which track.js replaces with the publisher token.
+      // NOTE: HasOffers requires a valid registered numeric affiliate ID here.
+      const affIdParam = affiliateId || '{pid}';
       rawTracking = `https://${trackingDomain}/aff_c`
         + `?offer_id=${o.id}`
-        + `&aff_id={affiliate_id}`
+        + `&aff_id=${affIdParam}`
         + `&transaction_id={transaction_id}`
-        + `&sub1={sub1}&sub2={sub2}&sub3={sub3}`;
+        + `&sub1={sub1}&sub2={sub2}&sub3={sub3}&sub4={sub4}&sub5={sub5}`;
     }
 
     return {
@@ -254,7 +280,7 @@ async function fetchTune(cred) {
       payout_type:       normPayoutType(o.payout_type || o.revenue_type || 'cpa'),
       currency:          o.currency || 'USD',
       status:            o.status === 'active' ? 'active' : 'paused',
-      tracking_url:      toOurMacros(rawTracking, 'tune'),
+      tracking_url:      toOurMacros(rawTracking, 'tune', { affiliate_id: affiliateId }),
       preview_url:       previewUrl,
       allowed_countries: countries,
       advertiser_name:   adv.company || adv.name || o.advertiser_name || '',
