@@ -110,9 +110,15 @@ function macroReplace(url, data) {
     '{tr}':      data.tr || data.click_id || '',
 
     // ── Publisher / Affiliate ─────────────────────────────────────────────────
-    '{aff_click_id}':   data.publisher_click_id || '',
-    '{affiliate_id}':   String(data.publisher_id || ''),
-    '{offer_id}':       String(data.campaign_id || data.af_c_id || ''),
+    '{aff_click_id}':        data.publisher_click_id || '',
+    '{affiliate_id}':        String(data.publisher_id || ''),
+    '{offer_id}':            String(data.campaign_id || data.af_c_id || ''),
+    '{publisher_click_id}':  data.publisher_click_id || '',
+    '{pub_click_id}':        data.publisher_click_id || '',
+    '{pub_id}':              String(data.publisher_id || ''),
+    '{event}':               data.event_name || data.event || 'install',
+    '{event_type}':          data.event_name || data.event || 'install',
+    '{goal}':                data.goal_name || data.event_name || '',
   };
 
   return Object.entries(map).reduce((u, [macro, val]) => u.split(macro).join(val), url);

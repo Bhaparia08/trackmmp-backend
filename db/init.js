@@ -65,6 +65,9 @@ const migrations = [
   // campaigns: preview URL (App Store / Google Play link) — separate from destination_url (advertiser tracking link)
   `ALTER TABLE campaigns ADD COLUMN preview_url TEXT DEFAULT ''`,
 
+  // publishers: global postback URL — fired to publisher on every attributed conversion
+  `ALTER TABLE publishers ADD COLUMN global_postback_url TEXT DEFAULT ''`,
+
   // Publisher API keys table
   `CREATE TABLE IF NOT EXISTS publisher_api_keys (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

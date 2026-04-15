@@ -178,8 +178,17 @@ function handlePostback(params, ip, io) {
     ip,
   };
 
+  // ── Fire outbound postbacks ───────────────────────────────────────────────
   if (matchedGoal?.postback_url) fetch(macroReplace(matchedGoal.postback_url, macroData)).catch(() => {});
-  if (campaign?.postback_url) fetch(macroReplace(campaign.postback_url, macroData)).catch(() => {});
+  if (campaign?.postback_url)    fetch(macroReplace(campaign.postback_url, macroData)).catch(() => {});
+
+  // ── Fire publisher global postback (if configured) ────────────────────────
+  if (click.publisher_id) {
+    const pub = db.prepare('SELECT global_postback_url FROM publishers WHERE id = ?').get(click.publisher_id);
+    if (pub?.global_postback_url) {
+      fetch(macroReplace(pub.global_postback_url, macroData)).catch(() => {});
+    }
+  }
 
   // ── Socket emit ────────────────────────────────────────────────────────────
   if (io) {

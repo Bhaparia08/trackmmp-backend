@@ -117,4 +117,21 @@ router.get('/postbacks', (req, res) => {
   res.json(rows);
 });
 
+// GET /api/publisher/settings — get publisher postback settings
+router.get('/settings', (req, res) => {
+  const pub = db.prepare('SELECT id, name, email, pub_token, global_postback_url FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
+  if (!pub) return res.status(404).json({ error: 'Publisher profile not found' });
+  res.json(pub);
+});
+
+// PUT /api/publisher/settings — save publisher postback settings
+router.put('/settings', (req, res) => {
+  const pub = db.prepare('SELECT id FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
+  if (!pub) return res.status(404).json({ error: 'Publisher profile not found' });
+  const { global_postback_url } = req.body;
+  db.prepare('UPDATE publishers SET global_postback_url = ? WHERE id = ?')
+    .run(global_postback_url || '', pub.id);
+  res.json({ ok: true, global_postback_url: global_postback_url || '' });
+});
+
 module.exports = router;
