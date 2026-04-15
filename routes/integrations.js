@@ -228,8 +228,24 @@ async function fetchTune(cred) {
     else if (o.allowed_countries && typeof o.allowed_countries === 'object') countries = Object.values(o.allowed_countries).join(',');
     else if (typeof o.allowed_countries === 'string') countries = o.allowed_countries;
 
-    // offer_url is the affiliate tracking URL with HasOffers macros
-    const rawTracking = o.offer_url || o.preview_url || '';
+    // Build tracking URL. TUNE's offer_url is the affiliate click URL with {macros}.
+    // Many TUNE networks don't return offer_url in field-filtered responses —
+    // in that case we CONSTRUCT the standard HasOffers tracking URL ourselves.
+    // Format: https://{network}.hasoffers.com/aff_c?offer_id=N&aff_id={affiliate_id}&transaction_id={transaction_id}
+    let rawTracking = o.offer_url || '';
+    const previewUrl = o.preview_url || '';
+
+    if (!rawTracking || rawTracking === previewUrl) {
+      // Derive the click-tracking base domain from the HasOffers network subdomain.
+      // e.g. networkId="surfshark" → surfshark.hasoffers.com
+      const trackingDomain = `${networkId}.hasoffers.com`;
+      rawTracking = `https://${trackingDomain}/aff_c`
+        + `?offer_id=${o.id}`
+        + `&aff_id={affiliate_id}`
+        + `&transaction_id={transaction_id}`
+        + `&sub1={sub1}&sub2={sub2}&sub3={sub3}`;
+    }
+
     return {
       external_id:       String(o.id || ''),
       name:              o.name || 'Unnamed Offer',
@@ -239,7 +255,7 @@ async function fetchTune(cred) {
       currency:          o.currency || 'USD',
       status:            o.status === 'active' ? 'active' : 'paused',
       tracking_url:      toOurMacros(rawTracking, 'tune'),
-      preview_url:       o.preview_url || '',
+      preview_url:       previewUrl,
       allowed_countries: countries,
       advertiser_name:   adv.company || adv.name || o.advertiser_name || '',
       categories:        '',
