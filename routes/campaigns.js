@@ -37,20 +37,20 @@ router.post('/', (req, res, next) => {
 
     const { name, advertiser_name, advertiser_id, app_id, payout = 0, payout_type = 'cpi',
             publisher_payout = 0, publisher_payout_type = 'cpi',
-            destination_url = '', postback_url = '', cap_daily = 0, cap_total = 0,
+            destination_url = '', preview_url = '', postback_url = '', cap_daily = 0, cap_total = 0,
             allowed_countries = '', click_lookback_days = 7, is_retargeting = 0 } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const result = db.prepare(`
       INSERT INTO campaigns (user_id, advertiser_id, app_id, name, advertiser_name, campaign_token,
         security_token, payout, payout_type, publisher_payout, publisher_payout_type,
-        destination_url, postback_url, cap_daily, cap_total,
+        destination_url, preview_url, postback_url, cap_daily, cap_total,
         allowed_countries, click_lookback_days, is_retargeting)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
-           destination_url, postback_url, cap_daily, cap_total,
+           destination_url, preview_url, postback_url, cap_daily, cap_total,
            allowed_countries, click_lookback_days, is_retargeting ? 1 : 0);
 
     res.status(201).json(db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid));
@@ -92,7 +92,7 @@ router.put('/:id', (req, res, next) => {
 
     const { name, advertiser_name, advertiser_id, payout, payout_type,
             publisher_payout, publisher_payout_type,
-            destination_url, postback_url,
+            destination_url, preview_url, postback_url,
             status, cap_daily, cap_total, allowed_countries, click_lookback_days, is_retargeting } = req.body;
 
     db.prepare(`UPDATE campaigns SET
@@ -100,14 +100,14 @@ router.put('/:id', (req, res, next) => {
       advertiser_id=COALESCE(?,advertiser_id),
       payout=COALESCE(?,payout), payout_type=COALESCE(?,payout_type),
       publisher_payout=COALESCE(?,publisher_payout), publisher_payout_type=COALESCE(?,publisher_payout_type),
-      destination_url=COALESCE(?,destination_url), postback_url=COALESCE(?,postback_url),
+      destination_url=COALESCE(?,destination_url), preview_url=COALESCE(?,preview_url), postback_url=COALESCE(?,postback_url),
       status=COALESCE(?,status), cap_daily=COALESCE(?,cap_daily), cap_total=COALESCE(?,cap_total),
       allowed_countries=COALESCE(?,allowed_countries), click_lookback_days=COALESCE(?,click_lookback_days),
       is_retargeting=COALESCE(?,is_retargeting), updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
            publisher_payout??null, publisher_payout_type||null,
-           destination_url||null, postback_url||null, status||null,
+           destination_url||null, preview_url||null, postback_url||null, status||null,
            cap_daily??null, cap_total??null, allowed_countries||null,
            click_lookback_days??null, is_retargeting!=null?+is_retargeting:null, c.id);
 

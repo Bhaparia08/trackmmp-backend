@@ -62,6 +62,9 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN publisher_payout REAL DEFAULT 0`,
   `ALTER TABLE campaigns ADD COLUMN publisher_payout_type TEXT DEFAULT 'cpi'`,
 
+  // campaigns: preview URL (App Store / Google Play link) — separate from destination_url (advertiser tracking link)
+  `ALTER TABLE campaigns ADD COLUMN preview_url TEXT DEFAULT ''`,
+
   // Publisher API keys table
   `CREATE TABLE IF NOT EXISTS publisher_api_keys (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

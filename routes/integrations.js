@@ -626,9 +626,9 @@ router.post('/import', (req, res, next) => {
     const insertCampaign = db.prepare(`
       INSERT INTO campaigns
         (user_id, advertiser_id, name, advertiser_name, campaign_token, security_token,
-         payout, payout_type, destination_url, allowed_countries, status,
+         payout, payout_type, destination_url, preview_url, allowed_countries, status,
          source_credential_id, external_offer_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `);
 
     const updateCampaign = db.prepare(`
@@ -638,6 +638,7 @@ router.post('/import', (req, res, next) => {
         payout = COALESCE(?, payout),
         payout_type = COALESCE(?, payout_type),
         destination_url = COALESCE(?, destination_url),
+        preview_url = COALESCE(?, preview_url),
         allowed_countries = COALESCE(?, allowed_countries),
         source_credential_id = COALESCE(?, source_credential_id),
         external_offer_id = COALESCE(?, external_offer_id),
@@ -647,7 +648,8 @@ router.post('/import', (req, res, next) => {
 
     for (const offer of offers) {
       const advName = batchAdvName || offer.advertiser_name || credAdvertiserName || platformFallback || null;
-      const destUrl = offer.tracking_url || offer.preview_url || null;
+      const destUrl = offer.tracking_url || null;   // tracking URL only — never fall back to preview
+      const prevUrl = offer.preview_url || null;
 
       // Check if a campaign with same name already exists (active OR archived)
       const exists = db.prepare('SELECT id, status FROM campaigns WHERE name = ?').get(offer.name);
@@ -660,6 +662,7 @@ router.post('/import', (req, res, next) => {
             offer.payout || null,
             offer.payout_type || null,
             destUrl,
+            prevUrl,
             offer.allowed_countries || null,
             credential_id || null,
             offer.external_id || null,
@@ -687,6 +690,7 @@ router.post('/import', (req, res, next) => {
         offer.payout || 0,
         offer.payout_type || 'cpi',
         destUrl,
+        prevUrl || '',
         offer.allowed_countries || '',
         credential_id || null,
         offer.external_id || null,
