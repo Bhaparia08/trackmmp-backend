@@ -231,53 +231,71 @@ router.post('/fetch-offers', async (req, res, next) => {
 
     const offers = await adapter(cred);
 
-    // ── Auto-sync: pause campaigns whose offer is no longer active on the platform ──
-    // Wrapped in try/catch — if the new columns don't exist yet (mid-migration),
-    // skip sync gracefully rather than crashing the response.
-    const autoPaused = [];
+    // ── Build importedMap: offer external_id → campaign on our platform ──────────
+    // Two-pass lookup so campaigns imported before source_credential_id existed
+    // (those with NULL source_credential_id) are still found via name match.
+    const autoPaused  = [];
     const autoResumed = [];
-    let allLinked = [];
+    const importedMap = {}; // external_offer_id → { id, status, campaign_token, name }
 
     try {
-      const linked = db.prepare(`
-        SELECT id, name, external_offer_id, status
+      // Pass 1: campaigns explicitly linked to this credential
+      const byCredential = db.prepare(`
+        SELECT id, name, external_offer_id, status, campaign_token
         FROM campaigns
-        WHERE source_credential_id = ? AND status IN ('active','paused')
+        WHERE source_credential_id = ? AND status != 'archived'
       `).all(credential_id);
 
+      for (const c of byCredential) {
+        if (c.external_offer_id) {
+          importedMap[String(c.external_offer_id)] = {
+            id: c.id, status: c.status, campaign_token: c.campaign_token, name: c.name,
+          };
+        }
+      }
+
+      // Pass 2: name-match for campaigns imported before source_credential_id tracking
+      // (one batch query — not one per offer)
+      const unmappedNames = offers
+        .filter(o => !importedMap[String(o.external_id)])
+        .map(o => o.name);
+
+      if (unmappedNames.length > 0) {
+        const ph = unmappedNames.map(() => '?').join(',');
+        const byName = db.prepare(
+          `SELECT id, name, status, campaign_token FROM campaigns
+           WHERE name IN (${ph}) AND status != 'archived'`
+        ).all(...unmappedNames);
+
+        for (const c of byName) {
+          const offer = offers.find(o => o.name === c.name);
+          if (offer && !importedMap[String(offer.external_id)]) {
+            importedMap[String(offer.external_id)] = {
+              id: c.id, status: c.status, campaign_token: c.campaign_token, name: c.name,
+            };
+          }
+        }
+      }
+
+      // ── Auto-sync: pause/resume campaigns based on platform offer status ───────
       const activeOfferIds = new Set(
         offers.filter(o => o.status === 'active').map(o => String(o.external_id))
       );
 
-      for (const camp of linked) {
-        if (!camp.external_offer_id) continue;
-        const nowActive = activeOfferIds.has(String(camp.external_offer_id));
+      for (const [extId, camp] of Object.entries(importedMap)) {
+        const nowActive = activeOfferIds.has(extId);
         if (!nowActive && camp.status === 'active') {
           db.prepare("UPDATE campaigns SET status='paused', updated_at=unixepoch() WHERE id=?").run(camp.id);
+          importedMap[extId].status = 'paused';
           autoPaused.push({ id: camp.id, name: camp.name });
         } else if (nowActive && camp.status === 'paused') {
           db.prepare("UPDATE campaigns SET status='active', updated_at=unixepoch() WHERE id=?").run(camp.id);
+          importedMap[extId].status = 'active';
           autoResumed.push({ id: camp.id, name: camp.name });
         }
       }
-
-      // Re-read after sync to return fresh statuses
-      allLinked = db.prepare(`
-        SELECT id, name, external_offer_id, status, campaign_token
-        FROM campaigns
-        WHERE source_credential_id = ?
-      `).all(credential_id);
     } catch (syncErr) {
-      // Columns may not exist yet — continue without sync data
       console.warn('[sync] skipped:', syncErr.message);
-    }
-
-    // Map: external_offer_id → { id, status, campaign_token, name }
-    const importedMap = {};
-    for (const c of allLinked) {
-      if (c.external_offer_id) importedMap[String(c.external_offer_id)] = {
-        id: c.id, status: c.status, campaign_token: c.campaign_token, name: c.name,
-      };
     }
 
     res.json({
