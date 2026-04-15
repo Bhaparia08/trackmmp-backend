@@ -513,18 +513,51 @@ router.post('/import', (req, res, next) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `);
 
+    const updateCampaign = db.prepare(`
+      UPDATE campaigns SET
+        status = 'active',
+        advertiser_name = COALESCE(?, advertiser_name),
+        payout = COALESCE(?, payout),
+        payout_type = COALESCE(?, payout_type),
+        destination_url = COALESCE(?, destination_url),
+        allowed_countries = COALESCE(?, allowed_countries),
+        source_credential_id = COALESCE(?, source_credential_id),
+        external_offer_id = COALESCE(?, external_offer_id),
+        updated_at = unixepoch()
+      WHERE id = ?
+    `);
+
     for (const offer of offers) {
-      // Skip if a campaign with same name already exists
-      const exists = db.prepare('SELECT id FROM campaigns WHERE name = ?').get(offer.name);
-      if (exists) { skipped.push({ name: offer.name, reason: 'already exists' }); continue; }
+      const advName = batchAdvName || offer.advertiser_name || credAdvertiserName || platformFallback || null;
+      const destUrl = offer.tracking_url || offer.preview_url || null;
+
+      // Check if a campaign with same name already exists (active OR archived)
+      const exists = db.prepare('SELECT id, status FROM campaigns WHERE name = ?').get(offer.name);
+
+      if (exists) {
+        if (exists.status === 'archived') {
+          // Re-activate the archived campaign and refresh its details
+          updateCampaign.run(
+            advName,
+            offer.payout || null,
+            offer.payout_type || null,
+            destUrl,
+            offer.allowed_countries || null,
+            credential_id || null,
+            offer.external_id || null,
+            exists.id,
+          );
+          const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(exists.id);
+          imported.push({ id: exists.id, name: offer.name, campaign_token: campaign.campaign_token, campaign, reactivated: true });
+        } else {
+          // Active/paused campaign — skip to avoid duplicates
+          skipped.push({ name: offer.name, reason: 'already exists and is active' });
+        }
+        continue;
+      }
 
       const token = nanoid12();
       const secToken = nanoid20hex();
-      const advName = batchAdvName || offer.advertiser_name || credAdvertiserName || platformFallback || null;
-
-      // Use tracking_url (advertiser click URL with our macros) as destination_url.
-      // Fall back to preview_url if tracking_url is absent (e.g. platform didn't return one).
-      const destUrl = offer.tracking_url || offer.preview_url || '';
 
       const result = insertCampaign.run(
         req.user.id,
@@ -544,7 +577,14 @@ router.post('/import', (req, res, next) => {
       imported.push({ id: result.lastInsertRowid, name: offer.name, campaign_token: token, campaign });
     }
 
-    res.json({ imported, skipped, total_imported: imported.length });
+    const reactivated = imported.filter(i => i.reactivated);
+    res.json({
+      imported,
+      skipped,
+      total_imported: imported.length,
+      total_reactivated: reactivated.length,
+      reactivated,
+    });
   } catch (err) { next(err); }
 });
 
