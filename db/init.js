@@ -124,9 +124,6 @@ const migrations = [
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
 
-  // Smart link origin tracking on clicks
-  `ALTER TABLE clicks ADD COLUMN smart_link_id INTEGER REFERENCES smart_links(id)`,
-
   // ── Smart Links ────────────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS smart_links (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,6 +146,8 @@ const migrations = [
     os_names       TEXT    NOT NULL DEFAULT '',
     created_at     INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
+  // Add smart_link_id to clicks AFTER smart_links table exists
+  `ALTER TABLE clicks ADD COLUMN smart_link_id INTEGER REFERENCES smart_links(id)`,
 
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (

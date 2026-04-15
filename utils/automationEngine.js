@@ -106,6 +106,9 @@ const EVALUATORS = {
 function execPauseCampaign(cfg, triggerData) {
   const campaignId = cfg.campaign_id || triggerData.campaign_id;
   if (!campaignId) return 'no campaign_id';
+  const campaign = db.prepare('SELECT status FROM campaigns WHERE id = ?').get(campaignId);
+  if (!campaign) return `campaign #${campaignId} not found`;
+  if (campaign.status === 'paused') return `campaign #${campaignId} already paused (no action needed)`;
   db.prepare("UPDATE campaigns SET status = 'paused', updated_at = unixepoch() WHERE id = ?").run(campaignId);
   return `Paused campaign #${campaignId}`;
 }
@@ -113,6 +116,9 @@ function execPauseCampaign(cfg, triggerData) {
 function execPausePublisher(cfg, triggerData) {
   const publisherId = cfg.publisher_id;
   if (!publisherId) return 'no publisher_id';
+  const publisher = db.prepare('SELECT status FROM publishers WHERE id = ?').get(publisherId);
+  if (!publisher) return `publisher #${publisherId} not found`;
+  if (publisher.status === 'paused') return `publisher #${publisherId} already paused (no action needed)`;
   db.prepare("UPDATE publishers SET status = 'paused' WHERE id = ?").run(publisherId);
   return `Paused publisher #${publisherId}`;
 }
@@ -132,11 +138,18 @@ const EXECUTORS = {
 
 // ── Main runner ─────────────────────────────────────────────────────────────
 
+// Minimum seconds between re-triggers for the same rule (prevents spam every 60s)
+const COOLDOWN_SECS = 60 * 60; // 1 hour
+
 function runAutomationRules() {
+  const now = Math.floor(Date.now() / 1000);
   const rules = db.prepare("SELECT * FROM automation_rules WHERE status = 'active'").all();
 
   for (const rule of rules) {
     try {
+      // Cooldown: skip if this rule already fired within the last hour
+      if (rule.last_triggered_at && (now - rule.last_triggered_at) < COOLDOWN_SECS) continue;
+
       const triggerCfg = tryParse(rule.trigger_config);
       const actionCfg  = tryParse(rule.action_config);
 
@@ -157,7 +170,7 @@ function runAutomationRules() {
     }
   }
 
-  // Stamp last_checked for all active rules
+  // Stamp last_checked_at for all active rules
   db.prepare("UPDATE automation_rules SET last_checked_at = unixepoch() WHERE status = 'active'").run();
 }
 

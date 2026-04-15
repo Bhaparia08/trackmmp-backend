@@ -16,7 +16,16 @@ router.get('/', (req, res) => {
     WHERE sl.user_id = ?
     ORDER BY sl.created_at DESC
   `).all(req.user.id);
-  res.json(rows);
+
+  // Attach rules to each smart link so the frontend expand works without extra calls
+  const rulesStmt = db.prepare(`
+    SELECT slr.*, c.name AS campaign_name, c.campaign_token, c.status AS campaign_status, c.payout
+    FROM smart_link_rules slr
+    JOIN campaigns c ON c.id = slr.campaign_id
+    WHERE slr.smart_link_id = ?
+    ORDER BY slr.priority ASC, slr.id ASC
+  `);
+  res.json(rows.map(sl => ({ ...sl, rules: rulesStmt.all(sl.id) })));
 });
 
 // POST /api/smart-links

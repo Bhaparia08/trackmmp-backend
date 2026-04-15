@@ -168,7 +168,7 @@ router.get('/smart/:token', clickLimiter, async (req, res, next) => {
     const ua = req.headers['user-agent'] || '';
     const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
     const country = await lookupCountry(ip);
-    const { device_type, os } = parseDevice(ua);
+    const { device_type, os, platform } = parseDevice(ua);
 
     // Load all rules for this smart link (active campaigns only)
     const rules = db.prepare(`
@@ -232,7 +232,7 @@ router.get('/smart/:token', clickLimiter, async (req, res, next) => {
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(click_id, selected.campaign_id, publisher_id, selected.user_id,
            q.pid||null, publisher_click_id, ip, ua, country, language,
-           device_type, os, advertising_id, null, req.headers.referer||null,
+           device_type, os, advertising_id, platform||null, req.headers.referer||null,
            q.sub1||null, q.sub2||null, q.sub3||null, q.sub4||null, q.sub5||null,
            sl.id);
 

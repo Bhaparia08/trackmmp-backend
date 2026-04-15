@@ -10,7 +10,7 @@ router.get('/', (req, res) => {
   const rows = db.prepare(`
     SELECT r.*,
       (SELECT COUNT(*) FROM automation_rule_logs WHERE rule_id = r.id) AS trigger_count,
-      (SELECT triggered_at FROM automation_rule_logs WHERE rule_id = r.id ORDER BY triggered_at DESC LIMIT 1) AS last_triggered_at
+      (SELECT triggered_at FROM automation_rule_logs WHERE rule_id = r.id ORDER BY triggered_at DESC LIMIT 1) AS last_log_at
     FROM automation_rules r
     WHERE r.user_id = ?
     ORDER BY r.created_at DESC
