@@ -56,7 +56,15 @@ router.post('/', (req, res, next) => {
 
 router.get('/:id', (req, res) => {
   const { clause, params } = campaignFilter(req.user);
-  const c = db.prepare(`SELECT * FROM campaigns c WHERE c.id = ? AND (${clause})`).get(req.params.id, ...params);
+  const c = db.prepare(`
+    SELECT c.*,
+      COALESCE(u.name, c.advertiser_name) AS advertiser_display,
+      u.email AS advertiser_email,
+      u.company_name AS advertiser_company
+    FROM campaigns c
+    LEFT JOIN users u ON u.id = c.advertiser_id
+    WHERE c.id = ? AND (${clause})
+  `).get(req.params.id, ...params);
   if (!c) return res.status(404).json({ error: 'Campaign not found' });
 
   const stats = db.prepare(`
