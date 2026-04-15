@@ -262,14 +262,56 @@ router.post('/fetch-offers', async (req, res, next) => {
       }
     }
 
+    // Re-read linked campaigns after auto-sync so the response reflects updated statuses
+    const allLinked = db.prepare(`
+      SELECT id, name, external_offer_id, status, campaign_token
+      FROM campaigns
+      WHERE source_credential_id = ?
+    `).all(credential_id);
+
+    // Map: external_offer_id → { id, status, campaign_token, name }
+    const importedMap = {};
+    for (const c of allLinked) {
+      if (c.external_offer_id) importedMap[String(c.external_offer_id)] = {
+        id: c.id, status: c.status, campaign_token: c.campaign_token, name: c.name,
+      };
+    }
+
     res.json({
       offers, platform: cred.platform, label: cred.label, total: offers.length,
       sync: { paused: autoPaused, resumed: autoResumed },
+      imported_map: importedMap,
     });
   } catch (err) {
     // Return a clean error to the frontend instead of crashing
     res.status(502).json({ error: err.message || 'Failed to fetch offers from platform' });
   }
+});
+
+/* ─── POST /api/integrations/set-campaign-status ────────────────────────────── */
+// Pause or resume a specific imported campaign by its external offer ID.
+// Works for every platform — the link is stored in source_credential_id + external_offer_id.
+router.post('/set-campaign-status', (req, res, next) => {
+  try {
+    const { credential_id, external_offer_id, campaign_id, status } = req.body;
+    if (!status || !['active', 'paused'].includes(status))
+      return res.status(400).json({ error: 'status must be "active" or "paused"' });
+
+    // Look up by campaign_id (fastest) or by credential+external_offer_id
+    let camp;
+    if (campaign_id) {
+      camp = db.prepare('SELECT id, status FROM campaigns WHERE id = ?').get(campaign_id);
+    } else if (credential_id && external_offer_id) {
+      camp = db.prepare(
+        'SELECT id, status FROM campaigns WHERE source_credential_id = ? AND external_offer_id = ?'
+      ).get(credential_id, String(external_offer_id));
+    }
+
+    if (!camp) return res.status(404).json({ error: 'Campaign not found' });
+
+    db.prepare("UPDATE campaigns SET status=?, updated_at=unixepoch() WHERE id=?").run(status, camp.id);
+    res.json({ success: true, campaign_id: camp.id, status });
+  } catch (err) { next(err); }
 });
 
 /* ─── POST /api/integrations/import ─────────────────────────────────────────── */
