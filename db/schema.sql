@@ -97,6 +97,54 @@ CREATE TABLE IF NOT EXISTS campaigns (
   updated_at           INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
+-- Campaign Goals (multiple conversion goals per campaign)
+CREATE TABLE IF NOT EXISTS campaign_goals (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  user_id      INTEGER NOT NULL REFERENCES users(id),
+  name         TEXT    NOT NULL,
+  event_name   TEXT    NOT NULL DEFAULT 'install',
+  payout       REAL    NOT NULL DEFAULT 0,
+  revenue      REAL    NOT NULL DEFAULT 0,
+  payout_type  TEXT    NOT NULL DEFAULT 'fixed',
+  postback_url TEXT    DEFAULT '',
+  is_default   INTEGER NOT NULL DEFAULT 0,
+  status       TEXT    NOT NULL DEFAULT 'active',
+  created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+-- Impressions (view-through attribution)
+CREATE TABLE IF NOT EXISTS impressions (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  impression_id      TEXT    NOT NULL UNIQUE,
+  campaign_id        INTEGER REFERENCES campaigns(id),
+  publisher_id       INTEGER REFERENCES publishers(id),
+  user_id            INTEGER REFERENCES users(id),
+  pid                TEXT,
+  publisher_click_id TEXT,
+  ip                 TEXT,
+  user_agent         TEXT,
+  country            TEXT,
+  device_type        TEXT,
+  os                 TEXT,
+  platform           TEXT,
+  advertising_id     TEXT,
+  af_sub1 TEXT, af_sub2 TEXT, af_sub3 TEXT,
+  created_at         INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+-- Fraud Log
+CREATE TABLE IF NOT EXISTS fraud_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  click_id     TEXT,
+  campaign_id  INTEGER REFERENCES campaigns(id),
+  user_id      INTEGER REFERENCES users(id),
+  fraud_type   TEXT NOT NULL,
+  details      TEXT,
+  action       TEXT NOT NULL DEFAULT 'flagged',
+  created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
 -- Clicks
 CREATE TABLE IF NOT EXISTS clicks (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,

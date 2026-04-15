@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 
 const clickLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
+const impLimiter   = rateLimit({ windowMs: 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false });
 
 // GET /track/click/:campaign_token
 router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
@@ -25,7 +26,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     const { device_type, os, browser, platform } = parseDevice(ua);
     const language = req.headers['accept-language']?.split(',')[0] || '';
 
-    // Resolve publisher by pub_token (pid param)
+    // Resolve publisher
     let publisher_id = null;
     if (q.pid) {
       const pub = db.prepare('SELECT id FROM publishers WHERE pub_token = ? AND user_id = ?')
@@ -33,21 +34,34 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       if (pub) publisher_id = pub.id;
     }
 
+    // Support all major click ID param names
+    const publisher_click_id = q.clickid || q.click_id || q.irclickid || q.aff_click_id || null;
+
+    // Support Adjust's gps_adid, idfa, adid
+    const advertising_id = q.advertising_id || q.gps_adid || q.idfa || q.adid || null;
+
     const click_id = nanoid16();
-    const publisher_click_id = q.clickid || q.click_id || null;
 
     db.prepare(`INSERT INTO clicks
-      (click_id, campaign_id, publisher_id, user_id, pid, af_c_id, af_siteid,
-       af_sub1, af_sub2, af_sub3, af_sub4, af_sub5, publisher_click_id,
-       ip, user_agent, country, language, device_type, os, browser, advertising_id, platform, referrer)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      (click_id, campaign_id, publisher_id, user_id,
+       pid, af_c_id, af_siteid,
+       af_sub1, af_sub2, af_sub3, af_sub4, af_sub5,
+       sub6, sub7, sub8, sub9, sub10,
+       publisher_click_id, ip, user_agent, country, language,
+       device_type, os, browser, advertising_id, platform, referrer,
+       creative_id, ad_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(click_id, campaign.id, publisher_id, campaign.user_id,
            q.pid||null, q.af_c_id||null, q.af_siteid||null,
-           q.af_sub1||null, q.af_sub2||null, q.af_sub3||null, q.af_sub4||null, q.af_sub5||null,
-           publisher_click_id, ip, ua, country, language, device_type, os, browser,
-           q.advertising_id||null, platform, req.headers.referer||null);
+           q.af_sub1||q.sub1||null, q.af_sub2||q.sub2||null,
+           q.af_sub3||q.sub3||null, q.af_sub4||q.sub4||null, q.af_sub5||q.sub5||null,
+           q.sub6||null, q.sub7||null, q.sub8||null, q.sub9||null, q.sub10||null,
+           publisher_click_id, ip, ua, country, language,
+           device_type, os, browser, advertising_id, platform,
+           req.headers.referer||null,
+           q.creative_id||q.creative||null, q.ad_id||null);
 
-    // Upsert daily clicks
+    // Daily stats upsert
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
       VALUES (?,?,?,?,date('now'),1)
       ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
@@ -59,6 +73,48 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     const dest = campaign.destination_url || '/';
     const separator = dest.includes('?') ? '&' : '?';
     return res.redirect(302, `${dest}${separator}click_id=${click_id}`);
+  } catch (err) { next(err); }
+});
+
+// GET /track/imp/:campaign_token  — Impression tracking (1x1 pixel or beacon)
+router.get('/imp/:campaign_token', impLimiter, async (req, res, next) => {
+  try {
+    const { nanoid16: nid } = require('../utils/clickId');
+    const campaign = db.prepare(
+      "SELECT * FROM campaigns WHERE campaign_token = ? AND status = 'active'"
+    ).get(req.params.campaign_token);
+
+    if (campaign) {
+      const q = req.query;
+      const ua = req.headers['user-agent'] || '';
+      const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      const country = await lookupCountry(ip);
+      const { device_type, os, platform } = parseDevice(ua);
+      const impression_id = nid();
+
+      let publisher_id = null;
+      if (q.pid) {
+        const pub = db.prepare('SELECT id FROM publishers WHERE pub_token = ? AND user_id = ?')
+          .get(q.pid, campaign.user_id);
+        if (pub) publisher_id = pub.id;
+      }
+
+      db.prepare(`INSERT INTO impressions
+        (impression_id, campaign_id, publisher_id, user_id, pid, publisher_click_id,
+         ip, user_agent, country, device_type, os, platform, advertising_id,
+         af_sub1, af_sub2, af_sub3)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(impression_id, campaign.id, publisher_id, campaign.user_id,
+             q.pid||null, q.clickid||q.publisher_click_id||null,
+             ip, ua, country, device_type, os, platform,
+             q.advertising_id||q.idfa||q.gps_adid||null,
+             q.af_sub1||null, q.af_sub2||null, q.af_sub3||null);
+    }
+
+    // Return 1x1 transparent GIF
+    const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' });
+    res.send(pixel);
   } catch (err) { next(err); }
 });
 

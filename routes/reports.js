@@ -131,4 +131,82 @@ router.get('/by-event', (req, res) => {
   res.json(rows);
 });
 
+// GET /api/reports/by-goal
+router.get('/by-goal', (req, res) => {
+  const { from, to, campaign_id } = req.query;
+  const conditions = ['pb.user_id = ?', "pb.status = 'attributed'"];
+  const values = [req.user.id];
+  if (from) { conditions.push("date(pb.created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(pb.created_at,'unixepoch') <= ?"); values.push(to); }
+  if (campaign_id) { conditions.push('pb.campaign_id = ?'); values.push(campaign_id); }
+
+  const rows = db.prepare(`
+    SELECT pb.goal_name, pb.event_type, pb.event_name,
+      COUNT(*) AS conversions,
+      ROUND(SUM(pb.payout),2) AS payout,
+      ROUND(SUM(pb.revenue),2) AS revenue
+    FROM postbacks pb
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY COALESCE(pb.goal_name, pb.event_type)
+    ORDER BY conversions DESC
+  `).all(...values);
+  res.json(rows);
+});
+
+// GET /api/reports/by-sub — breakdown by sub1
+router.get('/by-sub', (req, res) => {
+  const { from, to, campaign_id, sub = 'af_sub1' } = req.query;
+  const allowedSubs = ['af_sub1','af_sub2','af_sub3','af_sub4','af_sub5','sub6','sub7','sub8','sub9','sub10','pid'];
+  const col = allowedSubs.includes(sub) ? sub : 'af_sub1';
+  const conditions = ['cl.user_id = ?'];
+  const values = [req.user.id];
+  if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); values.push(to); }
+  if (campaign_id) { conditions.push('cl.campaign_id = ?'); values.push(campaign_id); }
+
+  const rows = db.prepare(`
+    SELECT cl.${col} AS sub_value,
+      COUNT(DISTINCT cl.id) AS clicks,
+      COUNT(DISTINCT CASE WHEN cl.status='installed' THEN cl.id END) AS installs,
+      ROUND(COALESCE(SUM(pb.revenue),0),2) AS revenue
+    FROM clicks cl
+    LEFT JOIN postbacks pb ON pb.click_id = cl.click_id AND pb.status = 'attributed'
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY cl.${col}
+    ORDER BY clicks DESC LIMIT 100
+  `).all(...values);
+  res.json(rows);
+});
+
+// GET /api/reports/by-os
+router.get('/by-os', (req, res) => {
+  const { from, to } = req.query;
+  const conditions = ['cl.user_id = ?'];
+  const values = [req.user.id];
+  if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); values.push(to); }
+
+  const rows = db.prepare(`
+    SELECT cl.os, cl.platform,
+      COUNT(DISTINCT cl.id) AS clicks,
+      COUNT(DISTINCT CASE WHEN cl.status='installed' THEN cl.id END) AS installs,
+      ROUND(COALESCE(SUM(pb.revenue),0),2) AS revenue
+    FROM clicks cl
+    LEFT JOIN postbacks pb ON pb.click_id = cl.click_id AND pb.status = 'attributed'
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY cl.os ORDER BY clicks DESC
+  `).all(...values);
+  res.json(rows);
+});
+
+// GET /api/reports/fraud-summary
+router.get('/fraud-summary', (req, res) => {
+  const rows = db.prepare(`
+    SELECT fraud_type, COUNT(*) as count, action
+    FROM fraud_log WHERE user_id = ?
+    GROUP BY fraud_type, action ORDER BY count DESC
+  `).all(req.user.id);
+  res.json(rows);
+});
+
 module.exports = router;

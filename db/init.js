@@ -32,6 +32,23 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN advertiser_id INTEGER REFERENCES users(id)`,
   // publishers table
   `ALTER TABLE publishers ADD COLUMN publisher_user_id INTEGER REFERENCES users(id)`,
+  // clicks: extended sub-params, creative, ad, city, impression link
+  `ALTER TABLE clicks ADD COLUMN sub6 TEXT`,
+  `ALTER TABLE clicks ADD COLUMN sub7 TEXT`,
+  `ALTER TABLE clicks ADD COLUMN sub8 TEXT`,
+  `ALTER TABLE clicks ADD COLUMN sub9 TEXT`,
+  `ALTER TABLE clicks ADD COLUMN sub10 TEXT`,
+  `ALTER TABLE clicks ADD COLUMN creative_id TEXT`,
+  `ALTER TABLE clicks ADD COLUMN ad_id TEXT`,
+  `ALTER TABLE clicks ADD COLUMN city TEXT`,
+  `ALTER TABLE clicks ADD COLUMN impression_id TEXT REFERENCES impressions(impression_id)`,
+  // campaigns: cost tracking, impression lookback
+  `ALTER TABLE campaigns ADD COLUMN cost REAL DEFAULT 0`,
+  `ALTER TABLE campaigns ADD COLUMN cost_model TEXT DEFAULT 'cpc'`,
+  `ALTER TABLE campaigns ADD COLUMN impression_lookback_days INTEGER DEFAULT 1`,
+  // postbacks: goal tracking
+  `ALTER TABLE postbacks ADD COLUMN goal_id INTEGER REFERENCES campaign_goals(id)`,
+  `ALTER TABLE postbacks ADD COLUMN goal_name TEXT`,
 ];
 
 for (const sql of migrations) {

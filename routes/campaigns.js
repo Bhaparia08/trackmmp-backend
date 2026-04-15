@@ -109,21 +109,42 @@ router.get('/:id/tracking-url', (req, res) => {
   const c = db.prepare(`SELECT * FROM campaigns c WHERE c.id = ? AND (${clause})`).get(req.params.id, ...params);
   if (!c) return res.status(404).json({ error: 'Campaign not found' });
 
-  const base = process.env.TRACKING_DOMAIN || 'http://localhost:3001';
-  const afUrl = `${base}/track/click/${c.campaign_token}?pid={publisher_id}&c=${encodeURIComponent(c.name)}&af_c_id=${c.id}&af_siteid={site_id}&af_sub1={sub1}&af_sub2={sub2}&af_sub3={sub3}&af_sub4={sub4}&af_sub5={sub5}&clickid={publisher_click_id}&af_click_lookback=${c.click_lookback_days}d`;
-  const adjustUrl = `${base}/track/click/${c.campaign_token}?campaign=${encodeURIComponent(c.name)}&adgroup={adgroup}&creative={creative}&label={label}&clickid={publisher_click_id}`;
+  const base = process.env.TRACKING_DOMAIN || 'https://track.apogeemobi.com';
 
-  const macroLegend = [
-    { macro: '{publisher_id}',       description: 'AF: publisher/media source ID (pid param)' },
-    { macro: '{site_id}',            description: 'AF: publisher site or placement ID (af_siteid)' },
-    { macro: '{sub1}–{sub5}',        description: 'AF: optional passthrough sub-parameters' },
-    { macro: '{publisher_click_id}', description: 'Both: publisher\'s own click ID — returned in postback' },
-    { macro: '{adgroup}',            description: 'Adjust: ad group name' },
-    { macro: '{creative}',           description: 'Adjust: creative name' },
-    { macro: '{label}',              description: 'Adjust: custom label data' },
+  const urls = {
+    appsflyer: `${base}/track/click/${c.campaign_token}?pid={publisher_id}&c=${encodeURIComponent(c.name)}&af_c_id=${c.id}&af_siteid={site_id}&af_sub1={sub1}&af_sub2={sub2}&af_sub3={sub3}&af_sub4={sub4}&af_sub5={sub5}&clickid={publisher_click_id}&af_click_lookback=${c.click_lookback_days}d&advertising_id={gaid}`,
+    adjust:    `${base}/track/click/${c.campaign_token}?campaign=${encodeURIComponent(c.name)}&adgroup={adgroup}&creative={creative}&label={label}&gps_adid={gps_adid}&idfa={idfa}&clickid={publisher_click_id}&af_sub1={sub1}`,
+    branch:    `${base}/track/click/${c.campaign_token}?~channel={channel}&~campaign=${encodeURIComponent(c.name)}&~feature=paid_advertising&clickid={publisher_click_id}&advertising_id={advertising_id}&af_sub1={sub1}`,
+    impact:    `${base}/track/click/${c.campaign_token}?irclickid={irclickid}&mediapartnerid={media_partner_id}&clickid={irclickid}&af_sub1={sub1}&advertising_id={advertising_id}`,
+    rakuten:   `${base}/track/click/${c.campaign_token}?mid={mid}&u1={u1}&u2={u2}&u3={u3}&clickid={u1}&advertising_id={advertising_id}`,
+    impression: `${base}/track/imp/${c.campaign_token}?pid={publisher_id}&clickid={publisher_click_id}&advertising_id={gaid}`,
+  };
+
+  const postback_macros = [
+    { macro: '{click_id}',           desc: 'Publisher\'s click ID (sent in clickid= param)' },
+    { macro: '{our_click_id}',       desc: 'Platform-generated click ID' },
+    { macro: '{advertising_id}',     desc: 'GAID (Android) or IDFA (iOS)' },
+    { macro: '{idfa}',               desc: 'Apple IDFA' },
+    { macro: '{gps_adid}',           desc: 'Google Play Services Advertising ID' },
+    { macro: '{payout}',             desc: 'Payout amount for this conversion' },
+    { macro: '{revenue}',            desc: 'Revenue amount' },
+    { macro: '{goal_name}',          desc: 'Matched goal name (install, purchase, etc.)' },
+    { macro: '{event_name}',         desc: 'In-app event name' },
+    { macro: '{country_code}',       desc: 'ISO 2-letter country code' },
+    { macro: '{platform}',           desc: 'ios | android | web' },
+    { macro: '{os}',                 desc: 'Operating system name' },
+    { macro: '{install_unix_ts}',    desc: 'Install timestamp (Unix)' },
+    { macro: '{sub1}–{sub10}',       desc: 'Passthrough sub-parameters' },
+    { macro: '{creative_id}',        desc: 'Creative identifier' },
+    { macro: '{af_c_id}',            desc: 'Campaign ID' },
+    { macro: '{af_siteid}',          desc: 'Site / placement ID' },
+    { macro: '{irclickid}',          desc: 'Impact Radius click ID' },
+    { macro: '{mid}',                desc: 'Rakuten merchant ID' },
+    { macro: '{channel}',            desc: 'Branch channel' },
+    { macro: '{ip}',                 desc: 'User IP address' },
   ];
 
-  res.json({ tracking_url: afUrl, adjust_tracking_url: adjustUrl, macro_legend: macroLegend });
+  res.json({ urls, postback_macros, campaign: { id: c.id, name: c.name, token: c.campaign_token } });
 });
 
 module.exports = router;

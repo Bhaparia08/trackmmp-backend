@@ -67,6 +67,8 @@ app.use('/api/publishers', require('./routes/publishers'));
 app.use('/api/clicks', require('./routes/clicks'));
 app.use('/api/s2s', require('./routes/s2s'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/fraud', require('./routes/fraud'));
+app.use('/api/campaigns/:campaign_id/goals', require('./routes/goals'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/publisher', require('./routes/publisher'));
 
