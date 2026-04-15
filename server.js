@@ -94,9 +94,22 @@ const distCandidates = [
 const frontendDist = distCandidates.find(p => fs.existsSync(path.join(p, 'index.html')));
 if (process.env.NODE_ENV === 'production' && frontendDist) {
   console.log(`Serving frontend from: ${frontendDist}`);
-  app.use(express.static(frontendDist));
+  // Assets (JS/CSS) are content-hashed — long cache is fine
+  // index.html must never be cached so users always get the latest bundle
+  app.use(express.static(frontendDist, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    },
+  }));
   // All unmatched routes → React SPA (client-side routing)
   app.get('*', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 }
