@@ -59,45 +59,71 @@ async function fetchEverflow(cred) {
 async function fetchTune(cred) {
   // TUNE / HasOffers affiliate API
   // Endpoint: https://NETWORKID.api.hasoffers.com/Apiv3/json
-  const networkId = cred.network_id || '';
-  const base = networkId
-    ? `https://${networkId}.api.hasoffers.com`
-    : 'https://api.hasoffers.com';
+  // Strip any full domain if user pasted e.g. "surfshark.hasoffers.com" instead of just "surfshark"
+  const rawNid = (cred.network_id || '').trim();
+  const networkId = rawNid.includes('.') ? rawNid.split('.')[0] : rawNid;
+  const base = `https://${networkId}.api.hasoffers.com`;
 
-  const params = new URLSearchParams({
-    NetworkId:  networkId,
-    Target:     'Affiliate_Offer',
-    Method:     'findAll',
-    api_key:    cred.api_key,
-    'filters[status]': 'active',
-    'fields[]':  ['id', 'name', 'description', 'default_payout', 'payout_type',
-                  'currency', 'status', 'preview_url', 'allowed_countries',
-                  'Advertiser.company'].join('&fields[]='),
-    limit:      200,
-  });
+  // Build params properly — URLSearchParams doesn't handle repeated keys from the constructor,
+  // so we use append() for array params (fields[], contain[])
+  const params = new URLSearchParams();
+  params.append('NetworkId',        networkId);
+  params.append('Target',           'Affiliate_Offer');
+  params.append('Method',           'findAll');
+  params.append('api_key',          cred.api_key);
+  params.append('filters[status]',  'active');
+  params.append('limit',            '200');
+  params.append('contain[]',        'Advertiser');   // get advertiser info as nested object
+
+  // Request specific fields — each must be a separate fields[] param
+  const fields = ['id','name','description','default_payout','payout_type',
+                  'currency','status','preview_url','allowed_countries'];
+  fields.forEach(f => params.append('fields[]', f));
 
   const res = await fetch(`${base}/Apiv3/json?${params}`);
   if (!res.ok) throw new Error(`TUNE API error ${res.status}`);
   const json = await res.json();
-  const data = json.response?.data?.data || json.response?.data || {};
-  const offers = Object.values(data);
 
-  return offers.map(o => ({
-    external_id:       String(o.id || ''),
-    name:              o.name || 'Unnamed Offer',
-    description:       o.description || '',
-    payout:            parseFloat(o.default_payout || 0),
-    payout_type:       normPayoutType(o.payout_type || 'cpi'),
-    currency:          o.currency || 'USD',
-    status:            o.status === 'active' ? 'active' : 'paused',
-    preview_url:       o.preview_url || '',
-    allowed_countries: Array.isArray(o.allowed_countries)
-                         ? o.allowed_countries.join(',')
-                         : '',
-    advertiser_name:   o.Advertiser?.company || '',
-    categories:        '',
-    raw: o,
-  }));
+  if (json.response?.status === -1) {
+    const errMsg = json.response?.errors?.[0]?.publicMessage || json.response?.errorMessage || 'API error';
+    throw new Error(`HasOffers: ${errMsg}`);
+  }
+
+  // HasOffers returns data keyed by offer ID: { "1508": { "Offer": {...}, "Advertiser": {...} } }
+  // Without contain it returns: { "1508": { "id": "1508", ... } }
+  const raw = json.response?.data?.data || json.response?.data || {};
+  const entries = Object.values(raw);
+
+  return entries.map(entry => {
+    // Handle both nested (with contain) and flat formats
+    const o   = entry.Offer || entry;
+    const adv = entry.Advertiser || {};
+
+    // allowed_countries may be an array, object, or comma string depending on HasOffers version
+    let countries = '';
+    if (Array.isArray(o.allowed_countries)) {
+      countries = o.allowed_countries.join(',');
+    } else if (o.allowed_countries && typeof o.allowed_countries === 'object') {
+      countries = Object.values(o.allowed_countries).join(',');
+    } else if (typeof o.allowed_countries === 'string') {
+      countries = o.allowed_countries;
+    }
+
+    return {
+      external_id:       String(o.id || ''),
+      name:              o.name || 'Unnamed Offer',
+      description:       o.description || '',
+      payout:            parseFloat(o.default_payout || o.payout || 0),
+      payout_type:       normPayoutType(o.payout_type || o.revenue_type || 'cpa'),
+      currency:          o.currency || 'USD',
+      status:            o.status === 'active' ? 'active' : 'paused',
+      preview_url:       o.preview_url || o.offer_url || '',
+      allowed_countries: countries,
+      advertiser_name:   adv.company || adv.name || o.advertiser_name || '',
+      categories:        '',
+      raw: entry,
+    };
+  });
 }
 
 async function fetchCityAds(cred) {
