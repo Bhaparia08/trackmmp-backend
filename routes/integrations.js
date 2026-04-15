@@ -100,6 +100,56 @@ async function fetchTune(cred) {
   }));
 }
 
+async function fetchCityAds(cred) {
+  // CityAds affiliate API — webmaster/v1/offers
+  // Docs: https://userdocs.cityads.com/docs/udocs/en/latest/
+  const params = new URLSearchParams({
+    token:    cred.api_key,
+    limit:    200,
+    offset:   0,
+    language: 'en',
+  });
+  const res = await fetch(`https://api.cityads.com/api/rest/webmaster/v1/offers?${params}`);
+  if (!res.ok) throw new Error(`CityAds API error ${res.status}`);
+  const json = await res.json();
+  if (json.error) throw new Error(`CityAds API: ${json.error}`);
+
+  const offers = Array.isArray(json.offer) ? json.offer : [];
+
+  // CityAds currency_id mapping (most common)
+  const CURRENCY = { '1': 'RUB', '2': 'USD', '3': 'EUR', '4': 'GBP' };
+
+  return offers.map(o => {
+    const cd = o.commission_data || {};
+    const currency = CURRENCY[cd.currency_id] || 'USD';
+
+    // Determine payout_type and amount
+    let payout_type = 'cpa';
+    let payout = 0;
+    if (cd.percent && (parseFloat(cd.percent.min) > 0 || parseFloat(cd.percent.max) > 0)) {
+      payout_type = 'revshare';
+      payout = parseFloat(cd.percent.max || cd.percent.min || 0);
+    } else if (cd.amount && (parseFloat(cd.amount.min) > 0 || parseFloat(cd.amount.max) > 0)) {
+      payout = parseFloat(cd.amount.max || cd.amount.min || 0);
+    }
+
+    return {
+      external_id:       String(o.id || ''),
+      name:              o.name || o.translated_name || 'Unnamed Offer',
+      description:       o.text || o.text_en || '',
+      payout,
+      payout_type,
+      currency,
+      status:            o.is_active === '1' && o.is_deleted === '0' ? 'active' : 'paused',
+      preview_url:       o.site_url || '',
+      allowed_countries: '',   // regions are IDs — not ISO codes in v1, skip for now
+      advertiser_name:   String(o.advertiser || ''),
+      categories:        '',
+      raw: o,
+    };
+  });
+}
+
 async function fetchAppsFlyer(cred) {
   // AppsFlyer Partner API — fetch campaigns available to this partner
   const res = await fetch('https://hq1.appsflyer.com/api/partner-feed/v1/offers', {
@@ -134,7 +184,7 @@ function normPayoutType(raw = '') {
   return 'cpi';
 }
 
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer };
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {
