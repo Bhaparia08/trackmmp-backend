@@ -73,11 +73,11 @@ async function fetchTune(cred) {
   params.append('api_key',          cred.api_key);
   params.append('filters[status]',  'active');
   params.append('limit',            '200');
-  params.append('contain[]',        'Advertiser');   // get advertiser info as nested object
+  // Note: contain[]=Advertiser is not supported by all HasOffers networks, so we omit it
 
   // Request specific fields — each must be a separate fields[] param
   const fields = ['id','name','description','default_payout','payout_type',
-                  'currency','status','preview_url','allowed_countries'];
+                  'currency','status','preview_url','allowed_countries','advertiser_id'];
   fields.forEach(f => params.append('fields[]', f));
 
   const res = await fetch(`${base}/Apiv3/json?${params}`);
