@@ -1,8 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { customAlphabet } = require('nanoid');
 const db = require('../db/init');
 const { requireAuth } = require('../middleware/auth');
+
+const nanoid20hex = customAlphabet('0123456789abcdef', 20);
+function newPostbackToken() { return nanoid20hex(); }
 
 const router = express.Router();
 const SALT_ROUNDS = 12;
@@ -31,10 +35,10 @@ router.post('/register', async (req, res, next) => {
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role) VALUES (?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'admin');
+      'INSERT INTO users (email, password, name, company_name, role, postback_token) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'admin', newPostbackToken());
 
-    const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ token: signToken(user), user });
   } catch (err) { next(err); }
 });
@@ -50,10 +54,10 @@ router.post('/register/advertiser', async (req, res, next) => {
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role) VALUES (?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'advertiser');
+      'INSERT INTO users (email, password, name, company_name, role, postback_token) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'advertiser', newPostbackToken());
 
-    const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ token: signToken(user), user });
   } catch (err) { next(err); }
 });
@@ -69,10 +73,10 @@ router.post('/register/publisher', async (req, res, next) => {
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role) VALUES (?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'publisher');
+      'INSERT INTO users (email, password, name, company_name, role, postback_token) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'publisher', newPostbackToken());
 
-    const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
 
     // Auto-create a publisher record linked to this user
     const { nanoid } = require('nanoid');
@@ -107,7 +111,8 @@ router.post('/login', async (req, res, next) => {
 // GET /api/auth/me
 router.get('/me', requireAuth, (req, res) => {
   const user = db.prepare(`
-    SELECT u.id, u.email, u.name, u.company_name, u.role, u.plan, u.status, u.created_at,
+    SELECT u.id, u.email, u.name, u.company_name, u.role, u.plan, u.status,
+           u.postback_token, u.created_at,
            am.name  AS account_manager_name,
            am.email AS account_manager_email,
            am.phone AS account_manager_phone

@@ -50,8 +50,10 @@ const migrations = [
   // postbacks: goal tracking
   `ALTER TABLE postbacks ADD COLUMN goal_id INTEGER REFERENCES campaign_goals(id)`,
   `ALTER TABLE postbacks ADD COLUMN goal_name TEXT`,
-  // campaigns: security_token for Trackier-compatible /acquisition postbacks
+  // campaigns: security_token (kept for DB compat, no longer shown in UI)
   `ALTER TABLE campaigns ADD COLUMN security_token TEXT`,
+  // users: account-level postback token (one per user, used in /acquisition)
+  `ALTER TABLE users ADD COLUMN postback_token TEXT`,
 ];
 
 for (const sql of migrations) {
@@ -61,11 +63,18 @@ for (const sql of migrations) {
   }
 }
 
-// Backfill security_token for any campaigns that don't have one yet
+// Backfill tokens
 const { customAlphabet } = require('nanoid');
-const nanoid20 = customAlphabet('0123456789abcdef', 20);
-const missing = db.prepare("SELECT id FROM campaigns WHERE security_token IS NULL OR security_token = ''").all();
-const fill = db.prepare("UPDATE campaigns SET security_token = ? WHERE id = ?");
-for (const row of missing) fill.run(nanoid20(), row.id);
+const nanoid20hex = customAlphabet('0123456789abcdef', 20);
+
+// Campaign security tokens (legacy, keep backfill for existing rows)
+const missingCamp = db.prepare("SELECT id FROM campaigns WHERE security_token IS NULL OR security_token = ''").all();
+const fillCamp = db.prepare("UPDATE campaigns SET security_token = ? WHERE id = ?");
+for (const row of missingCamp) fillCamp.run(nanoid20hex(), row.id);
+
+// User postback tokens — one per user, this is THE integration token shown in the UI
+const missingUsers = db.prepare("SELECT id FROM users WHERE postback_token IS NULL OR postback_token = ''").all();
+const fillUser = db.prepare("UPDATE users SET postback_token = ? WHERE id = ?");
+for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
 
 module.exports = db;

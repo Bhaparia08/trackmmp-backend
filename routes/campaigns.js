@@ -147,13 +147,17 @@ router.get('/:id/tracking-url', (req, res) => {
     { macro: '{ip}',                 desc: 'User IP address' },
   ];
 
-  // Trackier-compatible acquisition postback URLs
+  // Get the account owner's postback_token
+  const owner = db.prepare('SELECT postback_token FROM users WHERE id = ?').get(c.user_id);
+  const postbackToken = owner?.postback_token || '';
+
+  // Single acquisition postback URLs (account-level token, works for ALL campaigns)
   const acquisition = {
-    install: `${base}/acquisition?click_id={click_id}&security_token=${c.security_token}&idfa={idfa}&gaid={gaid}`,
-    event:   `${base}/acquisition?click_id={click_id}&security_token=${c.security_token}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
+    install: `${base}/acquisition?click_id={click_id}&security_token=${postbackToken}&idfa={idfa}&gaid={gaid}`,
+    event:   `${base}/acquisition?click_id={click_id}&security_token=${postbackToken}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
   };
 
-  res.json({ urls, acquisition, postback_macros, campaign: { id: c.id, name: c.name, token: c.campaign_token, security_token: c.security_token } });
+  res.json({ urls, acquisition, postback_macros, campaign: { id: c.id, name: c.name, token: c.campaign_token }, postback_token: postbackToken });
 });
 
 module.exports = router;

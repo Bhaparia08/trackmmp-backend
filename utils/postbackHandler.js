@@ -52,11 +52,10 @@ function handlePostback(params, ip, io) {
   if (rawClickId) click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(rawClickId);
   if (!click && pubClickId) click = db.prepare('SELECT * FROM clicks WHERE publisher_click_id = ?').get(pubClickId);
 
-  // Extra: if security_token given and no click found yet, try to find a recent click for that campaign
-  if (!click && security_token) {
-    const campaign = db.prepare('SELECT id FROM campaigns WHERE security_token = ?').get(security_token);
-    if (!campaign) {
-      // Unknown token — record as rejected and bail
+  // Validate security_token against users.postback_token (account-level token)
+  if (security_token) {
+    const owner = db.prepare('SELECT id FROM users WHERE postback_token = ?').get(security_token);
+    if (!owner) {
       db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, event_type, payout, status, raw_params, ip, blocked_reason)
         VALUES (?,?,?,?,'rejected',?,?,?)`)
         .run(rawClickId||null, pubClickId||null, eventType, +payout, JSON.stringify(params), ip, 'invalid_security_token');
@@ -69,17 +68,6 @@ function handlePostback(params, ip, io) {
       VALUES (?,?,?,?,'rejected',?,?)`)
       .run(rawClickId||null, pubClickId||null, eventType, +payout, JSON.stringify(params), ip);
     return;
-  }
-
-  // Validate security_token against click's campaign if provided
-  if (security_token) {
-    const campaign = db.prepare('SELECT security_token FROM campaigns WHERE id = ?').get(click.campaign_id);
-    if (campaign && campaign.security_token && campaign.security_token !== security_token) {
-      db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, campaign_id, user_id, event_type, payout, status, raw_params, ip, blocked_reason)
-        VALUES (?,?,?,?,?,?,'rejected',?,?,?)`)
-        .run(click.click_id, click.publisher_click_id, click.campaign_id, click.user_id, eventType, +payout, JSON.stringify(params), ip, 'security_token_mismatch');
-      return;
-    }
   }
 
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(click.campaign_id);

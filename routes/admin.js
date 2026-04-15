@@ -1,8 +1,11 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const { nanoid } = require('nanoid');
+const { customAlphabet } = require('nanoid');
 const db = require('../db/init');
 const { requireAdmin } = require('../middleware/auth');
+
+const nanoid20hex = customAlphabet('0123456789abcdef', 20);
 
 const router = express.Router();
 const SALT_ROUNDS = 12;
@@ -119,8 +122,8 @@ router.post('/users', requireAdmin, async (req, res, next) => {
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role, created_by, account_manager_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, role, req.user.id, account_manager_id || null);
+      'INSERT INTO users (email, password, name, company_name, role, created_by, account_manager_id, postback_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, role, req.user.id, account_manager_id || null, nanoid20hex());
 
     const user = db.prepare('SELECT id, email, name, company_name, role, status, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
 
