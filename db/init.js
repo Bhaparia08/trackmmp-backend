@@ -87,10 +87,19 @@ const migrations = [
   )`,
 ];
 
+const IGNORABLE = [
+  'duplicate column',   // ALTER TABLE ADD COLUMN already exists
+  'already exists',     // CREATE TABLE IF NOT EXISTS race
+  'no such table',      // forward-ref migration on a fresh schema — schema.sql creates it
+];
+
 for (const sql of migrations) {
   try { db.exec(sql); } catch (e) {
-    // Column already exists — safe to ignore
-    if (!e.message.includes('duplicate column')) throw e;
+    const msg = e.message || '';
+    if (!IGNORABLE.some(s => msg.toLowerCase().includes(s))) {
+      console.error('[migration error]', msg, '\nSQL:', sql.slice(0, 120));
+      // Log but do NOT throw — a bad migration must not crash the server
+    }
   }
 }
 

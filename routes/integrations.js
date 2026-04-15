@@ -232,42 +232,45 @@ router.post('/fetch-offers', async (req, res, next) => {
     const offers = await adapter(cred);
 
     // ── Auto-sync: pause campaigns whose offer is no longer active on the platform ──
-    // Find all campaigns imported from this credential that are still active
-    const linked = db.prepare(`
-      SELECT id, name, external_offer_id, status
-      FROM campaigns
-      WHERE source_credential_id = ? AND status IN ('active','paused')
-    `).all(credential_id);
-
-    const activeOfferIds = new Set(
-      offers.filter(o => o.status === 'active').map(o => String(o.external_id))
-    );
-
+    // Wrapped in try/catch — if the new columns don't exist yet (mid-migration),
+    // skip sync gracefully rather than crashing the response.
     const autoPaused = [];
     const autoResumed = [];
+    let allLinked = [];
 
-    for (const camp of linked) {
-      if (!camp.external_offer_id) continue; // skip if no external ID (manually created)
+    try {
+      const linked = db.prepare(`
+        SELECT id, name, external_offer_id, status
+        FROM campaigns
+        WHERE source_credential_id = ? AND status IN ('active','paused')
+      `).all(credential_id);
 
-      const nowActive = activeOfferIds.has(String(camp.external_offer_id));
+      const activeOfferIds = new Set(
+        offers.filter(o => o.status === 'active').map(o => String(o.external_id))
+      );
 
-      if (!nowActive && camp.status === 'active') {
-        // Offer gone or paused on the platform — pause our campaign
-        db.prepare("UPDATE campaigns SET status='paused', updated_at=unixepoch() WHERE id=?").run(camp.id);
-        autoPaused.push({ id: camp.id, name: camp.name });
-      } else if (nowActive && camp.status === 'paused') {
-        // Offer is active again on the platform — resume our campaign
-        db.prepare("UPDATE campaigns SET status='active', updated_at=unixepoch() WHERE id=?").run(camp.id);
-        autoResumed.push({ id: camp.id, name: camp.name });
+      for (const camp of linked) {
+        if (!camp.external_offer_id) continue;
+        const nowActive = activeOfferIds.has(String(camp.external_offer_id));
+        if (!nowActive && camp.status === 'active') {
+          db.prepare("UPDATE campaigns SET status='paused', updated_at=unixepoch() WHERE id=?").run(camp.id);
+          autoPaused.push({ id: camp.id, name: camp.name });
+        } else if (nowActive && camp.status === 'paused') {
+          db.prepare("UPDATE campaigns SET status='active', updated_at=unixepoch() WHERE id=?").run(camp.id);
+          autoResumed.push({ id: camp.id, name: camp.name });
+        }
       }
-    }
 
-    // Re-read linked campaigns after auto-sync so the response reflects updated statuses
-    const allLinked = db.prepare(`
-      SELECT id, name, external_offer_id, status, campaign_token
-      FROM campaigns
-      WHERE source_credential_id = ?
-    `).all(credential_id);
+      // Re-read after sync to return fresh statuses
+      allLinked = db.prepare(`
+        SELECT id, name, external_offer_id, status, campaign_token
+        FROM campaigns
+        WHERE source_credential_id = ?
+      `).all(credential_id);
+    } catch (syncErr) {
+      // Columns may not exist yet — continue without sync data
+      console.warn('[sync] skipped:', syncErr.message);
+    }
 
     // Map: external_offer_id → { id, status, campaign_token, name }
     const importedMap = {};
