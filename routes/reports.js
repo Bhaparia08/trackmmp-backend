@@ -199,6 +199,45 @@ router.get('/by-os', (req, res) => {
   res.json(rows);
 });
 
+// GET /api/reports/postbacks — paginated postback log with filters
+router.get('/postbacks', (req, res) => {
+  const { campaign_id, status, event_type, from, to, page = 1, limit = 50 } = req.query;
+  const conditions = ['pb.user_id = ?'];
+  const values = [req.user.id];
+
+  if (campaign_id) { conditions.push('pb.campaign_id = ?'); values.push(campaign_id); }
+  if (status)      { conditions.push('pb.status = ?'); values.push(status); }
+  if (event_type)  { conditions.push('pb.event_type = ?'); values.push(event_type); }
+  if (from) { conditions.push("date(pb.created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(pb.created_at,'unixepoch') <= ?"); values.push(to); }
+
+  const where = conditions.join(' AND ');
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  const total = db.prepare(`SELECT COUNT(*) as n FROM postbacks pb WHERE ${where}`).get(...values).n;
+
+  const rows = db.prepare(`
+    SELECT pb.id, pb.click_id, pb.publisher_click_id, pb.event_type, pb.event_name,
+           pb.goal_name, pb.payout, pb.revenue, pb.currency, pb.status,
+           pb.blocked_reason, pb.advertising_id, pb.ip, pb.created_at,
+           c.name AS campaign_name, c.campaign_token
+    FROM postbacks pb
+    LEFT JOIN campaigns c ON c.id = pb.campaign_id
+    WHERE ${where}
+    ORDER BY pb.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(...values, parseInt(limit), offset);
+
+  // Status summary counts
+  const summary = db.prepare(`
+    SELECT status, COUNT(*) as count, COALESCE(SUM(revenue),0) as revenue
+    FROM postbacks WHERE user_id = ?
+    GROUP BY status
+  `).all(req.user.id);
+
+  res.json({ rows, total, page: parseInt(page), limit: parseInt(limit), summary });
+});
+
 // GET /api/reports/fraud-summary
 router.get('/fraud-summary', (req, res) => {
   const rows = db.prepare(`
