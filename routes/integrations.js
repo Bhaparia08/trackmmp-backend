@@ -377,111 +377,96 @@ async function fetchAppsFlyer(cred) {
 }
 
 async function fetchSwaarm(cred) {
-  // network_id = subdomain, e.g. "pokkt" from partner.pokkt.swaarm-clients.com
+  // Swaarm Publisher Feed API (REST, token-based)
+  // Endpoint: https://feed.{network}.swaarm-clients.com/publishers/search
+  // Auth:     ?token={api_key}
+  // Offers:  withFeed=true returns the available campaign/offer feed
+  //
+  // api_key    = API token  (e.g. 6ca30b57-c78f-4b7a-a643-f8c8a99803de)
+  // network_id = subdomain  (e.g. "pokkt" from feed.pokkt.swaarm-clients.com)
+
   const rawNid    = (cred.network_id || '').trim().toLowerCase();
-  // Accept full domain ("partner.pokkt.swaarm-clients.com") or just "pokkt"
-  const networkId = rawNid.replace(/^partner\./, '').split('.')[0];
-  if (!networkId) throw new Error('Swaarm: network_id (domain subdomain) is required');
+  // Accept "pokkt", "feed.pokkt.swaarm-clients.com", or "partner.pokkt.swaarm-clients.com"
+  const networkId = rawNid.replace(/^(feed|partner)\./, '').split('.')[0];
+  if (!networkId) throw new Error('Swaarm: network_id is required (e.g. "pokkt")');
+  if (!cred.api_key) throw new Error('Swaarm: API token is required');
 
-  const gqlBase = `https://partner.${networkId}.swaarm-clients.com/graphql`;
+  const base = `https://feed.${networkId}.swaarm-clients.com/publishers/search`;
 
-  // ── Step 1: login mutation → bearer token ──────────────────────────────────
-  const loginResp = await fetch(gqlBase, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      query: `mutation Login($email: String!, $password: String!) {
-        login(email: $email, password: $password) {
-          token
-          validUntil
-        }
-      }`,
-      variables: { email: cred.api_key, password: cred.api_secret },
-    }),
+  // Use a 7-day window + withFeed=true to get both stats and the offer feed
+  const to   = new Date();
+  const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const fmt  = d => d.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:MM"
+
+  const params = new URLSearchParams({
+    token:       cred.api_key,
+    from:        fmt(from),
+    to:          fmt(to),
+    granularity: 'DAY',
+    withFeed:    'true',
   });
-  if (!loginResp.ok) {
-    const txt = await loginResp.text().catch(() => '');
-    throw new Error(`Swaarm login HTTP ${loginResp.status}: ${txt.slice(0, 200)}`);
+
+  const res = await fetch(`${base}?${params}`);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Swaarm API error ${res.status}: ${txt.slice(0, 300)}`);
   }
-  const loginJson = await loginResp.json();
-  const token = loginJson?.data?.login?.token;
-  if (!token) {
-    const msg = loginJson?.errors?.[0]?.message
-      || loginJson?.data?.login?.errorMessage
-      || JSON.stringify(loginJson).slice(0, 300);
-    throw new Error(`Swaarm authentication failed: ${msg}`);
+  const json = await res.json();
+
+  // The feed data lives under different keys depending on the Swaarm version:
+  // { feed: [...] }  or  { data: { feed: [...] } }  or  { offers: [...] }  or top-level array
+  const feedList = json?.feed
+    || json?.data?.feed
+    || json?.offers
+    || json?.data?.offers
+    || json?.campaigns
+    || (Array.isArray(json) ? json : []);
+
+  if (!Array.isArray(feedList)) {
+    throw new Error(`Swaarm: unexpected response format — ${JSON.stringify(json).slice(0, 300)}`);
   }
 
-  // ── Step 2: query available offers ────────────────────────────────────────
-  const offersResp = await fetch(gqlBase, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      query: `query {
-        offers {
-          id
-          name
-          description
-          status
-          payout { amount currency type }
-          trackingLink
-          previewUrl
-          countries { code }
-          advertiser { name }
-        }
-      }`,
-    }),
-  });
-  if (!offersResp.ok) {
-    const txt = await offersResp.text().catch(() => '');
-    throw new Error(`Swaarm offers HTTP ${offersResp.status}: ${txt.slice(0, 200)}`);
-  }
-  const offersJson = await offersResp.json();
+  return feedList.map(o => {
+    // Swaarm feed offer fields (camelCase and snake_case variants both handled)
+    const offerId   = o.id || o.offerId || o.campaignId || o.campaign_id || '';
+    const name      = o.name || o.offerName || o.campaignName || o.campaign_name || 'Unnamed';
+    const payoutAmt = parseFloat(o.payout || o.payoutAmount || o.payout_amount || o.revenue || 0);
+    const currency  = o.currency || o.payoutCurrency || 'USD';
+    const payType   = normPayoutType(o.payoutType || o.payout_type || o.revenueType || 'cpa');
+    const statusStr = String(o.status || o.campaignStatus || 'active').toLowerCase();
 
-  // Normalise: different Swaarm versions surface offers under different query names
-  const offerList = offersJson?.data?.offers
-    || offersJson?.data?.availableOffers
-    || offersJson?.data?.publisherOffers
-    || [];
+    // Tracking link — Swaarm provides a ready-made click URL per publisher
+    let rawTracking = o.trackingLink || o.tracking_link || o.clickUrl || o.click_url || '';
 
-  if (!Array.isArray(offerList)) {
-    const gqlErr = offersJson?.errors?.[0]?.message || JSON.stringify(offersJson).slice(0, 300);
-    throw new Error(`Swaarm: unexpected response — ${gqlErr}`);
-  }
-  if (offersJson?.errors?.length && offerList.length === 0) {
-    throw new Error(`Swaarm API error: ${offersJson.errors[0]?.message}`);
-  }
-
-  return offerList.map(o => {
-    // Build click tracking URL.
-    // Swaarm returns a pre-built trackingLink — we translate any platform macros
-    // to our format, then append pub_click_id if our {click_id} macro isn't there yet.
-    let rawTracking = o.trackingLink || o.tracking_link || '';
-    rawTracking     = toOurMacros(rawTracking, 'swaarm');
+    // Translate Swaarm macros → our macros, then ensure click_id param is present
+    rawTracking = toOurMacros(rawTracking, 'swaarm');
     if (rawTracking && !rawTracking.includes('{click_id}')) {
       rawTracking += (rawTracking.includes('?') ? '&' : '?')
-        + 'pub_click_id={click_id}&sub1={sub1}&sub2={sub2}&sub3={sub3}&pub_id={pid}';
+        + 'pub_click_id={click_id}&sub1={sub1}&sub2={sub2}&sub3={sub3}';
     }
 
-    const payout = o.payout || {};
+    // If no tracking link at all, construct a standard Swaarm click URL
+    if (!rawTracking) {
+      rawTracking = `https://${networkId}.trckswrm.com/click`
+        + `?offer_id=${offerId}`
+        + `&pub_click_id={click_id}&sub1={sub1}&sub2={sub2}&sub3={sub3}`;
+    }
+
+    const countries = o.countries || o.allowedCountries || o.allowed_countries || [];
+
     return {
-      external_id:       String(o.id || ''),
-      name:              o.name || 'Unnamed',
-      description:       o.description || '',
-      payout:            parseFloat(payout.amount || 0),
-      payout_type:       normPayoutType(payout.type || 'cpa'),
-      currency:          payout.currency || 'USD',
-      status:            String(o.status || '').toLowerCase() === 'active' ? 'active' : 'paused',
+      external_id:       String(offerId),
+      name,
+      description:       o.description || o.offerDescription || '',
+      payout:            payoutAmt,
+      payout_type:       payType,
+      currency,
+      status:            statusStr === 'active' || statusStr === '1' ? 'active' : 'paused',
       tracking_url:      rawTracking,
-      preview_url:       o.previewUrl || o.preview_url || '',
-      allowed_countries: Array.isArray(o.countries)
-                           ? o.countries.map(c => c.code || c).join(',')
-                           : '',
-      advertiser_name:   o.advertiser?.name || '',
-      categories:        '',
+      preview_url:       o.previewUrl || o.preview_url || o.landingPageUrl || o.landing_page_url || '',
+      allowed_countries: Array.isArray(countries) ? countries.map(c => c.code || c).join(',') : String(countries),
+      advertiser_name:   o.advertiser || o.advertiserName || o.advertiser_name || '',
+      categories:        o.categories || o.vertical || '',
       raw: o,
     };
   });
