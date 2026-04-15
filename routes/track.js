@@ -70,9 +70,73 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
 
     res.cookie('_cid', click_id, { maxAge: 86400000, httpOnly: true, sameSite: 'Lax' });
 
-    const dest = campaign.destination_url || '/';
-    const separator = dest.includes('?') ? '&' : '?';
-    return res.redirect(302, `${dest}${separator}click_id=${click_id}`);
+    // ── Macro substitution in advertiser's destination/tracking URL ──────────
+    // The destination_url may contain the advertiser's own macro placeholders.
+    // We replace all known macros with the real values captured at click time.
+    let dest = campaign.destination_url || '/';
+
+    const macroMap = {
+      // Our click IDs
+      '{click_id}':           click_id,
+      '{our_click_id}':       click_id,
+      // Publisher's own click ID (sent in clickid= param, returned in postbacks)
+      '{publisher_click_id}': publisher_click_id || '',
+      '{clickid}':            publisher_click_id || '',
+      // Publisher / media source tokens
+      '{pid}':                q.pid || '',
+      '{pub_token}':          q.pid || '',
+      '{af_siteid}':          q.af_siteid || '',
+      '{site_id}':            q.af_siteid || '',
+      // Sub-parameters (both naming conventions)
+      '{sub1}':  q.af_sub1 || q.sub1 || '',
+      '{sub2}':  q.af_sub2 || q.sub2 || '',
+      '{sub3}':  q.af_sub3 || q.sub3 || '',
+      '{sub4}':  q.af_sub4 || q.sub4 || '',
+      '{sub5}':  q.af_sub5 || q.sub5 || '',
+      '{sub6}':  q.sub6 || '',
+      '{sub7}':  q.sub7 || '',
+      '{sub8}':  q.sub8 || '',
+      '{sub9}':  q.sub9 || '',
+      '{sub10}': q.sub10 || '',
+      '{af_sub1}': q.af_sub1 || q.sub1 || '',
+      '{af_sub2}': q.af_sub2 || q.sub2 || '',
+      '{af_sub3}': q.af_sub3 || q.sub3 || '',
+      '{af_sub4}': q.af_sub4 || q.sub4 || '',
+      '{af_sub5}': q.af_sub5 || q.sub5 || '',
+      // Device identifiers
+      '{advertising_id}': advertising_id || '',
+      '{idfa}':           q.idfa || '',
+      '{gaid}':           q.gps_adid || q.advertising_id || '',
+      '{gps_adid}':       q.gps_adid || '',
+      // Geo & device
+      '{ip}':          ip,
+      '{country}':     country || '',
+      '{country_code}':country || '',
+      '{device_type}': device_type || '',
+      '{os}':          os || '',
+      '{browser}':     browser || '',
+      '{platform}':    platform || '',
+      '{language}':    language || '',
+      '{user_agent}':  encodeURIComponent(ua),
+      // Campaign identifiers
+      '{campaign_id}':    String(campaign.id),
+      '{campaign_token}': campaign.campaign_token,
+      '{af_c_id}':        q.af_c_id || String(campaign.id),
+      '{creative_id}':    q.creative_id || q.creative || '',
+      '{ad_id}':          q.ad_id || '',
+    };
+
+    // Replace every macro in one pass (case-insensitive)
+    for (const [macro, value] of Object.entries(macroMap)) {
+      dest = dest.split(macro).join(value);
+    }
+
+    // If click_id was not embedded in the URL, append it so postbacks can reference it
+    if (!dest.includes(click_id)) {
+      dest += (dest.includes('?') ? '&' : '?') + 'click_id=' + click_id;
+    }
+
+    return res.redirect(302, dest);
   } catch (err) { next(err); }
 });
 
