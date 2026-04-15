@@ -88,7 +88,11 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     // ── Macro substitution in advertiser's destination/tracking URL ──────────
     // The destination_url may contain the advertiser's own macro placeholders.
     // We replace all known macros with the real values captured at click time.
-    let dest = campaign.destination_url || '/';
+    // Fallback chain: destination_url → preview_url → error response
+    if (!campaign.destination_url && !campaign.preview_url) {
+      return res.status(404).send('Campaign has no destination URL configured. Contact your account manager.');
+    }
+    let dest = campaign.destination_url || campaign.preview_url;
 
     const macroMap = {
       // Our click IDs
