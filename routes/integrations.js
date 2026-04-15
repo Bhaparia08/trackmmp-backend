@@ -17,14 +17,115 @@ const router = express.Router();
 router.use(requireAuth);
 
 /* ─── Platform adapters ───────────────────────────────────────────────────────
-   Each adapter receives the stored credential row and returns a normalised array:
-   [{ external_id, name, description, payout, payout_type, currency,
-      status, preview_url, allowed_countries, advertiser_name, raw }]
+   Each adapter returns a normalised offer array. Each offer includes:
+   - tracking_url : the advertiser's actual click tracking URL with OUR macros
+                    substituted in place of their platform-specific macro syntax
+   - preview_url  : the landing/preview page URL (no macros)
+   The import route uses tracking_url as destination_url so our track.js can
+   resolve and redirect with real values at click time.
 ─────────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * Convert a platform's native macro syntax into our standard {macro} tokens.
+ * Called on the tracking URL returned by each platform before storing.
+ *
+ * Platform macro formats:
+ *   Impact       : [MACRO_NAME]  e.g. [clickId], [subId1], [mediaPartner]
+ *   Everflow     : {macro}       e.g. {transaction_id}, {affiliate_id}  (already close to ours)
+ *   TUNE/HasOffers: {macro}      e.g. {transaction_id}, {affiliate_id}
+ *   CityAds      : {macro}       e.g. {click_id}, {webmaster_id}
+ *   AppsFlyer    : {macro}       — AF macros map directly
+ */
+function toOurMacros(url, platform) {
+  if (!url) return url;
+
+  // Per-platform translation tables  [ their_macro , our_macro ]
+  const maps = {
+    impact: [
+      // click ID — THE most important: we put our click_id here so Impact returns it in postbacks
+      ['[clickId]',         '{click_id}'],
+      ['[CLICK_ID]',        '{click_id}'],
+      ['[irclickid]',       '{click_id}'],
+      ['[IRCLICKID]',       '{click_id}'],
+      // Sub IDs
+      ['[subId1]',          '{sub1}'],
+      ['[subId2]',          '{sub2}'],
+      ['[subId3]',          '{sub3}'],
+      ['[subId4]',          '{sub4}'],
+      ['[subId5]',          '{sub5}'],
+      ['[SUB1]',            '{sub1}'],
+      ['[SUB2]',            '{sub2}'],
+      ['[SUB3]',            '{sub3}'],
+      // Publisher / media partner
+      ['[mediaPartner]',    '{pid}'],
+      ['[MEDIA_PARTNER_ID]','{pid}'],
+      ['[PUBLISHER_ID]',    '{pid}'],
+      ['[publisherId]',     '{pid}'],
+      // Device / geo
+      ['[device]',          '{device_type}'],
+      ['[DEVICE]',          '{device_type}'],
+      ['[country]',         '{country}'],
+      ['[COUNTRY]',         '{country}'],
+      ['[advertisingId]',   '{advertising_id}'],
+      ['[ADVERTISING_ID]',  '{advertising_id}'],
+      ['[idfa]',            '{idfa}'],
+      ['[IDFA]',            '{idfa}'],
+      ['[gaid]',            '{gaid}'],
+      ['[ip]',              '{ip}'],
+    ],
+    everflow: [
+      // Everflow uses {macro} format — just rename their macros to ours
+      ['{transaction_id}',  '{click_id}'],
+      ['{affiliate_id}',    '{pid}'],
+      ['{offer_id}',        '{campaign_id}'],
+      ['{creative_id}',     '{creative_id}'],
+      // sub1-sub5 already match, advertising_id already matches
+    ],
+    tune: [
+      ['{transaction_id}',  '{click_id}'],
+      ['{affiliate_id}',    '{pid}'],
+      ['{offer_id}',        '{campaign_id}'],
+      // sub1-sub5 already match
+    ],
+    cityads: [
+      ['{click_id}',        '{click_id}'],   // already matches
+      ['{clickid}',         '{click_id}'],
+      ['{webmaster_id}',    '{pid}'],
+      ['{sub_id}',          '{sub1}'],
+    ],
+    appsflyer: [
+      // AF uses {macro} — map their names to ours
+      ['{clickid}',              '{click_id}'],
+      ['{publisher_click_id}',   '{publisher_click_id}'],
+      ['{af_sub1}',              '{sub1}'],
+      ['{af_sub2}',              '{sub2}'],
+      ['{af_sub3}',              '{sub3}'],
+      ['{af_sub4}',              '{sub4}'],
+      ['{af_sub5}',              '{sub5}'],
+      ['{advertising_id}',       '{advertising_id}'],
+    ],
+  };
+
+  const pairs = maps[platform] || [];
+  let result = url;
+  for (const [from, to] of pairs) {
+    // Case-insensitive replace for bracket-style macros; exact for curly-brace
+    result = result.split(from).join(to);
+  }
+  return result;
+}
+
+function normPayoutType(raw = '') {
+  const t = raw.toLowerCase();
+  if (t.includes('install') || t === 'cpi') return 'cpi';
+  if (t.includes('lead')    || t === 'cpl') return 'cpl';
+  if (t.includes('action')  || t === 'cpa') return 'cpa';
+  if (t.includes('rev')     || t === 'revshare') return 'revshare';
+  if (t.includes('click')   || t === 'cpc') return 'cpc';
+  return 'cpi';
+}
+
 async function fetchEverflow(cred) {
-  // Everflow affiliate API — fetch offers available to this affiliate account
-  // Docs: https://developers.eflow.team/
   const base = cred.network_id
     ? `https://${cred.network_id}.api.eflow.team`
     : 'https://api.eflow.team';
@@ -38,34 +139,36 @@ async function fetchEverflow(cred) {
   }
   const json = await res.json();
   const offers = json.offers || json.data || json.results || [];
-  return offers.map(o => ({
-    external_id:       String(o.network_offer_id || o.id || ''),
-    name:              o.name || o.offer_name || 'Unnamed Offer',
-    description:       o.description || o.offer_description || '',
-    payout:            parseFloat(o.default_payout || o.payout || o.revenue_type?.payout || 0),
-    payout_type:       normPayoutType(o.payout_type || o.revenue_type?.type || 'cpi'),
-    currency:          o.currency || 'USD',
-    status:            o.status === 1 || o.status === 'active' ? 'active' : 'paused',
-    preview_url:       o.preview_url || o.offer_url || '',
-    allowed_countries: Array.isArray(o.allowed_countries)
-                         ? o.allowed_countries.join(',')
-                         : (o.allowed_countries || ''),
-    advertiser_name:   o.advertiser?.label || o.advertiser_name || '',
-    categories:        (o.categories || []).map(c => c.label || c.name || c).join(', '),
-    raw: o,
-  }));
+
+  return offers.map(o => {
+    // Everflow: offer_url is the click tracking URL with their macros
+    // preview_url is just the landing page
+    const rawTracking = o.offer_url || o.click_url || o.tracking_url || o.preview_url || '';
+    return {
+      external_id:       String(o.network_offer_id || o.id || ''),
+      name:              o.name || o.offer_name || 'Unnamed Offer',
+      description:       o.description || o.offer_description || '',
+      payout:            parseFloat(o.default_payout || o.payout || o.revenue_type?.payout || 0),
+      payout_type:       normPayoutType(o.payout_type || o.revenue_type?.type || 'cpi'),
+      currency:          o.currency || 'USD',
+      status:            o.status === 1 || o.status === 'active' ? 'active' : 'paused',
+      tracking_url:      toOurMacros(rawTracking, 'everflow'),
+      preview_url:       o.preview_url || '',
+      allowed_countries: Array.isArray(o.allowed_countries)
+                           ? o.allowed_countries.join(',')
+                           : (o.allowed_countries || ''),
+      advertiser_name:   o.advertiser?.label || o.advertiser_name || '',
+      categories:        (o.categories || []).map(c => c.label || c.name || c).join(', '),
+      raw: o,
+    };
+  });
 }
 
 async function fetchTune(cred) {
-  // TUNE / HasOffers affiliate API
-  // Endpoint: https://NETWORKID.api.hasoffers.com/Apiv3/json
-  // Strip any full domain if user pasted e.g. "surfshark.hasoffers.com" instead of just "surfshark"
   const rawNid = (cred.network_id || '').trim();
   const networkId = rawNid.includes('.') ? rawNid.split('.')[0] : rawNid;
   const base = `https://${networkId}.api.hasoffers.com`;
 
-  // Build params properly — URLSearchParams doesn't handle repeated keys from the constructor,
-  // so we use append() for array params (fields[], contain[])
   const params = new URLSearchParams();
   params.append('NetworkId',        networkId);
   params.append('Target',           'Affiliate_Offer');
@@ -73,11 +176,10 @@ async function fetchTune(cred) {
   params.append('api_key',          cred.api_key);
   params.append('filters[status]',  'active');
   params.append('limit',            '200');
-  // Note: contain[]=Advertiser is not supported by all HasOffers networks, so we omit it
 
-  // Request specific fields — each must be a separate fields[] param
+  // Request offer_url so we get the tracking link, not just the preview page
   const fields = ['id','name','description','default_payout','payout_type',
-                  'currency','status','preview_url','allowed_countries','advertiser_id'];
+                  'currency','status','preview_url','offer_url','allowed_countries','advertiser_id'];
   fields.forEach(f => params.append('fields[]', f));
 
   const res = await fetch(`${base}/Apiv3/json?${params}`);
@@ -89,26 +191,20 @@ async function fetchTune(cred) {
     throw new Error(`HasOffers: ${errMsg}`);
   }
 
-  // HasOffers returns data keyed by offer ID: { "1508": { "Offer": {...}, "Advertiser": {...} } }
-  // Without contain it returns: { "1508": { "id": "1508", ... } }
   const raw = json.response?.data?.data || json.response?.data || {};
   const entries = Object.values(raw);
 
   return entries.map(entry => {
-    // Handle both nested (with contain) and flat formats
     const o   = entry.Offer || entry;
     const adv = entry.Advertiser || {};
 
-    // allowed_countries may be an array, object, or comma string depending on HasOffers version
     let countries = '';
-    if (Array.isArray(o.allowed_countries)) {
-      countries = o.allowed_countries.join(',');
-    } else if (o.allowed_countries && typeof o.allowed_countries === 'object') {
-      countries = Object.values(o.allowed_countries).join(',');
-    } else if (typeof o.allowed_countries === 'string') {
-      countries = o.allowed_countries;
-    }
+    if (Array.isArray(o.allowed_countries)) countries = o.allowed_countries.join(',');
+    else if (o.allowed_countries && typeof o.allowed_countries === 'object') countries = Object.values(o.allowed_countries).join(',');
+    else if (typeof o.allowed_countries === 'string') countries = o.allowed_countries;
 
+    // offer_url is the affiliate tracking URL with HasOffers macros
+    const rawTracking = o.offer_url || o.preview_url || '';
     return {
       external_id:       String(o.id || ''),
       name:              o.name || 'Unnamed Offer',
@@ -117,7 +213,8 @@ async function fetchTune(cred) {
       payout_type:       normPayoutType(o.payout_type || o.revenue_type || 'cpa'),
       currency:          o.currency || 'USD',
       status:            o.status === 'active' ? 'active' : 'paused',
-      preview_url:       o.preview_url || o.offer_url || '',
+      tracking_url:      toOurMacros(rawTracking, 'tune'),
+      preview_url:       o.preview_url || '',
       allowed_countries: countries,
       advertiser_name:   adv.company || adv.name || o.advertiser_name || '',
       categories:        '',
@@ -127,31 +224,20 @@ async function fetchTune(cred) {
 }
 
 async function fetchCityAds(cred) {
-  // CityAds affiliate API — webmaster/v1/offers
-  // Docs: https://userdocs.cityads.com/docs/udocs/en/latest/
-  const params = new URLSearchParams({
-    token:    cred.api_key,
-    limit:    200,
-    offset:   0,
-    language: 'en',
-  });
+  const params = new URLSearchParams({ token: cred.api_key, limit: 200, offset: 0, language: 'en' });
   const res = await fetch(`https://api.cityads.com/api/rest/webmaster/v1/offers?${params}`);
   if (!res.ok) throw new Error(`CityAds API error ${res.status}`);
   const json = await res.json();
   if (json.error) throw new Error(`CityAds API: ${json.error}`);
 
   const offers = Array.isArray(json.offer) ? json.offer : [];
-
-  // CityAds currency_id mapping (most common)
   const CURRENCY = { '1': 'RUB', '2': 'USD', '3': 'EUR', '4': 'GBP' };
 
   return offers.map(o => {
     const cd = o.commission_data || {};
     const currency = CURRENCY[cd.currency_id] || 'USD';
 
-    // Determine payout_type and amount
-    let payout_type = 'cpa';
-    let payout = 0;
+    let payout_type = 'cpa', payout = 0;
     if (cd.percent && (parseFloat(cd.percent.min) > 0 || parseFloat(cd.percent.max) > 0)) {
       payout_type = 'revshare';
       payout = parseFloat(cd.percent.max || cd.percent.min || 0);
@@ -159,6 +245,8 @@ async function fetchCityAds(cred) {
       payout = parseFloat(cd.amount.max || cd.amount.min || 0);
     }
 
+    // CityAds: affiliate_link or site_url is the tracking URL
+    const rawTracking = o.affiliate_link || o.click_url || o.site_url || '';
     return {
       external_id:       String(o.id || ''),
       name:              o.name || o.translated_name || 'Unnamed Offer',
@@ -167,8 +255,9 @@ async function fetchCityAds(cred) {
       payout_type,
       currency,
       status:            o.is_active === '1' && o.is_deleted === '0' ? 'active' : 'paused',
+      tracking_url:      toOurMacros(rawTracking, 'cityads'),
       preview_url:       o.site_url || '',
-      allowed_countries: '',   // regions are IDs — not ISO codes in v1, skip for now
+      allowed_countries: '',
       advertiser_name:   String(o.advertiser || ''),
       categories:        '',
       raw: o,
@@ -177,9 +266,6 @@ async function fetchCityAds(cred) {
 }
 
 async function fetchImpact(cred) {
-  // Impact Radius (impact.com) Media Partner API
-  // Auth: Basic auth — Account SID as username (api_key), Auth Token as password (api_secret)
-  // Endpoint: GET /Mediapartners/{AccountSID}/Campaigns
   const accountSid = cred.api_key;
   const authToken  = cred.api_secret;
   if (!accountSid || !authToken)
@@ -198,56 +284,55 @@ async function fetchImpact(cred) {
   const json = await res.json();
   const list = json.Campaigns || json.campaigns || json.data || [];
 
-  return list.map(o => ({
-    external_id:       String(o.Id || o.CampaignId || o.id || ''),
-    name:              o.Name || o.CampaignName || o.name || 'Unnamed',
-    description:       o.Description || o.description || '',
-    payout:            parseFloat(o.DefaultPayout || o.Payout || o.payout || 0),
-    payout_type:       normPayoutType(o.PayoutType || o.payout_type || 'cpa'),
-    currency:          o.CurrencyCode || o.currency || 'USD',
-    status:            String(o.Status || o.status || '').toLowerCase() === 'active' ? 'active' : 'paused',
-    preview_url:       o.LandingPageUrl || o.TrackingUrl || o.preview_url || '',
-    allowed_countries: Array.isArray(o.AllowedCountries)
-                         ? o.AllowedCountries.join(',')
-                         : (o.AllowedCountries || o.allowed_countries || ''),
-    advertiser_name:   o.AdvertiserName || o.Advertiser || o.advertiser_name || '',
-    categories:        (o.Categories || []).map(c => c.Name || c.name || c).join(', '),
-    raw: o,
-  }));
+  return list.map(o => {
+    // Impact: TrackingLink is the actual click tracking URL with [MACRO] syntax
+    // LandingPageUrl is just the advertiser's landing page (no macros)
+    const rawTracking = o.TrackingLink || o.tracking_link || o.TrackingUrl || o.LandingPageUrl || '';
+    return {
+      external_id:       String(o.Id || o.CampaignId || o.id || ''),
+      name:              o.Name || o.CampaignName || o.name || 'Unnamed',
+      description:       o.Description || o.description || '',
+      payout:            parseFloat(o.DefaultPayout || o.Payout || o.payout || 0),
+      payout_type:       normPayoutType(o.PayoutType || o.payout_type || 'cpa'),
+      currency:          o.CurrencyCode || o.currency || 'USD',
+      status:            String(o.Status || o.CampaignStatus || o.status || '').toLowerCase() === 'active' ? 'active' : 'paused',
+      tracking_url:      toOurMacros(rawTracking, 'impact'),
+      preview_url:       o.LandingPageUrl || o.preview_url || '',
+      allowed_countries: Array.isArray(o.AllowedCountries)
+                           ? o.AllowedCountries.join(',')
+                           : (o.AllowedCountries || o.allowed_countries || ''),
+      advertiser_name:   o.AdvertiserName || o.Advertiser || o.advertiser_name || '',
+      categories:        (o.Categories || []).map(c => c.Name || c.name || c).join(', '),
+      raw: o,
+    };
+  });
 }
 
 async function fetchAppsFlyer(cred) {
-  // AppsFlyer Partner API — fetch campaigns available to this partner
   const res = await fetch('https://hq1.appsflyer.com/api/partner-feed/v1/offers', {
     headers: { 'Authorization': `Bearer ${cred.api_key}` },
   });
   if (!res.ok) throw new Error(`AppsFlyer API error ${res.status}`);
   const json = await res.json();
   const offers = json.data || json.offers || [];
-  return offers.map(o => ({
-    external_id:       String(o.id || o.offer_id || ''),
-    name:              o.name || o.app_name || 'Unnamed',
-    description:       o.description || '',
-    payout:            parseFloat(o.payout || 0),
-    payout_type:       normPayoutType(o.payout_type || 'cpi'),
-    currency:          o.currency || 'USD',
-    status:            'active',
-    preview_url:       o.store_url || o.preview_url || '',
-    allowed_countries: (o.geo || []).join(','),
-    advertiser_name:   o.advertiser_name || '',
-    categories:        '',
-    raw: o,
-  }));
-}
-
-function normPayoutType(raw = '') {
-  const t = raw.toLowerCase();
-  if (t.includes('install') || t === 'cpi') return 'cpi';
-  if (t.includes('lead')    || t === 'cpl') return 'cpl';
-  if (t.includes('action')  || t === 'cpa') return 'cpa';
-  if (t.includes('rev')     || t === 'revshare') return 'revshare';
-  if (t.includes('click')   || t === 'cpc') return 'cpc';
-  return 'cpi';
+  return offers.map(o => {
+    const rawTracking = o.tracking_url || o.click_url || o.store_url || o.preview_url || '';
+    return {
+      external_id:       String(o.id || o.offer_id || ''),
+      name:              o.name || o.app_name || 'Unnamed',
+      description:       o.description || '',
+      payout:            parseFloat(o.payout || 0),
+      payout_type:       normPayoutType(o.payout_type || 'cpi'),
+      currency:          o.currency || 'USD',
+      status:            'active',
+      tracking_url:      toOurMacros(rawTracking, 'appsflyer'),
+      preview_url:       o.store_url || o.preview_url || '',
+      allowed_countries: (o.geo || []).join(','),
+      advertiser_name:   o.advertiser_name || '',
+      categories:        '',
+      raw: o,
+    };
+  });
 }
 
 const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact };
@@ -418,6 +503,10 @@ router.post('/import', (req, res, next) => {
       const secToken = nanoid20hex();
       const advName = batchAdvName || offer.advertiser_name || credAdvertiserName || platformFallback || null;
 
+      // Use tracking_url (advertiser click URL with our macros) as destination_url.
+      // Fall back to preview_url if tracking_url is absent (e.g. platform didn't return one).
+      const destUrl = offer.tracking_url || offer.preview_url || '';
+
       const result = insertCampaign.run(
         req.user.id,
         resolvedAdvertiserId,
@@ -427,7 +516,7 @@ router.post('/import', (req, res, next) => {
         secToken,
         offer.payout || 0,
         offer.payout_type || 'cpi',
-        offer.preview_url || '',
+        destUrl,
         offer.allowed_countries || '',
         credential_id || null,
         offer.external_id || null,
