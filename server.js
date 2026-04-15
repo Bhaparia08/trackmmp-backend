@@ -92,7 +92,7 @@ const distCandidates = [
   path.join(__dirname, '..', 'frontend', 'dist'),
 ];
 const frontendDist = distCandidates.find(p => fs.existsSync(path.join(p, 'index.html')));
-if (process.env.NODE_ENV === 'production' && frontendDist) {
+if (frontendDist) {
   console.log(`Serving frontend from: ${frontendDist}`);
   // Assets (JS/CSS) are content-hashed — long cache is fine
   // index.html must never be cached so users always get the latest bundle
