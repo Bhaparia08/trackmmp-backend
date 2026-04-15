@@ -176,6 +176,46 @@ async function fetchCityAds(cred) {
   });
 }
 
+async function fetchImpact(cred) {
+  // Impact Radius (impact.com) Media Partner API
+  // Auth: Basic auth — Account SID as username (api_key), Auth Token as password (api_secret)
+  // Endpoint: GET /Mediapartners/{AccountSID}/Campaigns
+  const accountSid = cred.api_key;
+  const authToken  = cred.api_secret;
+  if (!accountSid || !authToken)
+    throw new Error('Impact requires Account SID (api_key) and Auth Token (api_secret)');
+
+  const basicAuth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const url = `https://api.impact.com/Mediapartners/${encodeURIComponent(accountSid)}/Campaigns?PageSize=200`;
+
+  const res = await fetch(url, {
+    headers: { 'Authorization': `Basic ${basicAuth}`, 'Accept': 'application/json' },
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Impact API error ${res.status}: ${txt.slice(0, 300)}`);
+  }
+  const json = await res.json();
+  const list = json.Campaigns || json.campaigns || json.data || [];
+
+  return list.map(o => ({
+    external_id:       String(o.Id || o.CampaignId || o.id || ''),
+    name:              o.Name || o.CampaignName || o.name || 'Unnamed',
+    description:       o.Description || o.description || '',
+    payout:            parseFloat(o.DefaultPayout || o.Payout || o.payout || 0),
+    payout_type:       normPayoutType(o.PayoutType || o.payout_type || 'cpa'),
+    currency:          o.CurrencyCode || o.currency || 'USD',
+    status:            String(o.Status || o.status || '').toLowerCase() === 'active' ? 'active' : 'paused',
+    preview_url:       o.LandingPageUrl || o.TrackingUrl || o.preview_url || '',
+    allowed_countries: Array.isArray(o.AllowedCountries)
+                         ? o.AllowedCountries.join(',')
+                         : (o.AllowedCountries || o.allowed_countries || ''),
+    advertiser_name:   o.AdvertiserName || o.Advertiser || o.advertiser_name || '',
+    categories:        (o.Categories || []).map(c => c.Name || c.name || c).join(', '),
+    raw: o,
+  }));
+}
+
 async function fetchAppsFlyer(cred) {
   // AppsFlyer Partner API — fetch campaigns available to this partner
   const res = await fetch('https://hq1.appsflyer.com/api/partner-feed/v1/offers', {
@@ -210,7 +250,7 @@ function normPayoutType(raw = '') {
   return 'cpi';
 }
 
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds };
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {
