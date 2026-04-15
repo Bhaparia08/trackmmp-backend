@@ -76,6 +76,7 @@ app.use('/api/publisher', require('./routes/publisher'));
 app.use('/api/am', require('./routes/am'));
 app.use('/api/apikeys', require('./routes/apikeys'));
 app.use('/api/v1', require('./routes/v1'));
+app.use('/api/integrations', require('./routes/integrations'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
