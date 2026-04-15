@@ -21,8 +21,12 @@ router.get('/', (req, res) => {
     SELECT c.*,
       COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id), 0) AS total_clicks,
       COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id AND status = 'installed'), 0) AS total_installs,
-      COALESCE((SELECT SUM(revenue) FROM postbacks WHERE campaign_id = c.id AND status = 'attributed'), 0) AS total_revenue
-    FROM campaigns c WHERE ${clause} ORDER BY c.created_at DESC
+      COALESCE((SELECT SUM(revenue) FROM postbacks WHERE campaign_id = c.id AND status = 'attributed'), 0) AS total_revenue,
+      COALESCE(u.name, c.advertiser_name) AS advertiser_display,
+      u.email AS advertiser_email
+    FROM campaigns c
+    LEFT JOIN users u ON u.id = c.advertiser_id
+    WHERE ${clause} ORDER BY c.created_at DESC
   `).all(...params);
   res.json(rows);
 });

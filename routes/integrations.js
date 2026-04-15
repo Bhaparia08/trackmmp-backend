@@ -251,6 +251,11 @@ router.post('/import', (req, res, next) => {
     const imported = [];
     const skipped  = [];
 
+    // Resolve advertiser: explicit advertiser_id > credential's advertiser_id > null
+    const resolvedAdvertiserId = advertiser_id || cred?.advertiser_id || null;
+    // Resolve advertiser name: offer's name > credential label > linked user's name
+    const credAdvertiserName = cred?.label || null;
+
     const insertCampaign = db.prepare(`
       INSERT INTO campaigns
         (user_id, advertiser_id, name, advertiser_name, campaign_token, security_token,
@@ -259,18 +264,19 @@ router.post('/import', (req, res, next) => {
     `);
 
     for (const offer of offers) {
-      // Skip if a campaign with same name already exists for this user
-      const exists = db.prepare('SELECT id FROM campaigns WHERE user_id = ? AND name = ?')
-                       .get(req.user.id, offer.name);
+      // Skip if a campaign with same name already exists
+      const exists = db.prepare('SELECT id FROM campaigns WHERE name = ?').get(offer.name);
       if (exists) { skipped.push({ name: offer.name, reason: 'already exists' }); continue; }
 
       const token = nanoid12();
       const secToken = nanoid20hex();
+      const advName = offer.advertiser_name || credAdvertiserName || null;
+
       const result = insertCampaign.run(
         req.user.id,
-        advertiser_id || null,
+        resolvedAdvertiserId,
         offer.name,
-        offer.advertiser_name || cred?.label || null,
+        advName,
         token,
         secToken,
         offer.payout || 0,
