@@ -240,7 +240,7 @@ router.post('/fetch-offers', async (req, res, next) => {
 /* ─── POST /api/integrations/import ─────────────────────────────────────────── */
 router.post('/import', (req, res, next) => {
   try {
-    const { offers, advertiser_id, credential_id } = req.body;
+    const { offers, advertiser_id, credential_id, advertiser_name: batchAdvName } = req.body;
     if (!Array.isArray(offers) || offers.length === 0)
       return res.status(400).json({ error: 'offers array is required' });
 
@@ -253,8 +253,15 @@ router.post('/import', (req, res, next) => {
 
     // Resolve advertiser: explicit advertiser_id > credential's advertiser_id > null
     const resolvedAdvertiserId = advertiser_id || cred?.advertiser_id || null;
-    // Resolve advertiser name: offer's name > credential label > linked user's name
+    // Advertiser name fallback chain:
+    //   1. batchAdvName  — explicitly passed from the UI (Offer Import "Advertiser Name" field)
+    //   2. offer.advertiser_name — per-offer name from the platform API
+    //   3. cred.label    — saved credential label (e.g. "Surfshark")
+    //   4. cred.platform — platform name (e.g. "tune", "everflow") as last resort
     const credAdvertiserName = cred?.label || null;
+    const platformFallback = cred?.platform
+      ? cred.platform.charAt(0).toUpperCase() + cred.platform.slice(1)
+      : null;
 
     const insertCampaign = db.prepare(`
       INSERT INTO campaigns
@@ -270,7 +277,7 @@ router.post('/import', (req, res, next) => {
 
       const token = nanoid12();
       const secToken = nanoid20hex();
-      const advName = offer.advertiser_name || credAdvertiserName || null;
+      const advName = batchAdvName || offer.advertiser_name || credAdvertiserName || platformFallback || null;
 
       const result = insertCampaign.run(
         req.user.id,
