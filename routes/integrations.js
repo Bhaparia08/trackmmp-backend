@@ -192,8 +192,8 @@ router.post('/fetch-offers', async (req, res, next) => {
     const { credential_id } = req.body;
     if (!credential_id) return res.status(400).json({ error: 'credential_id required' });
 
-    const cred = db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ? AND user_id = ?')
-                   .get(credential_id, req.user.id);
+    const cred = db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ?')
+                   .get(credential_id);
     if (!cred) return res.status(404).json({ error: 'Credentials not found' });
 
     const adapter = ADAPTERS[cred.platform];

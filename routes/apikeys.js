@@ -18,13 +18,15 @@ router.use(requireAuth);
 // GET /api/apikeys — list publisher API keys
 router.get('/', (req, res) => {
   if (req.user.role === 'admin') {
+    // Admins see ALL keys across all admin accounts
     const rows = db.prepare(`
-      SELECT k.*, p.name AS publisher_name, p.email AS publisher_email
+      SELECT k.*, p.name AS publisher_name, p.email AS publisher_email,
+             u.name AS created_by_name, u.email AS created_by_email
       FROM publisher_api_keys k
       LEFT JOIN publishers p ON p.id = k.publisher_id
-      WHERE k.user_id = ?
+      LEFT JOIN users u ON u.id = k.created_by
       ORDER BY k.created_at DESC
-    `).all(req.user.id);
+    `).all();
     return res.json(rows);
   }
   if (req.user.role === 'publisher') {
@@ -105,13 +107,15 @@ router.delete('/:id', (req, res, next) => {
 // GET /api/apikeys/adv-credentials — list stored advertiser credentials
 router.get('/adv-credentials', (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  // Admins see ALL credentials saved by any admin
   const rows = db.prepare(`
-    SELECT c.*, u.name AS advertiser_name, u.email AS advertiser_email
+    SELECT c.*, u.name AS advertiser_name, u.email AS advertiser_email,
+           cu.name AS created_by_name, cu.email AS created_by_email
     FROM advertiser_api_credentials c
     LEFT JOIN users u ON u.id = c.advertiser_id
-    WHERE c.user_id = ?
+    LEFT JOIN users cu ON cu.id = c.user_id
     ORDER BY c.created_at DESC
-  `).all(req.user.id);
+  `).all();
   res.json(rows);
 });
 
@@ -135,7 +139,7 @@ router.post('/adv-credentials', (req, res, next) => {
 router.delete('/adv-credentials/:id', (req, res, next) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const row = db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const row = db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Not found' });
     db.prepare('DELETE FROM advertiser_api_credentials WHERE id = ?').run(row.id);
     res.json({ success: true });
