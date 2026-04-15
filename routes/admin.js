@@ -93,7 +93,7 @@ router.get('/users', requireAdmin, (req, res) => {
   const { role } = req.query;
   let query = `
     SELECT u.id, u.email, u.name, u.company_name, u.role, u.status, u.plan, u.created_at,
-           u.account_manager_id,
+           u.account_manager_id, u.postback_token,
            am.name  AS account_manager_name,
            am.email AS account_manager_email,
            am.phone AS account_manager_phone

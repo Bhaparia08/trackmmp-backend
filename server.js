@@ -81,12 +81,18 @@ app.use('/api/v1', require('./routes/v1'));
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
 
 // ── In production, serve the built React frontend from Express ────────────────
-// This means NO separate web server (Nginx/LiteSpeed) is needed for the SPA.
-// The backend serves everything on one port, safe alongside Apogeemobi.com.
-const frontendDist = fs.existsSync(path.join(__dirname, 'frontend', 'dist'))
-  ? path.join(__dirname, 'frontend', 'dist')
-  : path.join(__dirname, '..', 'frontend', 'dist');
-if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
+// Checks multiple candidate paths in priority order:
+//   1. backend/public          (our standard build target)
+//   2. backend/frontend/dist   (legacy path)
+//   3. ../frontend/dist        (monorepo dev path)
+const distCandidates = [
+  path.join(__dirname, 'public'),
+  path.join(__dirname, 'frontend', 'dist'),
+  path.join(__dirname, '..', 'frontend', 'dist'),
+];
+const frontendDist = distCandidates.find(p => fs.existsSync(path.join(p, 'index.html')));
+if (process.env.NODE_ENV === 'production' && frontendDist) {
+  console.log(`Serving frontend from: ${frontendDist}`);
   app.use(express.static(frontendDist));
   // All unmatched routes → React SPA (client-side routing)
   app.get('*', (req, res) => {
