@@ -13,9 +13,12 @@ router.get('/profile', (req, res) => {
 });
 
 // GET /api/publisher/campaigns — active campaigns this publisher can run
+// NOTE: advertiser payout (c.payout) is intentionally excluded — publishers only see publisher_payout
 router.get('/campaigns', (req, res) => {
   const campaigns = db.prepare(`
-    SELECT c.id, c.name, c.advertiser_name, c.campaign_token, c.payout, c.payout_type,
+    SELECT c.id, c.name, c.advertiser_name, c.campaign_token,
+           COALESCE(c.publisher_payout, 0) AS payout,
+           COALESCE(c.publisher_payout_type, c.payout_type) AS payout_type,
            c.destination_url, c.click_lookback_days, c.status,
            a.name AS app_name, a.platform AS app_platform
     FROM campaigns c
@@ -48,9 +51,10 @@ router.get('/tracking-url/:campaign_id', (req, res) => {
     + `&sub2={SUB2}`
     + `&sub3={SUB3}`;
 
+  const pubPayout = c.publisher_payout ?? 0;
   const postbackUrl = `${base}/pb`
     + `?clickid={CLICK_ID}`
-    + `&payout=${c.payout}`
+    + `&payout=${pubPayout}`
     + `&event=install`;
 
   res.json({
@@ -58,7 +62,8 @@ router.get('/tracking-url/:campaign_id', (req, res) => {
     postback_url:  postbackUrl,
     pub_token:     pub.pub_token,
     base_domain:   base,
-    campaign: { id: c.id, name: c.name, payout: c.payout, payout_type: c.payout_type },
+    // Only expose publisher_payout to the publisher — never the advertiser's payout
+    campaign: { id: c.id, name: c.name, payout: pubPayout, payout_type: c.publisher_payout_type || c.payout_type },
   });
 });
 

@@ -58,6 +58,10 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN source_credential_id INTEGER REFERENCES advertiser_api_credentials(id)`,
   `ALTER TABLE campaigns ADD COLUMN external_offer_id TEXT`,
 
+  // campaigns: separate publisher payout (what we pay publishers) from advertiser payout (what advertiser pays us)
+  `ALTER TABLE campaigns ADD COLUMN publisher_payout REAL DEFAULT 0`,
+  `ALTER TABLE campaigns ADD COLUMN publisher_payout_type TEXT DEFAULT 'cpi'`,
+
   // Publisher API keys table
   `CREATE TABLE IF NOT EXISTS publisher_api_keys (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
