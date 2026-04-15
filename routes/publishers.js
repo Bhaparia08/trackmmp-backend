@@ -37,10 +37,11 @@ router.put('/:id', (req, res, next) => {
   try {
     const p = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!p) return res.status(404).json({ error: 'Publisher not found' });
-    const { name, email, notes, status } = req.body;
+    const { name, email, notes, status, global_postback_url } = req.body;
     db.prepare(`UPDATE publishers SET name=COALESCE(?,name), email=COALESCE(?,email),
-      notes=COALESCE(?,notes), status=COALESCE(?,status) WHERE id=?`)
-      .run(name||null, email||null, notes||null, status||null, p.id);
+      notes=COALESCE(?,notes), status=COALESCE(?,status),
+      global_postback_url=COALESCE(?,global_postback_url) WHERE id=?`)
+      .run(name||null, email||null, notes||null, status||null, global_postback_url ?? null, p.id);
     res.json(db.prepare('SELECT * FROM publishers WHERE id = ?').get(p.id));
   } catch (err) { next(err); }
 });
