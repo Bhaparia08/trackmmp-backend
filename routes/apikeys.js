@@ -42,15 +42,27 @@ router.get('/', (req, res) => {
   res.status(403).json({ error: 'Not allowed' });
 });
 
-// POST /api/apikeys — create a new API key for a publisher
+// POST /api/apikeys — create a new API key
+// Admin: can create for any publisher they own
+// Publisher: creates for their own account (publisher_id resolved automatically)
 router.post('/', (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const { publisher_id, name } = req.body;
-    if (!publisher_id || !name) return res.status(400).json({ error: 'publisher_id and name are required' });
+    let publisher_id = req.body.publisher_id;
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
 
-    const pub = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(publisher_id, req.user.id);
-    if (!pub) return res.status(404).json({ error: 'Publisher not found' });
+    if (req.user.role === 'publisher') {
+      // Publisher generates their own key — resolve their publisher record
+      const pub = db.prepare('SELECT * FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
+      if (!pub) return res.status(404).json({ error: 'Publisher profile not found. Ask your account manager to link your account.' });
+      publisher_id = pub.id;
+    } else if (req.user.role === 'admin') {
+      if (!publisher_id) return res.status(400).json({ error: 'publisher_id is required' });
+      const pub = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(publisher_id, req.user.id);
+      if (!pub) return res.status(404).json({ error: 'Publisher not found' });
+    } else {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
 
     const api_key = nanoid32();
     const result = db.prepare(`
