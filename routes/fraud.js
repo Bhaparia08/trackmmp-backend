@@ -4,11 +4,11 @@ const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/fraud?from=&to=&campaign_id=&fraud_type=
+// admin sees all fraud logs (no user_id filter)
 router.get('/', requireAdmin, (req, res) => {
   const { from, to, campaign_id, fraud_type, page = 1, limit = 50 } = req.query;
-  const conditions = ['fl.user_id = ?'];
-  const values = [req.user.id];
+  const conditions = ['1=1'];
+  const values = [];
   if (from) { conditions.push("date(fl.created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(fl.created_at,'unixepoch') <= ?"); values.push(to); }
   if (campaign_id) { conditions.push('fl.campaign_id = ?'); values.push(campaign_id); }
@@ -28,14 +28,13 @@ router.get('/', requireAdmin, (req, res) => {
   res.json({ rows, total, page: parseInt(page), limit: parseInt(limit) });
 });
 
-// GET /api/fraud/summary
 router.get('/summary', requireAdmin, (req, res) => {
   const summary = db.prepare(`
     SELECT fraud_type, COUNT(*) as count, action
-    FROM fraud_log WHERE user_id = ?
+    FROM fraud_log
     GROUP BY fraud_type, action
     ORDER BY count DESC
-  `).all(req.user.id);
+  `).all();
   res.json(summary);
 });
 

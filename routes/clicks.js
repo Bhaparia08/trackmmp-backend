@@ -9,8 +9,12 @@ router.get('/', (req, res) => {
   const { campaign_id, publisher_id, status, platform, country, from, to,
           page = 1, limit = 50 } = req.query;
 
-  const conditions = ['cl.user_id = ?'];
-  const values = [req.user.id];
+  // admin sees all clicks; other roles see only their own
+  const scope = req.user.role === 'admin'
+    ? { clause: '1=1', params: [] }
+    : { clause: 'cl.user_id = ?', params: [req.user.id] };
+  const conditions = [scope.clause];
+  const values = [...scope.params];
 
   if (campaign_id) { conditions.push('cl.campaign_id = ?'); values.push(campaign_id); }
   if (publisher_id) { conditions.push('cl.publisher_id = ?'); values.push(publisher_id); }

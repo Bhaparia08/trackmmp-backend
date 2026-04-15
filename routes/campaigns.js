@@ -10,7 +10,7 @@ router.use(requireAuth);
 
 // Helper: build campaign WHERE clause based on role
 function campaignFilter(user) {
-  if (user.role === 'admin') return { clause: 'c.user_id = ?', params: [user.id] };
+  if (user.role === 'admin') return { clause: '1=1', params: [] }; // admin sees all campaigns
   if (user.role === 'advertiser') return { clause: 'c.advertiser_id = ?', params: [user.id] };
   return { clause: '1=0', params: [] }; // publishers use /api/publisher routes
 }
@@ -72,7 +72,7 @@ router.get('/:id', (req, res) => {
 router.put('/:id', (req, res, next) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const c = db.prepare('SELECT * FROM campaigns WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const c = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
     if (!c) return res.status(404).json({ error: 'Campaign not found' });
 
     const { name, advertiser_name, advertiser_id, payout, payout_type, destination_url, postback_url,
@@ -99,7 +99,7 @@ router.put('/:id', (req, res, next) => {
 router.delete('/:id', (req, res, next) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const c = db.prepare('SELECT * FROM campaigns WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const c = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
     if (!c) return res.status(404).json({ error: 'Campaign not found' });
     db.prepare("UPDATE campaigns SET status='archived', updated_at=unixepoch() WHERE id=?").run(c.id);
     res.json({ success: true });

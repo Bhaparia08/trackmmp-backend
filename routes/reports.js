@@ -5,6 +5,17 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
+/* ── Role-aware data scope ───────────────────────────────────────────────────
+   admin        → sees ALL data (no user_id filter)
+   advertiser   → sees only their own user_id
+   account_mgr  → their /api/am/* routes handle scoping; here fallback to own
+─────────────────────────────────────────────────────────────────────────────*/
+function userScope(user, alias = '') {
+  const col = alias ? `${alias}.user_id` : 'user_id';
+  if (user.role === 'admin') return { clause: '1=1', params: [] };
+  return { clause: `${col} = ?`, params: [user.id] };
+}
+
 function dateFilter(from, to) {
   const conditions = [];
   const values = [];
@@ -17,7 +28,8 @@ function dateFilter(from, to) {
 router.get('/summary', (req, res) => {
   const { from, to, campaign_id, publisher_id } = req.query;
   const { conditions, values } = dateFilter(from, to);
-  conditions.push('user_id = ?'); values.push(req.user.id);
+  const scope = userScope(req.user);
+  conditions.push(scope.clause); values.push(...scope.params);
   if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
   if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
 
@@ -31,7 +43,6 @@ router.get('/summary', (req, res) => {
   const total_clicks = row.clicks || 0;
   const total_installs = row.installs || 0;
   const cr = total_clicks > 0 ? ((total_installs / total_clicks) * 100).toFixed(2) : '0.00';
-
   res.json({ ...row, conversion_rate: cr + '%' });
 });
 
@@ -39,7 +50,8 @@ router.get('/summary', (req, res) => {
 router.get('/by-day', (req, res) => {
   const { from, to, campaign_id, publisher_id } = req.query;
   const { conditions, values } = dateFilter(from, to);
-  conditions.push('user_id = ?'); values.push(req.user.id);
+  const scope = userScope(req.user);
+  conditions.push(scope.clause); values.push(...scope.params);
   if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
   if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
 
@@ -54,7 +66,8 @@ router.get('/by-day', (req, res) => {
 router.get('/by-campaign', (req, res) => {
   const { from, to } = req.query;
   const { conditions, values } = dateFilter(from, to);
-  conditions.push('ds.user_id = ?'); values.push(req.user.id);
+  const scope = userScope(req.user, 'ds');
+  conditions.push(scope.clause); values.push(...scope.params);
 
   const rows = db.prepare(`SELECT c.name AS campaign, c.id AS campaign_id,
     SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
@@ -70,7 +83,8 @@ router.get('/by-campaign', (req, res) => {
 router.get('/by-publisher', (req, res) => {
   const { from, to } = req.query;
   const { conditions, values } = dateFilter(from, to);
-  conditions.push('ds.user_id = ?'); values.push(req.user.id);
+  const scope = userScope(req.user, 'ds');
+  conditions.push(scope.clause); values.push(...scope.params);
 
   const rows = db.prepare(`SELECT p.name AS publisher, p.id AS publisher_id,
     SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
@@ -85,15 +99,15 @@ router.get('/by-publisher', (req, res) => {
 // GET /api/reports/by-country
 router.get('/by-country', (req, res) => {
   const { from, to } = req.query;
-  const values = [req.user.id];
-  const dateC = [];
-  if (from) { dateC.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
-  if (to)   { dateC.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
-  const extra = dateC.length ? ' AND ' + dateC.join(' AND ') : '';
+  const scope = userScope(req.user, 'cl');
+  const conditions = [scope.clause];
+  const values = [...scope.params];
+  if (from) { conditions.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
 
   const rows = db.prepare(`SELECT country, COUNT(*) AS clicks,
     SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installs
-    FROM clicks WHERE user_id = ?${extra}
+    FROM clicks cl WHERE ${conditions.join(' AND ')}
     GROUP BY country ORDER BY clicks DESC LIMIT 50`).all(...values);
   res.json(rows);
 });
@@ -101,15 +115,15 @@ router.get('/by-country', (req, res) => {
 // GET /api/reports/by-device
 router.get('/by-device', (req, res) => {
   const { from, to } = req.query;
-  const values = [req.user.id];
-  const dateC = [];
-  if (from) { dateC.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
-  if (to)   { dateC.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
-  const extra = dateC.length ? ' AND ' + dateC.join(' AND ') : '';
+  const scope = userScope(req.user, 'cl');
+  const conditions = [scope.clause];
+  const values = [...scope.params];
+  if (from) { conditions.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
 
   const rows = db.prepare(`SELECT device_type, os, platform, COUNT(*) AS clicks,
     SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installs
-    FROM clicks WHERE user_id = ?${extra}
+    FROM clicks cl WHERE ${conditions.join(' AND ')}
     GROUP BY device_type, os ORDER BY clicks DESC`).all(...values);
   res.json(rows);
 });
@@ -117,16 +131,16 @@ router.get('/by-device', (req, res) => {
 // GET /api/reports/by-event
 router.get('/by-event', (req, res) => {
   const { from, to, campaign_id } = req.query;
-  const values = [req.user.id];
-  const extra = [];
-  if (from) { extra.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
-  if (to)   { extra.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
-  if (campaign_id) { extra.push('campaign_id = ?'); values.push(campaign_id); }
-  const where = extra.length ? ' AND ' + extra.join(' AND ') : '';
+  const scope = userScope(req.user);
+  const conditions = [scope.clause, "status = 'attributed'"];
+  const values = [...scope.params];
+  if (from) { conditions.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
+  if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
 
   const rows = db.prepare(`SELECT event_type, event_name, COUNT(*) AS count,
     SUM(revenue) AS revenue FROM postbacks
-    WHERE user_id = ? AND status = 'attributed'${where}
+    WHERE ${conditions.join(' AND ')}
     GROUP BY event_type, event_name ORDER BY count DESC`).all(...values);
   res.json(rows);
 });
@@ -134,8 +148,9 @@ router.get('/by-event', (req, res) => {
 // GET /api/reports/by-goal
 router.get('/by-goal', (req, res) => {
   const { from, to, campaign_id } = req.query;
-  const conditions = ['pb.user_id = ?', "pb.status = 'attributed'"];
-  const values = [req.user.id];
+  const scope = userScope(req.user, 'pb');
+  const conditions = [scope.clause, "pb.status = 'attributed'"];
+  const values = [...scope.params];
   if (from) { conditions.push("date(pb.created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(pb.created_at,'unixepoch') <= ?"); values.push(to); }
   if (campaign_id) { conditions.push('pb.campaign_id = ?'); values.push(campaign_id); }
@@ -153,13 +168,14 @@ router.get('/by-goal', (req, res) => {
   res.json(rows);
 });
 
-// GET /api/reports/by-sub — breakdown by sub1
+// GET /api/reports/by-sub
 router.get('/by-sub', (req, res) => {
   const { from, to, campaign_id, sub = 'af_sub1' } = req.query;
   const allowedSubs = ['af_sub1','af_sub2','af_sub3','af_sub4','af_sub5','sub6','sub7','sub8','sub9','sub10','pid'];
   const col = allowedSubs.includes(sub) ? sub : 'af_sub1';
-  const conditions = ['cl.user_id = ?'];
-  const values = [req.user.id];
+  const scope = userScope(req.user, 'cl');
+  const conditions = [scope.clause];
+  const values = [...scope.params];
   if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); values.push(to); }
   if (campaign_id) { conditions.push('cl.campaign_id = ?'); values.push(campaign_id); }
@@ -181,8 +197,9 @@ router.get('/by-sub', (req, res) => {
 // GET /api/reports/by-os
 router.get('/by-os', (req, res) => {
   const { from, to } = req.query;
-  const conditions = ['cl.user_id = ?'];
-  const values = [req.user.id];
+  const scope = userScope(req.user, 'cl');
+  const conditions = [scope.clause];
+  const values = [...scope.params];
   if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); values.push(to); }
 
@@ -199,11 +216,12 @@ router.get('/by-os', (req, res) => {
   res.json(rows);
 });
 
-// GET /api/reports/postbacks — paginated postback log with filters
+// GET /api/reports/postbacks
 router.get('/postbacks', (req, res) => {
   const { campaign_id, status, event_type, from, to, page = 1, limit = 50 } = req.query;
-  const conditions = ['pb.user_id = ?'];
-  const values = [req.user.id];
+  const scope = userScope(req.user, 'pb');
+  const conditions = [scope.clause];
+  const values = [...scope.params];
 
   if (campaign_id) { conditions.push('pb.campaign_id = ?'); values.push(campaign_id); }
   if (status)      { conditions.push('pb.status = ?'); values.push(status); }
@@ -213,7 +231,6 @@ router.get('/postbacks', (req, res) => {
 
   const where = conditions.join(' AND ');
   const offset = (parseInt(page) - 1) * parseInt(limit);
-
   const total = db.prepare(`SELECT COUNT(*) as n FROM postbacks pb WHERE ${where}`).get(...values).n;
 
   const rows = db.prepare(`
@@ -228,23 +245,27 @@ router.get('/postbacks', (req, res) => {
     LIMIT ? OFFSET ?
   `).all(...values, parseInt(limit), offset);
 
-  // Status summary counts
+  const summaryScope = userScope(req.user);
+  const summaryWhere = summaryScope.clause === '1=1' ? '1=1' : 'user_id = ?';
+  const summaryParams = summaryScope.params;
   const summary = db.prepare(`
     SELECT status, COUNT(*) as count, COALESCE(SUM(revenue),0) as revenue
-    FROM postbacks WHERE user_id = ?
+    FROM postbacks WHERE ${summaryWhere}
     GROUP BY status
-  `).all(req.user.id);
+  `).all(...summaryParams);
 
   res.json({ rows, total, page: parseInt(page), limit: parseInt(limit), summary });
 });
 
 // GET /api/reports/fraud-summary
 router.get('/fraud-summary', (req, res) => {
+  const scope = userScope(req.user);
+  const where = scope.clause === '1=1' ? '1=1' : 'user_id = ?';
   const rows = db.prepare(`
     SELECT fraud_type, COUNT(*) as count, action
-    FROM fraud_log WHERE user_id = ?
+    FROM fraud_log WHERE ${where}
     GROUP BY fraud_type, action ORDER BY count DESC
-  `).all(req.user.id);
+  `).all(...scope.params);
   res.json(rows);
 });
 
