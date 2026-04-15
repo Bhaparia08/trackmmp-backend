@@ -238,19 +238,22 @@ router.post('/import', (req, res, next) => {
                        .get(req.user.id, offer.name);
       if (exists) { skipped.push({ name: offer.name, reason: 'already exists' }); continue; }
 
+      const token = nanoid12();
+      const secToken = nanoid20hex();
       const result = insertCampaign.run(
         req.user.id,
         advertiser_id || null,
         offer.name,
         offer.advertiser_name || cred?.label || null,
-        nanoid12(),
-        nanoid20hex(),
+        token,
+        secToken,
         offer.payout || 0,
         offer.payout_type || 'cpi',
         offer.preview_url || '',
         offer.allowed_countries || '',
       );
-      imported.push({ id: result.lastInsertRowid, name: offer.name });
+      const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid);
+      imported.push({ id: result.lastInsertRowid, name: offer.name, campaign_token: token, campaign });
     }
 
     res.json({ imported, skipped, total_imported: imported.length });
