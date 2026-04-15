@@ -155,6 +155,113 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /track/smart/:token  — Smart link: route to best-matching campaign
+router.get('/smart/:token', clickLimiter, async (req, res, next) => {
+  try {
+    const sl = db.prepare(
+      "SELECT * FROM smart_links WHERE token = ? AND status = 'active'"
+    ).get(req.params.token);
+
+    if (!sl) return res.status(404).send('Smart link not found or inactive');
+
+    const q = req.query;
+    const ua = req.headers['user-agent'] || '';
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    const country = await lookupCountry(ip);
+    const { device_type, os } = parseDevice(ua);
+
+    // Load all rules for this smart link (active campaigns only)
+    const rules = db.prepare(`
+      SELECT slr.*, c.destination_url, c.campaign_token, c.user_id, c.app_id, c.payout, c.visibility
+      FROM smart_link_rules slr
+      JOIN campaigns c ON c.id = slr.campaign_id AND c.status = 'active'
+      WHERE slr.smart_link_id = ?
+      ORDER BY slr.priority ASC, slr.id ASC
+    `).all(sl.id);
+
+    // Filter rules that match the request's geo / device / os
+    function listMatches(col, val) {
+      if (!col) return true;
+      const items = col.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return items.length === 0 || items.includes((val || '').toLowerCase());
+    }
+
+    const matching = rules.filter(r =>
+      listMatches(r.country_codes, country) &&
+      listMatches(r.device_types, device_type) &&
+      listMatches(r.os_names, os)
+    );
+
+    // Weighted random selection among matching rules
+    let selected = null;
+    if (matching.length > 0) {
+      const totalWeight = matching.reduce((s, r) => s + (r.weight || 1), 0);
+      let rand = Math.random() * totalWeight;
+      for (const r of matching) {
+        rand -= (r.weight || 1);
+        if (rand <= 0) { selected = r; break; }
+      }
+      if (!selected) selected = matching[matching.length - 1];
+    }
+
+    // No matching rule → use fallback URL
+    if (!selected) {
+      const fallback = sl.fallback_url || '/';
+      return res.redirect(302, fallback);
+    }
+
+    // Record a click on the selected campaign
+    const click_id = nanoid16();
+    const publisher_click_id = q.clickid || q.click_id || null;
+    const advertising_id = q.advertising_id || q.gps_adid || q.idfa || null;
+    const language = req.headers['accept-language']?.split(',')[0] || '';
+
+    let publisher_id = null;
+    if (q.pid) {
+      const pub = db.prepare('SELECT id FROM publishers WHERE pub_token = ? AND user_id = ?')
+        .get(q.pid, selected.user_id);
+      if (pub) publisher_id = pub.id;
+    }
+
+    db.prepare(`INSERT INTO clicks
+      (click_id, campaign_id, publisher_id, user_id,
+       pid, publisher_click_id, ip, user_agent, country, language,
+       device_type, os, advertising_id, platform, referrer,
+       af_sub1, af_sub2, af_sub3, af_sub4, af_sub5,
+       smart_link_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(click_id, selected.campaign_id, publisher_id, selected.user_id,
+           q.pid||null, publisher_click_id, ip, ua, country, language,
+           device_type, os, advertising_id, null, req.headers.referer||null,
+           q.sub1||null, q.sub2||null, q.sub3||null, q.sub4||null, q.sub5||null,
+           sl.id);
+
+    db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
+      VALUES (?,?,?,?,date('now'),1)
+      ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
+      DO UPDATE SET clicks = clicks + 1`)
+      .run(selected.user_id, selected.app_id||0, selected.campaign_id, publisher_id||0);
+
+    // Build destination URL with macro substitution
+    let dest = selected.destination_url || sl.fallback_url || '/';
+    const macros = {
+      '{click_id}': click_id, '{our_click_id}': click_id,
+      '{publisher_click_id}': publisher_click_id || '', '{clickid}': publisher_click_id || '',
+      '{pid}': q.pid || '', '{advertising_id}': advertising_id || '',
+      '{idfa}': q.idfa || '', '{gaid}': q.gps_adid || '',
+      '{ip}': ip, '{country}': country || '', '{country_code}': country || '',
+      '{device_type}': device_type || '', '{os}': os || '',
+      '{sub1}': q.sub1 || '', '{sub2}': q.sub2 || '', '{sub3}': q.sub3 || '',
+      '{sub4}': q.sub4 || '', '{sub5}': q.sub5 || '',
+      '{campaign_id}': String(selected.campaign_id), '{campaign_token}': selected.campaign_token,
+    };
+    for (const [k, v] of Object.entries(macros)) dest = dest.split(k).join(v);
+    if (!dest.includes(click_id)) dest += (dest.includes('?') ? '&' : '?') + 'click_id=' + click_id;
+
+    return res.redirect(302, dest);
+  } catch (err) { next(err); }
+});
+
 // GET /track/imp/:campaign_token  — Impression tracking (1x1 pixel or beacon)
 router.get('/imp/:campaign_token', impLimiter, async (req, res, next) => {
   try {

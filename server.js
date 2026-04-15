@@ -87,9 +87,17 @@ app.use('/api/apikeys', require('./routes/apikeys'));
 app.use('/api/v1', require('./routes/v1'));
 app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/campaign-access', require('./routes/campaignAccess'));
+app.use('/api/smart-links',    require('./routes/smartLinks'));
+app.use('/api/automation',     require('./routes/automation'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
+
+// ── Automation Rules Engine — runs every 60 seconds ───────────────────────
+const { runAutomationRules } = require('./utils/automationEngine');
+setInterval(() => {
+  try { runAutomationRules(); } catch (e) { console.error('[AutomationEngine]', e.message); }
+}, 60 * 1000);
 
 // ── In production, serve the built React frontend from Express ────────────────
 // Checks multiple candidate paths in priority order:

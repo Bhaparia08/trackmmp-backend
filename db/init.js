@@ -123,6 +123,55 @@ const migrations = [
     used       INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
+
+  // Smart link origin tracking on clicks
+  `ALTER TABLE clicks ADD COLUMN smart_link_id INTEGER REFERENCES smart_links(id)`,
+
+  // ── Smart Links ────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS smart_links (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    name         TEXT    NOT NULL,
+    token        TEXT    NOT NULL UNIQUE,
+    fallback_url TEXT    NOT NULL DEFAULT '',
+    status       TEXT    NOT NULL DEFAULT 'active',
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at   INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE TABLE IF NOT EXISTS smart_link_rules (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    smart_link_id  INTEGER NOT NULL REFERENCES smart_links(id) ON DELETE CASCADE,
+    campaign_id    INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    priority       INTEGER NOT NULL DEFAULT 0,
+    weight         INTEGER NOT NULL DEFAULT 100,
+    country_codes  TEXT    NOT NULL DEFAULT '',
+    device_types   TEXT    NOT NULL DEFAULT '',
+    os_names       TEXT    NOT NULL DEFAULT '',
+    created_at     INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+
+  // ── Automation Rules ───────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS automation_rules (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id          INTEGER NOT NULL REFERENCES users(id),
+    name             TEXT    NOT NULL,
+    status           TEXT    NOT NULL DEFAULT 'active',
+    trigger_type     TEXT    NOT NULL,
+    trigger_config   TEXT    NOT NULL DEFAULT '{}',
+    action_type      TEXT    NOT NULL,
+    action_config    TEXT    NOT NULL DEFAULT '{}',
+    last_checked_at  INTEGER,
+    last_triggered_at INTEGER,
+    created_at       INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at       INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE TABLE IF NOT EXISTS automation_rule_logs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_id      INTEGER NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    triggered_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    trigger_data TEXT    NOT NULL DEFAULT '{}',
+    action_taken TEXT    NOT NULL DEFAULT ''
+  )`,
 ];
 
 const IGNORABLE = [
