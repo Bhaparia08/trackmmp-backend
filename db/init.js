@@ -68,6 +68,24 @@ const migrations = [
   // publishers: global postback URL — fired to publisher on every attributed conversion
   `ALTER TABLE publishers ADD COLUMN global_postback_url TEXT DEFAULT ''`,
 
+  // campaigns: visibility / access control
+  // private = admin-only, approval_required = publisher must request, open = anyone can run
+  `ALTER TABLE campaigns ADD COLUMN visibility TEXT NOT NULL DEFAULT 'open'`,
+
+  // campaign access requests — publishers request approval for approval_required campaigns
+  `CREATE TABLE IF NOT EXISTS campaign_access_requests (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    publisher_id INTEGER NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    status       TEXT NOT NULL DEFAULT 'pending',
+    note         TEXT,
+    reviewed_by  INTEGER REFERENCES users(id),
+    reviewed_at  INTEGER,
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(campaign_id, publisher_id)
+  )`,
+
   // Publisher API keys table
   `CREATE TABLE IF NOT EXISTS publisher_api_keys (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

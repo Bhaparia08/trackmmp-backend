@@ -86,6 +86,7 @@ app.use('/api/am', require('./routes/am'));
 app.use('/api/apikeys', require('./routes/apikeys'));
 app.use('/api/v1', require('./routes/v1'));
 app.use('/api/integrations', require('./routes/integrations'));
+app.use('/api/campaign-access', require('./routes/campaignAccess'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

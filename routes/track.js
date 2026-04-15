@@ -34,6 +34,21 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       if (pub) publisher_id = pub.id;
     }
 
+    // ── Visibility / access check ──────────────────────────────────────────────
+    const visibility = campaign.visibility || 'open';
+    if (visibility === 'private') {
+      return res.status(403).send('This campaign is not available.');
+    }
+    if (visibility === 'approval_required') {
+      if (!publisher_id) return res.status(403).send('Access to this campaign requires approval. Contact your account manager.');
+      const access = db.prepare(
+        "SELECT status FROM campaign_access_requests WHERE campaign_id = ? AND publisher_id = ?"
+      ).get(campaign.id, publisher_id);
+      if (!access || access.status !== 'approved') {
+        return res.status(403).send('Your access to this campaign is pending approval. Clicks are paused until approved.');
+      }
+    }
+
     // Support all major click ID param names
     const publisher_click_id = q.clickid || q.click_id || q.irclickid || q.aff_click_id || null;
 

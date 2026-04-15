@@ -12,20 +12,29 @@ router.get('/profile', (req, res) => {
   res.json(pub);
 });
 
-// GET /api/publisher/campaigns — active campaigns this publisher can run
+// GET /api/publisher/campaigns — active campaigns this publisher can see
 // NOTE: advertiser payout (c.payout) is intentionally excluded — publishers only see publisher_payout
+// private campaigns are hidden; approval_required shown with access status
 router.get('/campaigns', (req, res) => {
+  const pub = db.prepare('SELECT id FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
+  const pubId = pub?.id || 0;
+
   const campaigns = db.prepare(`
     SELECT c.id, c.name, c.advertiser_name, c.campaign_token,
            COALESCE(c.publisher_payout, 0) AS payout,
            COALESCE(c.publisher_payout_type, c.payout_type) AS payout_type,
            c.destination_url, c.click_lookback_days, c.status,
-           a.name AS app_name, a.platform AS app_platform
+           COALESCE(c.visibility, 'open') AS visibility,
+           c.preview_url, c.allowed_countries,
+           a.name AS app_name, a.platform AS app_platform,
+           r.status AS access_status
     FROM campaigns c
     LEFT JOIN apps a ON a.id = c.app_id
+    LEFT JOIN campaign_access_requests r ON r.campaign_id = c.id AND r.publisher_id = ?
     WHERE c.status = 'active'
+      AND COALESCE(c.visibility, 'open') != 'private'
     ORDER BY c.created_at DESC
-  `).all();
+  `).all(pubId);
   res.json(campaigns);
 });
 
@@ -36,6 +45,18 @@ router.get('/tracking-url/:campaign_id', (req, res) => {
 
   const c = db.prepare('SELECT * FROM campaigns WHERE id = ? AND status = ?').get(req.params.campaign_id, 'active');
   if (!c) return res.status(404).json({ error: 'Campaign not found' });
+
+  // Visibility check
+  const visibility = c.visibility || 'open';
+  if (visibility === 'private') return res.status(403).json({ error: 'Campaign is private' });
+  if (visibility === 'approval_required') {
+    const access = db.prepare(
+      "SELECT status FROM campaign_access_requests WHERE campaign_id = ? AND publisher_id = ?"
+    ).get(c.id, pub.id);
+    if (!access || access.status !== 'approved') {
+      return res.status(403).json({ error: 'Access pending approval', access_status: access?.status || 'not_requested' });
+    }
+  }
 
   // Use configured domain, or derive from request host, fallback to production domain
   const base = process.env.TRACKING_DOMAIN
