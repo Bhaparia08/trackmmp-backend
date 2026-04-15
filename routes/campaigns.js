@@ -51,20 +51,20 @@ router.post('/', (req, res, next) => {
             publisher_payout = 0, publisher_payout_type = 'cpi',
             destination_url = '', preview_url = '', postback_url = '', cap_daily = 0, cap_total = 0,
             allowed_countries = '', click_lookback_days = 7, is_retargeting = 0,
-            visibility = 'open', approved_publishers = [] } = req.body;
+            visibility = 'open', approved_publishers = [], tags = '' } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const result = db.prepare(`
       INSERT INTO campaigns (user_id, advertiser_id, app_id, name, advertiser_name, campaign_token,
         security_token, payout, payout_type, publisher_payout, publisher_payout_type,
         destination_url, preview_url, postback_url, cap_daily, cap_total,
-        allowed_countries, click_lookback_days, is_retargeting, visibility)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_countries, click_lookback_days, is_retargeting, visibility, tags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
            destination_url, preview_url, postback_url, cap_daily, cap_total,
-           allowed_countries, click_lookback_days, is_retargeting ? 1 : 0, visibility);
+           allowed_countries, click_lookback_days, is_retargeting ? 1 : 0, visibility, tags||'');
 
     const campaignId = result.lastInsertRowid;
     upsertApprovedPublishers(campaignId, approved_publishers, req.user.id);
@@ -118,7 +118,7 @@ router.put('/:id', (req, res, next) => {
             publisher_payout, publisher_payout_type,
             destination_url, preview_url, postback_url,
             status, cap_daily, cap_total, allowed_countries, click_lookback_days,
-            is_retargeting, visibility, approved_publishers } = req.body;
+            is_retargeting, visibility, approved_publishers, tags } = req.body;
 
     db.prepare(`UPDATE campaigns SET
       name=COALESCE(?,name), advertiser_name=COALESCE(?,advertiser_name),
@@ -128,14 +128,15 @@ router.put('/:id', (req, res, next) => {
       destination_url=COALESCE(?,destination_url), preview_url=COALESCE(?,preview_url), postback_url=COALESCE(?,postback_url),
       status=COALESCE(?,status), cap_daily=COALESCE(?,cap_daily), cap_total=COALESCE(?,cap_total),
       allowed_countries=COALESCE(?,allowed_countries), click_lookback_days=COALESCE(?,click_lookback_days),
-      is_retargeting=COALESCE(?,is_retargeting), visibility=COALESCE(?,visibility), updated_at=unixepoch()
+      is_retargeting=COALESCE(?,is_retargeting), visibility=COALESCE(?,visibility),
+      tags=COALESCE(?,tags), updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
            publisher_payout??null, publisher_payout_type||null,
            destination_url||null, preview_url||null, postback_url||null, status||null,
            cap_daily??null, cap_total??null, allowed_countries||null,
            click_lookback_days??null, is_retargeting!=null?+is_retargeting:null,
-           visibility||null, c.id);
+           visibility||null, tags!=null?tags:null, c.id);
 
     if (Array.isArray(approved_publishers)) {
       upsertApprovedPublishers(c.id, approved_publishers, req.user.id);

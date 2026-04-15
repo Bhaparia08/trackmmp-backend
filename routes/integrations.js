@@ -650,8 +650,8 @@ router.post('/import', (req, res, next) => {
         (user_id, advertiser_id, name, advertiser_name, campaign_token, security_token,
          payout, payout_type, publisher_payout, publisher_payout_type,
          destination_url, preview_url, allowed_countries, visibility, status,
-         source_credential_id, external_offer_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+         source_credential_id, external_offer_id, tags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
     `);
 
     const updateCampaign = db.prepare(`
@@ -668,6 +668,7 @@ router.post('/import', (req, res, next) => {
         visibility = COALESCE(?, visibility),
         source_credential_id = COALESCE(?, source_credential_id),
         external_offer_id = COALESCE(?, external_offer_id),
+        tags = COALESCE(?, tags),
         updated_at = unixepoch()
       WHERE id = ?
     `);
@@ -705,6 +706,7 @@ router.post('/import', (req, res, next) => {
             resolvedVisibility,
             credential_id || null,
             offer.external_id || null,
+            offer.categories || null,
             exists.id,
           );
           const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(exists.id);
@@ -737,6 +739,7 @@ router.post('/import', (req, res, next) => {
         resolvedVisibility,
         credential_id || null,
         offer.external_id || null,
+        offer.categories || '',
       );
       const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid);
       applyApprovedPublishers(result.lastInsertRowid);

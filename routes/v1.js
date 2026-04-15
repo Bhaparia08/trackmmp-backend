@@ -27,17 +27,42 @@ router.get('/campaigns', (req, res) => {
   const pub = db.prepare('SELECT * FROM publishers WHERE id = ?').get(req.publisherId);
   if (!pub) return res.json({ data: [] });
 
+  const { tags } = req.query;
+
+  // Build campaign list: exclude private campaigns; for approval_required, only show if publisher is approved
+  const conditions = [
+    "c.status = 'active'",
+    "COALESCE(c.visibility, 'open') != 'private'",
+    `(COALESCE(c.visibility, 'open') != 'approval_required'
+      OR EXISTS (SELECT 1 FROM campaign_access_requests r WHERE r.campaign_id = c.id AND r.publisher_id = ? AND r.status = 'approved'))`,
+  ];
+  const params = [req.publisherId];
+
+  if (tags) {
+    // Filter by tag — support comma-separated multi-tag (any match)
+    const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
+    if (tagList.length > 0) {
+      const tagConditions = tagList.map(() => "INSTR(',' || LOWER(c.tags) || ',', ',' || LOWER(?) || ',') > 0");
+      conditions.push(`(${tagConditions.join(' OR ')})`);
+      params.push(...tagList);
+    }
+  }
+
   const campaigns = db.prepare(`
-    SELECT c.id, c.name, c.advertiser_name, c.campaign_token, c.payout, c.payout_type,
+    SELECT c.id, c.name, c.advertiser_name, c.campaign_token,
+           COALESCE(c.publisher_payout, 0) AS payout,
+           COALESCE(c.publisher_payout_type, c.payout_type) AS payout_type,
            c.allowed_countries, c.click_lookback_days, c.cap_daily, c.cap_total, c.status,
+           COALESCE(c.visibility, 'open') AS visibility,
+           COALESCE(c.tags, '') AS tags,
            a.name AS app_name, a.platform AS app_platform, a.bundle_id
     FROM campaigns c
     LEFT JOIN apps a ON a.id = c.app_id
-    WHERE c.status = 'active'
+    WHERE ${conditions.join(' AND ')}
     ORDER BY c.created_at DESC
-  `).all();
+  `).all(...params);
 
-  // Attach publisher-specific tracking URL and postback instructions to each campaign
+  // Attach publisher-specific tracking URL and goals to each campaign
   const data = campaigns.map(c => {
     const goals = db.prepare(`
       SELECT id, name, event_name, payout, payout_type, revenue
@@ -53,6 +78,52 @@ router.get('/campaigns', (req, res) => {
   });
 
   res.json({ data, publisher: { id: pub.id, name: pub.name, pub_token: pub.pub_token } });
+});
+
+// ─── GET /api/v1/offers/:id ──────────────────────────────────────────────────
+router.get('/offers/:id', (req, res) => {
+  const pub = db.prepare('SELECT * FROM publishers WHERE id = ?').get(req.publisherId);
+  if (!pub) return res.status(404).json({ error: 'Publisher not found' });
+
+  const c = db.prepare(`
+    SELECT c.id, c.name, c.advertiser_name, c.campaign_token,
+           COALESCE(c.publisher_payout, 0) AS payout,
+           COALESCE(c.publisher_payout_type, c.payout_type) AS payout_type,
+           c.allowed_countries, c.click_lookback_days, c.cap_daily, c.cap_total, c.status,
+           COALESCE(c.visibility, 'open') AS visibility,
+           COALESCE(c.tags, '') AS tags,
+           c.preview_url,
+           a.name AS app_name, a.platform AS app_platform, a.bundle_id
+    FROM campaigns c
+    LEFT JOIN apps a ON a.id = c.app_id
+    WHERE c.id = ? AND c.status = 'active'
+      AND COALESCE(c.visibility, 'open') != 'private'
+  `).get(req.params.id);
+
+  if (!c) return res.status(404).json({ error: 'Offer not found' });
+
+  // Enforce approval_required access
+  if (c.visibility === 'approval_required') {
+    const access = db.prepare(
+      "SELECT status FROM campaign_access_requests WHERE campaign_id = ? AND publisher_id = ?"
+    ).get(c.id, req.publisherId);
+    if (!access || access.status !== 'approved') {
+      return res.status(403).json({ error: 'Access pending approval', access_status: access?.status || 'not_requested' });
+    }
+  }
+
+  const goals = db.prepare(`
+    SELECT id, name, event_name, payout, payout_type, revenue
+    FROM campaign_goals WHERE campaign_id = ? AND status = 'active'
+  `).all(c.id);
+
+  res.json({
+    ...c,
+    tracking_url: `${TRACKING_BASE}/track/click/${c.campaign_token}?pid=${pub.pub_token}&clickid={your_click_id}&af_sub1={sub1}&af_sub2={sub2}&af_sub3={sub3}`,
+    postback_url: `${TRACKING_BASE}/acquisition?click_id={your_click_id}&security_token={advertiser_security_token}&gaid={gaid}&idfa={idfa}`,
+    goals,
+    publisher: { id: pub.id, name: pub.name, pub_token: pub.pub_token },
+  });
 });
 
 // ─── GET /api/v1/clicks ─────────────────────────────────────────────────────

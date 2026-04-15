@@ -25,7 +25,7 @@ router.get('/campaigns', (req, res) => {
            COALESCE(c.publisher_payout_type, c.payout_type) AS payout_type,
            c.destination_url, c.click_lookback_days, c.status,
            COALESCE(c.visibility, 'open') AS visibility,
-           c.preview_url, c.allowed_countries,
+           c.preview_url, c.allowed_countries, COALESCE(c.tags, '') AS tags,
            a.name AS app_name, a.platform AS app_platform,
            r.status AS access_status
     FROM campaigns c

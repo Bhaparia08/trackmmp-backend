@@ -149,6 +149,9 @@ const migrations = [
   // Add smart_link_id to clicks AFTER smart_links table exists
   `ALTER TABLE clicks ADD COLUMN smart_link_id INTEGER REFERENCES smart_links(id)`,
 
+  // Offer tags / categories — comma-separated vertical labels (Gaming, Finance, etc.)
+  `ALTER TABLE campaigns ADD COLUMN tags TEXT NOT NULL DEFAULT ''`,
+
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
