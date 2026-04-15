@@ -377,23 +377,23 @@ async function fetchAppsFlyer(cred) {
 }
 
 async function fetchSwaarm(cred) {
-  // Swaarm Feed API v1.2 (documented at /feed/docs/feed-api.html)
-  // Endpoint : GET https://feed.{network}.swaarm-clients.com/feed/v1.2/ads
-  // Auth     : ?apiKey={token}   (query param, NOT "token=")
-  // Response : { ads: [ Ad, ... ], publisher: {...} }
+  // Swaarm Feed API v1.2
+  // Endpoint : GET https://{network}.trckswrm.com/feed/v1.2/ads
+  // Auth     : ?api_key={token}   (underscore, NOT "apiKey")
+  // Response : { ads: [ Ad, ... ], publisher: { id, subSources } }
   //
   // credentials:
-  //   api_key    = apiKey token  (e.g. 6ca30b57-c78f-4b7a-a643-f8c8a99803de)
-  //   network_id = subdomain     (e.g. "pokkt" from feed.pokkt.swaarm-clients.com)
+  //   api_key    = API token  (e.g. 6ca30b57-c78f-4b7a-a643-f8c8a99803de)
+  //   network_id = subdomain  (e.g. "pokkt" from pokkt.trckswrm.com)
 
-  if (!cred.api_key)    throw new Error('Swaarm: API Key (apiKey) is required');
+  if (!cred.api_key) throw new Error('Swaarm: API Key is required');
 
-  // Derive network subdomain — accept "pokkt", "feed.pokkt.swaarm-clients.com", full URL, etc.
+  // Accept "pokkt", "pokkt.trckswrm.com", full URL — extract just the first label
   const rawNid    = (cred.network_id || '').trim().toLowerCase();
-  const networkId = rawNid.replace(/^(https?:\/\/)?(feed|partner)\./, '').split('.')[0];
+  const networkId = rawNid.replace(/^https?:\/\//, '').split('.')[0];
   if (!networkId) throw new Error('Swaarm: Network Domain is required (e.g. "pokkt")');
 
-  const url = `https://feed.${networkId}.swaarm-clients.com/feed/v1.2/ads?apiKey=${encodeURIComponent(cred.api_key)}`;
+  const url = `https://${networkId}.trckswrm.com/feed/v1.2/ads?api_key=${encodeURIComponent(cred.api_key)}`;
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -409,20 +409,18 @@ async function fetchSwaarm(cred) {
   }
 
   return adList.map(o => {
-    // click_url is the ready-made tracking URL for this publisher (per the API spec)
+    // click_url comes pre-built with this publisher's pub_id hardcoded, e.g.:
+    //   https://pokkt.trckswrm.com/click?offer_id=3814&pub_id=1068
+    // There is no click_id macro — append sub1 so we can track our click IDs.
     let rawTracking = o.click_url || o.clickUrl || '';
 
-    // Translate any Swaarm-native macros to ours, then ensure {click_id} is present
-    rawTracking = toOurMacros(rawTracking, 'swaarm');
-    if (rawTracking && !rawTracking.includes('{click_id}')) {
-      rawTracking += (rawTracking.includes('?') ? '&' : '?')
-        + 'pub_click_id={click_id}&sub1={sub1}&sub2={sub2}&sub3={sub3}';
-    }
-    // Fallback: construct standard Swaarm click URL if none returned
     if (!rawTracking) {
-      rawTracking = `https://${networkId}.trckswrm.com/click`
-        + `?offer_id=${o.id || ''}&pub_click_id={click_id}&sub1={sub1}&sub2={sub2}&sub3={sub3}`;
+      // Fallback: construct standard Swaarm click URL
+      rawTracking = `https://${networkId}.trckswrm.com/click?offer_id=${o.id || ''}`;
     }
+    // Append our click tracking params (sub1 = click_id, sub2/sub3 passthrough)
+    rawTracking += (rawTracking.includes('?') ? '&' : '?')
+      + 'sub1={click_id}&sub2={sub2}&sub3={sub3}';
 
     // Geo targeting → comma-separated country list
     const geoAllowed = o.targeting?.allowedGeoTargeting?.countries || [];
@@ -430,6 +428,12 @@ async function fetchSwaarm(cred) {
 
     // leadflow: "CPI" = paid on install, "CPA" = paid on action
     const payType = normPayoutType(o.leadflow || o.payout_type || 'cpi');
+
+    // OS platform from device targeting
+    const osRaw = o.targeting?.allowedDeviceTargeting?.os || '';
+    const platform = osRaw.toLowerCase() === 'ios' ? 'ios'
+                   : osRaw.toLowerCase() === 'android' ? 'android'
+                   : '';
 
     return {
       external_id:       String(o.id || ''),
@@ -443,7 +447,7 @@ async function fetchSwaarm(cred) {
       preview_url:       o.preview_url || '',
       allowed_countries: countries,
       advertiser_name:   '',         // not in feed response
-      categories:        Array.isArray(o.app_categories) ? o.app_categories.join(', ') : '',
+      categories:        Array.isArray(o.app_categories) ? o.app_categories.join(', ') : (platform ? platform.toUpperCase() : ''),
       raw: o,
     };
   });
