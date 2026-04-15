@@ -28,6 +28,7 @@ const migrations = [
   `ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
   `ALTER TABLE users ADD COLUMN created_by INTEGER REFERENCES users(id)`,
   `ALTER TABLE users ADD COLUMN account_manager_id INTEGER REFERENCES account_managers(id) ON DELETE SET NULL`,
+  `ALTER TABLE account_managers ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
   // campaigns table
   `ALTER TABLE campaigns ADD COLUMN advertiser_id INTEGER REFERENCES users(id)`,
   // publishers table

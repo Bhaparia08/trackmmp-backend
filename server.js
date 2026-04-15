@@ -71,6 +71,7 @@ app.use('/api/fraud', require('./routes/fraud'));
 app.use('/api/campaigns/:campaign_id/goals', require('./routes/goals'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/publisher', require('./routes/publisher'));
+app.use('/api/am', require('./routes/am'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

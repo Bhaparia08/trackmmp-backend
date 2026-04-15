@@ -11,40 +11,74 @@ const SALT_ROUNDS = 12;
 
 // GET /api/admin/account-managers
 router.get('/account-managers', requireAdmin, (req, res) => {
-  res.json(db.prepare('SELECT * FROM account_managers ORDER BY name ASC').all());
+  const ams = db.prepare(`
+    SELECT am.*, u.status AS user_status, u.id AS user_id
+    FROM account_managers am
+    LEFT JOIN users u ON u.id = am.user_id
+    ORDER BY am.name ASC
+  `).all();
+  res.json(ams);
 });
 
-// POST /api/admin/account-managers
-router.post('/account-managers', requireAdmin, (req, res, next) => {
+// POST /api/admin/account-managers — creates AM record + user login account
+router.post('/account-managers', requireAdmin, async (req, res, next) => {
   try {
-    const { name, email, phone, notes } = req.body;
-    if (!name || !email) return res.status(400).json({ error: 'name and email are required' });
-    const existing = db.prepare('SELECT id FROM account_managers WHERE email = ?').get(email);
-    if (existing) return res.status(409).json({ error: 'Email already exists' });
-    const result = db.prepare(
-      'INSERT INTO account_managers (name, email, phone, notes) VALUES (?, ?, ?, ?)'
-    ).run(name, email, phone || null, notes || null);
-    res.status(201).json(db.prepare('SELECT * FROM account_managers WHERE id = ?').get(result.lastInsertRowid));
+    const { name, email, phone, notes, password } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'name, email and password are required' });
+
+    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existingUser) return res.status(409).json({ error: 'Email already registered as a user' });
+    const existingAM = db.prepare('SELECT id FROM account_managers WHERE email = ?').get(email);
+    if (existingAM) return res.status(409).json({ error: 'Email already exists as account manager' });
+
+    // Create user account with account_manager role
+    const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    const userResult = db.prepare(
+      'INSERT INTO users (email, password, name, role, created_by) VALUES (?, ?, ?, ?, ?)'
+    ).run(email, hash, name, 'account_manager', req.user.id);
+    const userId = userResult.lastInsertRowid;
+
+    // Create account manager record linked to the user
+    const amResult = db.prepare(
+      'INSERT INTO account_managers (name, email, phone, notes, user_id) VALUES (?, ?, ?, ?, ?)'
+    ).run(name, email, phone || null, notes || null, userId);
+
+    res.status(201).json(db.prepare('SELECT am.*, u.status AS user_status FROM account_managers am LEFT JOIN users u ON u.id = am.user_id WHERE am.id = ?').get(amResult.lastInsertRowid));
   } catch (err) { next(err); }
 });
 
 // PUT /api/admin/account-managers/:id
-router.put('/account-managers/:id', requireAdmin, (req, res, next) => {
+router.put('/account-managers/:id', requireAdmin, async (req, res, next) => {
   try {
-    const { name, email, phone, notes } = req.body;
-    const am = db.prepare('SELECT id FROM account_managers WHERE id = ?').get(req.params.id);
+    const { name, email, phone, notes, password, status } = req.body;
+    const am = db.prepare('SELECT * FROM account_managers WHERE id = ?').get(req.params.id);
     if (!am) return res.status(404).json({ error: 'Account manager not found' });
+
     db.prepare('UPDATE account_managers SET name = ?, email = ?, phone = ?, notes = ? WHERE id = ?')
       .run(name, email, phone || null, notes || null, req.params.id);
-    res.json(db.prepare('SELECT * FROM account_managers WHERE id = ?').get(req.params.id));
+
+    // Sync to user account
+    if (am.user_id) {
+      db.prepare('UPDATE users SET name = ?, email = ?, status = ? WHERE id = ?')
+        .run(name, email, status || 'active', am.user_id);
+      if (password) {
+        const hash = await bcrypt.hash(password, SALT_ROUNDS);
+        db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, am.user_id);
+      }
+    }
+
+    res.json(db.prepare('SELECT am.*, u.status AS user_status FROM account_managers am LEFT JOIN users u ON u.id = am.user_id WHERE am.id = ?').get(req.params.id));
   } catch (err) { next(err); }
 });
 
 // DELETE /api/admin/account-managers/:id
 router.delete('/account-managers/:id', requireAdmin, (req, res) => {
-  const am = db.prepare('SELECT id FROM account_managers WHERE id = ?').get(req.params.id);
+  const am = db.prepare('SELECT * FROM account_managers WHERE id = ?').get(req.params.id);
   if (!am) return res.status(404).json({ error: 'Account manager not found' });
   db.prepare('UPDATE users SET account_manager_id = NULL WHERE account_manager_id = ?').run(req.params.id);
+  if (am.user_id) {
+    db.prepare("UPDATE users SET status = 'suspended' WHERE id = ?").run(am.user_id);
+  }
   db.prepare('DELETE FROM account_managers WHERE id = ?').run(req.params.id);
   res.json({ success: true });
 });
@@ -62,8 +96,8 @@ router.get('/users', requireAdmin, (req, res) => {
            am.phone AS account_manager_phone
     FROM users u
     LEFT JOIN account_managers am ON am.id = u.account_manager_id
-    WHERE u.role != ?`;
-  const params = ['admin'];
+    WHERE u.role NOT IN ('admin','account_manager')`;
+  const params = [];
   if (role) { query += ' AND u.role = ?'; params.push(role); }
   query += ' ORDER BY u.created_at DESC';
   res.json(db.prepare(query).all(...params));
@@ -105,7 +139,7 @@ router.post('/users', requireAdmin, async (req, res, next) => {
 router.put('/users/:id', requireAdmin, async (req, res, next) => {
   try {
     const { name, company_name, status, password, account_manager_id } = req.body;
-    const user = db.prepare('SELECT id FROM users WHERE id = ? AND role != ?').get(req.params.id, 'admin');
+    const user = db.prepare("SELECT id FROM users WHERE id = ? AND role NOT IN ('admin','account_manager')").get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (password) {
@@ -130,7 +164,7 @@ router.put('/users/:id', requireAdmin, async (req, res, next) => {
 
 // DELETE /api/admin/users/:id  (suspend, not hard delete)
 router.delete('/users/:id', requireAdmin, (req, res) => {
-  const user = db.prepare('SELECT id FROM users WHERE id = ? AND role != ?').get(req.params.id, 'admin');
+  const user = db.prepare("SELECT id FROM users WHERE id = ? AND role NOT IN ('admin','account_manager')").get(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   db.prepare("UPDATE users SET status = 'suspended' WHERE id = ?").run(req.params.id);
   res.json({ success: true });
