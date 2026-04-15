@@ -54,6 +54,34 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN security_token TEXT`,
   // users: account-level postback token (one per user, used in /acquisition)
   `ALTER TABLE users ADD COLUMN postback_token TEXT`,
+
+  // Publisher API keys table
+  `CREATE TABLE IF NOT EXISTS publisher_api_keys (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    publisher_id  INTEGER REFERENCES publishers(id) ON DELETE CASCADE,
+    user_id       INTEGER REFERENCES users(id),
+    name          TEXT    NOT NULL,
+    api_key       TEXT    NOT NULL UNIQUE,
+    status        TEXT    NOT NULL DEFAULT 'active',
+    last_used_at  INTEGER,
+    created_by    INTEGER REFERENCES users(id),
+    created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+
+  // Advertiser external API credentials
+  `CREATE TABLE IF NOT EXISTS advertiser_api_credentials (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER REFERENCES users(id),
+    advertiser_id INTEGER REFERENCES users(id),
+    platform      TEXT    NOT NULL,
+    label         TEXT,
+    api_key       TEXT    NOT NULL,
+    api_secret    TEXT,
+    network_id    TEXT,
+    extra         TEXT,
+    status        TEXT    NOT NULL DEFAULT 'active',
+    created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
 ];
 
 for (const sql of migrations) {

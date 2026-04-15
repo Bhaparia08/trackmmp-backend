@@ -74,6 +74,8 @@ app.use('/api/campaigns/:campaign_id/goals', require('./routes/goals'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/publisher', require('./routes/publisher'));
 app.use('/api/am', require('./routes/am'));
+app.use('/api/apikeys', require('./routes/apikeys'));
+app.use('/api/v1', require('./routes/v1'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
