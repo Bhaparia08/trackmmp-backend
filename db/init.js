@@ -54,6 +54,9 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN security_token TEXT`,
   // users: account-level postback token (one per user, used in /acquisition)
   `ALTER TABLE users ADD COLUMN postback_token TEXT`,
+  // campaigns: track which external platform/offer this campaign was imported from
+  `ALTER TABLE campaigns ADD COLUMN source_credential_id INTEGER REFERENCES advertiser_api_credentials(id)`,
+  `ALTER TABLE campaigns ADD COLUMN external_offer_id TEXT`,
 
   // Publisher API keys table
   `CREATE TABLE IF NOT EXISTS publisher_api_keys (

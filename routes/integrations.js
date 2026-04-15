@@ -230,7 +230,42 @@ router.post('/fetch-offers', async (req, res, next) => {
     }
 
     const offers = await adapter(cred);
-    res.json({ offers, platform: cred.platform, label: cred.label, total: offers.length });
+
+    // ── Auto-sync: pause campaigns whose offer is no longer active on the platform ──
+    // Find all campaigns imported from this credential that are still active
+    const linked = db.prepare(`
+      SELECT id, name, external_offer_id, status
+      FROM campaigns
+      WHERE source_credential_id = ? AND status IN ('active','paused')
+    `).all(credential_id);
+
+    const activeOfferIds = new Set(
+      offers.filter(o => o.status === 'active').map(o => String(o.external_id))
+    );
+
+    const autoPaused = [];
+    const autoResumed = [];
+
+    for (const camp of linked) {
+      if (!camp.external_offer_id) continue; // skip if no external ID (manually created)
+
+      const nowActive = activeOfferIds.has(String(camp.external_offer_id));
+
+      if (!nowActive && camp.status === 'active') {
+        // Offer gone or paused on the platform — pause our campaign
+        db.prepare("UPDATE campaigns SET status='paused', updated_at=unixepoch() WHERE id=?").run(camp.id);
+        autoPaused.push({ id: camp.id, name: camp.name });
+      } else if (nowActive && camp.status === 'paused') {
+        // Offer is active again on the platform — resume our campaign
+        db.prepare("UPDATE campaigns SET status='active', updated_at=unixepoch() WHERE id=?").run(camp.id);
+        autoResumed.push({ id: camp.id, name: camp.name });
+      }
+    }
+
+    res.json({
+      offers, platform: cred.platform, label: cred.label, total: offers.length,
+      sync: { paused: autoPaused, resumed: autoResumed },
+    });
   } catch (err) {
     // Return a clean error to the frontend instead of crashing
     res.status(502).json({ error: err.message || 'Failed to fetch offers from platform' });
@@ -266,8 +301,9 @@ router.post('/import', (req, res, next) => {
     const insertCampaign = db.prepare(`
       INSERT INTO campaigns
         (user_id, advertiser_id, name, advertiser_name, campaign_token, security_token,
-         payout, payout_type, destination_url, allowed_countries, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+         payout, payout_type, destination_url, allowed_countries, status,
+         source_credential_id, external_offer_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `);
 
     for (const offer of offers) {
@@ -290,6 +326,8 @@ router.post('/import', (req, res, next) => {
         offer.payout_type || 'cpi',
         offer.preview_url || '',
         offer.allowed_countries || '',
+        credential_id || null,
+        offer.external_id || null,
       );
       const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid);
       imported.push({ id: result.lastInsertRowid, name: offer.name, campaign_token: token, campaign });
