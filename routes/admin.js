@@ -89,6 +89,17 @@ router.put('/account-managers/:id', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PATCH /api/admin/account-managers/:id/link-user  — directly link an AM to an existing user account
+router.patch('/account-managers/:id/link-user', requireAdmin, (req, res) => {
+  const { user_id } = req.body;
+  const am = db.prepare('SELECT * FROM account_managers WHERE id = ?').get(req.params.id);
+  if (!am) return res.status(404).json({ error: 'Account manager not found' });
+  const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(user_id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  db.prepare('UPDATE account_managers SET user_id = ? WHERE id = ?').run(user_id, req.params.id);
+  res.json({ success: true, am_id: +req.params.id, user_id });
+});
+
 // DELETE /api/admin/account-managers/:id
 router.delete('/account-managers/:id', requireAdmin, (req, res) => {
   const am = db.prepare('SELECT * FROM account_managers WHERE id = ?').get(req.params.id);
