@@ -59,9 +59,13 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     // If campaign has allowed_countries set, block traffic from other geos.
     // Blocked traffic is redirected to geo_fallback_url (should be a smart link)
     // so the traffic is not wasted. Click is NOT recorded on this campaign.
-    if (campaign.allowed_countries) {
+    // Skip geo check if: country is unknown (XX = GeoIP DB missing/lookup failed),
+    // or if a valid security_token is provided (preview/test mode).
+    const previewBypass = q.security_token && q.security_token === campaign.security_token;
+    const countryUnknown = !country || country === 'XX';
+    if (!previewBypass && campaign.allowed_countries) {
       const allowed = campaign.allowed_countries.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
-      if (allowed.length > 0 && !allowed.includes((country || '').toUpperCase())) {
+      if (allowed.length > 0 && !countryUnknown && !allowed.includes(country.toUpperCase())) {
         const fallback = campaign.geo_fallback_url;
         if (fallback) {
           // Pass publisher params through so smart link can attribute the redirected click
