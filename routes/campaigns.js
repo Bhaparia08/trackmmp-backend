@@ -132,14 +132,15 @@ router.put('/:id', (req, res, next) => {
       publisher_payout=COALESCE(?,publisher_payout), publisher_payout_type=COALESCE(?,publisher_payout_type),
       destination_url=COALESCE(?,destination_url), preview_url=COALESCE(?,preview_url), postback_url=COALESCE(?,postback_url),
       status=COALESCE(?,status), cap_daily=COALESCE(?,cap_daily), cap_total=COALESCE(?,cap_total),
-      allowed_countries=COALESCE(?,allowed_countries), click_lookback_days=COALESCE(?,click_lookback_days),
+      allowed_countries=?, click_lookback_days=COALESCE(?,click_lookback_days),
       is_retargeting=COALESCE(?,is_retargeting), visibility=COALESCE(?,visibility),
       tags=COALESCE(?,tags), geo_fallback_url=?, updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
            publisher_payout??null, publisher_payout_type||null,
            destination_url||null, preview_url||null, postback_url||null, status||null,
-           cap_daily??null, cap_total??null, allowed_countries||null,
+           cap_daily??null, cap_total??null,
+           allowed_countries !== undefined ? allowed_countries : c.allowed_countries,
            click_lookback_days??null, is_retargeting!=null?+is_retargeting:null,
            visibility||null, tags!=null?tags:null, geo_fallback_url||'', c.id);
 
