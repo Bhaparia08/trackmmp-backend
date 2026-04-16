@@ -26,19 +26,28 @@ function getIp(req) {
 }
 
 function normalise(raw) {
-  // Map Trackier-style param names → internal names
+  // Map all ad-network postback param aliases → internal names
   return {
     ...raw,
-    // gaid → advertising_id  (Google Advertising ID)
+    // Device IDs
     advertising_id: raw.advertising_id || raw.gaid || raw.gps_adid || null,
-    // goal_value → event_name  (event postback param)
+    // Goal / event
     event_name: raw.goal_value || raw.event_name || null,
-    // goal_value present → event type is 'custom'; otherwise default install
     event: raw.goal_value ? (raw.event || 'custom') : (raw.event || 'install'),
-    // click_id / transaction_id (our platform ID) or clickid (AF-style publisher ID)
-    click_id: raw.click_id || raw.transaction_id || raw.clickid || null,
+    // Primary click ID — our platform's click_id returned by any MMP:
+    //   click_id      — generic / standard
+    //   transaction_id — Trackier / generic
+    //   clickid       — AppsFlyer, Adjust
+    //   u1            — Rakuten (first custom param used for click passthrough)
+    //   aff_sub       — HasOffers / TUNE postbacks
+    click_id: raw.click_id || raw.transaction_id || raw.clickid || raw.u1 || raw.aff_sub || null,
     transaction_id: raw.transaction_id || raw.click_id || null,
-    clickid: raw.clickid || raw.click_id || null,
+    // Publisher's own click ID for secondary attribution:
+    //   clickid       — standard
+    //   irclickid     — Impact Radius
+    //   aff_click_id  — generic affiliate
+    //   u1            — Rakuten secondary
+    clickid: raw.clickid || raw.irclickid || raw.aff_click_id || raw.u1 || null,
   };
 }
 
