@@ -68,15 +68,53 @@ router.post('/register/advertiser', async (req, res, next) => {
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
+    const mailer = getMailer();
+    const needsVerification = !!mailer;
+
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role, postback_token) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'advertiser', newPostbackToken());
+      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'advertiser', newPostbackToken(), needsVerification ? 0 : 1);
 
     const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+
+    if (needsVerification) {
+      const verifyToken = nanoid32();
+      const expiresAt = Math.floor(Date.now() / 1000) + 86400;
+      db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
+      const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
+      await sendVerificationEmail(mailer, email, name, `${base}/verify-email?token=${verifyToken}`);
+      return res.status(201).json({ sent: true, email: user.email });
+    }
+
     res.status(201).json({ token: signToken(user), user });
   } catch (err) { next(err); }
 });
+
+// Helper: send verification email or log URL (if SMTP not configured)
+async function sendVerificationEmail(mailer, userEmail, userName, verifyUrl) {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  await mailer.sendMail({
+    from: `"Apogeemobi" <${from}>`,
+    to: userEmail,
+    subject: 'Verify your Apogeemobi account',
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2 style="color:#6366f1">Verify Your Email</h2>
+        <p>Hi ${userName},</p>
+        <p>Thanks for signing up! Please verify your email address to activate your account. This link expires in <strong>24 hours</strong>.</p>
+        <p style="margin:24px 0">
+          <a href="${verifyUrl}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
+            Verify My Email
+          </a>
+        </p>
+        <p style="color:#94a3b8;font-size:13px">If you didn't create an account, you can safely ignore this email.</p>
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
+        <p style="color:#94a3b8;font-size:12px">Apogeemobi · track.apogeemobi.com</p>
+      </div>
+    `,
+  });
+}
 
 // POST /api/auth/register/publisher  (open publisher self-signup)
 router.post('/register/publisher', async (req, res, next) => {
@@ -87,16 +125,17 @@ router.post('/register/publisher', async (req, res, next) => {
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
+    const mailer = getMailer();
+    const needsVerification = !!mailer;
+
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role, postback_token) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'publisher', newPostbackToken());
+      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'publisher', newPostbackToken(), needsVerification ? 0 : 1);
 
     const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
 
     // Auto-create a publisher record linked to this user.
-    // Owned by the first admin account — dynamically resolved so it works even if
-    // the admin was not the very first row inserted.
     const { nanoid } = require('nanoid');
     const pub_token = nanoid(10);
     const adminRow = db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get();
@@ -104,6 +143,15 @@ router.post('/register/publisher', async (req, res, next) => {
     db.prepare(
       'INSERT INTO publishers (user_id, publisher_user_id, name, email, pub_token) VALUES (?, ?, ?, ?, ?)'
     ).run(adminUserId, result.lastInsertRowid, name, email, pub_token);
+
+    if (needsVerification) {
+      const verifyToken = nanoid32();
+      const expiresAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
+      db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
+      const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
+      await sendVerificationEmail(mailer, email, name, `${base}/verify-email?token=${verifyToken}`);
+      return res.status(201).json({ sent: true, email: user.email });
+    }
 
     res.status(201).json({ token: signToken(user), user });
   } catch (err) { next(err); }
@@ -120,11 +168,65 @@ router.post('/login', async (req, res, next) => {
 
     if (user.status === 'suspended') return res.status(403).json({ error: 'Account suspended. Contact admin.' });
 
+    if (!user.email_verified) {
+      return res.status(403).json({
+        error: 'Please verify your email address before signing in. Check your inbox for the verification link.',
+        unverified: true,
+        email: user.email,
+      });
+    }
+
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
     const { password: _p, ...safeUser } = user;
     res.json({ token: signToken(safeUser), user: safeUser });
+  } catch (err) { next(err); }
+});
+
+// GET /api/auth/verify-email?token=xxx
+router.get('/verify-email', (req, res, next) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'token is required' });
+
+    const now = Math.floor(Date.now() / 1000);
+    const row = db.prepare(
+      'SELECT * FROM email_verification_tokens WHERE token=? AND used=0 AND expires_at > ?'
+    ).get(token, now);
+    if (!row) return res.status(400).json({ error: 'Verification link is invalid or has expired. Please request a new one.' });
+
+    db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(row.user_id);
+    db.prepare('UPDATE email_verification_tokens SET used=1 WHERE id=?').run(row.id);
+
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/resend-verification
+router.post('/resend-verification', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'email is required' });
+
+    const user = db.prepare('SELECT id, email, name, email_verified FROM users WHERE email = ?').get(email.toLowerCase().trim());
+    // Silent success — don't leak which emails exist or verification state
+    if (!user || user.email_verified) return res.json({ sent: true });
+
+    const mailer = getMailer();
+    if (!mailer) return res.json({ sent: true }); // SMTP not configured
+
+    // Expire old tokens
+    db.prepare('UPDATE email_verification_tokens SET used=1 WHERE user_id=? AND used=0').run(user.id);
+
+    const verifyToken = nanoid32();
+    const expiresAt = Math.floor(Date.now() / 1000) + 86400;
+    db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
+
+    const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
+    await sendVerificationEmail(mailer, user.email, user.name, `${base}/verify-email?token=${verifyToken}`);
+
+    res.json({ sent: true });
   } catch (err) { next(err); }
 });
 

@@ -14,6 +14,14 @@ services:
         value: https://trackmmp.onrender.com
       - key: TRACKING_DOMAIN
         value: https://trackmmp.onrender.com
+      - key: FRONTEND_ORIGIN
+        value: https://track.apogeemobi.com
+      # SMTP — set these in Render Dashboard > Environment to enable email sending
+      # - key: SMTP_HOST      (e.g. smtp.gmail.com)
+      # - key: SMTP_PORT      (e.g. 587)
+      # - key: SMTP_USER      (your Gmail or SMTP username)
+      # - key: SMTP_PASS      (your app password)
+      # - key: SMTP_FROM      (e.g. noreply@apogeemobi.com)
     disk:
       name: trackmmp-data
       mountPath: /data

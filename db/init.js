@@ -152,6 +152,17 @@ const migrations = [
   // Offer tags / categories — comma-separated vertical labels (Gaming, Finance, etc.)
   `ALTER TABLE campaigns ADD COLUMN tags TEXT NOT NULL DEFAULT ''`,
 
+  // Email verification — default 1 so existing accounts stay active
+  `ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1`,
+  `CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token      TEXT    NOT NULL UNIQUE,
+    expires_at INTEGER NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
