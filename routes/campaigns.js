@@ -175,10 +175,11 @@ router.get('/:id/tracking-url', (req, res) => {
   const base = process.env.TRACKING_DOMAIN || 'https://track.apogeemobi.com';
 
   const urls = {
-    standard:  `${base}/track/click/${c.campaign_token}?pid={publisher_id}&campaign=${encodeURIComponent(c.name)}&campaign_id=${c.id}&site_id={site_id}&sub1={sub1}&sub2={sub2}&sub3={sub3}&sub4={sub4}&sub5={sub5}&clickid={publisher_click_id}&advertising_id={gaid}`,
-    adjust:    `${base}/track/click/${c.campaign_token}?pid={publisher_id}&campaign=${encodeURIComponent(c.name)}&adgroup={adgroup}&creative={creative}&label={label}&gps_adid={gps_adid}&idfa={idfa}&clickid={publisher_click_id}&sub1={sub1}&sub2={sub2}`,
-    branch:    `${base}/track/click/${c.campaign_token}?~channel={channel}&~campaign=${encodeURIComponent(c.name)}&~feature=paid_advertising&clickid={publisher_click_id}&advertising_id={advertising_id}&sub1={sub1}`,
-    impact:    `${base}/track/click/${c.campaign_token}?irclickid={irclickid}&mediapartnerid={media_partner_id}&clickid={irclickid}&sub1={sub1}&advertising_id={advertising_id}`,
+    test:      `${base}/track/click/${c.campaign_token}?pid=test&af_c_id=${c.id}&security_token=${c.security_token}&clickid=test_click_001&advertising_id=00000000-0000-0000-0000-000000000000&af_sub1=test`,
+    standard:  `${base}/track/click/${c.campaign_token}?pid={publisher_id}&af_c_id=${c.id}&af_siteid={site_id}&af_sub1={sub1}&af_sub2={sub2}&af_sub3={sub3}&af_sub4={sub4}&af_sub5={sub5}&clickid={publisher_click_id}&advertising_id={gaid}`,
+    adjust:    `${base}/track/click/${c.campaign_token}?pid={publisher_id}&af_c_id=${c.id}&adgroup={adgroup}&creative={creative}&label={label}&gps_adid={gps_adid}&idfa={idfa}&clickid={publisher_click_id}&af_sub1={sub1}&af_sub2={sub2}`,
+    branch:    `${base}/track/click/${c.campaign_token}?~channel={channel}&~campaign=${encodeURIComponent(c.name)}&~feature=paid_advertising&clickid={publisher_click_id}&advertising_id={advertising_id}&af_sub1={sub1}`,
+    impact:    `${base}/track/click/${c.campaign_token}?irclickid={irclickid}&mediapartnerid={media_partner_id}&clickid={irclickid}&af_sub1={sub1}&advertising_id={advertising_id}`,
     rakuten:   `${base}/track/click/${c.campaign_token}?mid={mid}&u1={u1}&u2={u2}&u3={u3}&clickid={u1}&advertising_id={advertising_id}`,
     impression: `${base}/track/imp/${c.campaign_token}?pid={publisher_id}&clickid={publisher_click_id}&advertising_id={gaid}`,
   };
