@@ -56,8 +56,14 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       }
     }
 
-    // Support all major click ID param names
-    const publisher_click_id = q.clickid || q.click_id || q.irclickid || q.aff_click_id || null;
+    // Support all major click ID param names across all platforms:
+    //   clickid      — standard / AppsFlyer / Adjust
+    //   click_id     — generic
+    //   irclickid    — Impact Radius
+    //   aff_click_id — HasOffers / TUNE / Affiliate
+    //   aff_sub      — HasOffers alternative click ID param
+    //   u1           — Rakuten LinkShare
+    const publisher_click_id = q.clickid || q.click_id || q.irclickid || q.aff_click_id || q.u1 || q.aff_sub || null;
 
     // Support Adjust's gps_adid, idfa, adid
     const advertising_id = q.advertising_id || q.gps_adid || q.idfa || q.adid || null;

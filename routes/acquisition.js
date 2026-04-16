@@ -35,19 +35,17 @@ function normalise(raw) {
     event_name: raw.goal_value || raw.event_name || null,
     event: raw.goal_value ? (raw.event || 'custom') : (raw.event || 'install'),
     // Primary click ID — our platform's click_id returned by any MMP:
-    //   click_id      — generic / standard
+    //   click_id       — generic / standard
     //   transaction_id — Trackier / generic
-    //   clickid       — AppsFlyer, Adjust
-    //   u1            — Rakuten (first custom param used for click passthrough)
-    //   aff_sub       — HasOffers / TUNE postbacks
-    click_id: raw.click_id || raw.transaction_id || raw.clickid || raw.u1 || raw.aff_sub || null,
+    click_id: raw.click_id || raw.transaction_id || null,
     transaction_id: raw.transaction_id || raw.click_id || null,
     // Publisher's own click ID for secondary attribution:
-    //   clickid       — standard
+    //   clickid       — standard / AppsFlyer / Adjust
     //   irclickid     — Impact Radius
-    //   aff_click_id  — generic affiliate
-    //   u1            — Rakuten secondary
-    clickid: raw.clickid || raw.irclickid || raw.aff_click_id || raw.u1 || null,
+    //   aff_click_id  — HasOffers / TUNE / Affiliate
+    //   aff_sub       — HasOffers alternative click ID passthrough
+    //   u1            — Rakuten LinkShare
+    clickid: raw.clickid || raw.irclickid || raw.aff_click_id || raw.aff_sub || raw.u1 || null,
   };
 }
 
