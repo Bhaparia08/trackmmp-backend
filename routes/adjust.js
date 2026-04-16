@@ -230,4 +230,84 @@ router.delete('/tokens/:id', requireAuth, (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /adjust/report/:app_id  — Pull data from Adjust Reporting API
+// Query params: from (YYYY-MM-DD), to (YYYY-MM-DD), dimensions, metrics
+// Uses the app's adjust_api_token (Report Service API — Bearer auth)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/report/:app_id', requireAuth, async (req, res, next) => {
+  try {
+    const app = db.prepare('SELECT * FROM apps WHERE id = ? AND user_id = ?').get(req.params.app_id, req.user.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    if (!app.adjust_api_token) return res.status(400).json({ error: 'No Adjust API token configured for this app. Add it in the Adjust tab.' });
+    if (!app.adjust_app_token) return res.status(400).json({ error: 'No Adjust App Token configured for this app.' });
+
+    const {
+      from = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
+      to   = new Date().toISOString().slice(0, 10),
+      dimensions = 'day,campaign,network',
+      metrics    = 'installs,clicks,sessions,revenue,ecpi',
+    } = req.query;
+
+    // Adjust Report Service API v1
+    const url = new URL('https://automate.adjust.com/reports-service/report');
+    url.searchParams.set('app_token__in', app.adjust_app_token);
+    url.searchParams.set('date_period',   `${from}:${to}`);
+    url.searchParams.set('dimensions',    dimensions);
+    url.searchParams.set('metrics',       metrics);
+    url.searchParams.set('sort',          '-day');
+    url.searchParams.set('limit',         '200');
+
+    const fetch = require('node-fetch');
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${app.adjust_api_token}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({ error: `Adjust API error: ${response.status}`, detail: text.slice(0, 300) });
+    }
+
+    const data = await response.json();
+    res.json({
+      from, to, dimensions: dimensions.split(','), metrics: metrics.split(','),
+      rows: data.data?.list || data.rows || data || [],
+      totals: data.data?.totals || null,
+    });
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /adjust/apps/:app_id/info  — Verify Adjust API token & fetch app info
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/apps/:app_id/info', requireAuth, async (req, res, next) => {
+  try {
+    const app = db.prepare('SELECT * FROM apps WHERE id = ? AND user_id = ?').get(req.params.app_id, req.user.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    if (!app.adjust_api_token) return res.status(400).json({ error: 'No Adjust API token configured.' });
+
+    const fetch = require('node-fetch');
+    // Fetch list of apps from Adjust to validate the API token
+    const response = await fetch('https://api.adjust.com/accounts/apps', {
+      headers: {
+        'Authorization': `Bearer ${app.adjust_api_token}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({ error: `Adjust API error: ${response.status}`, detail: text.slice(0, 200) });
+    }
+
+    const data = await response.json();
+    // Find the app matching our stored app_token
+    const adjustApp = (data.items || data || []).find(a => a.token === app.adjust_app_token);
+    res.json({ valid: true, adjustApp: adjustApp || null, totalApps: (data.items || data || []).length });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
