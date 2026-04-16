@@ -122,9 +122,13 @@ router.get('/users', requireAdmin, (req, res) => {
            u.account_manager_id, u.postback_token,
            am.name  AS account_manager_name,
            am.email AS account_manager_email,
-           am.phone AS account_manager_phone
+           am.phone AS account_manager_phone,
+           p.id        AS publisher_id,
+           p.pub_token AS pub_token,
+           p.status    AS publisher_status
     FROM users u
     LEFT JOIN account_managers am ON am.id = u.account_manager_id
+    LEFT JOIN publishers p ON p.publisher_user_id = u.id
     WHERE u.role NOT IN ('admin','account_manager')`;
   const params = [];
   if (role) { query += ' AND u.role = ?'; params.push(role); }
