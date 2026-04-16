@@ -239,6 +239,7 @@ router.get('/postbacks', (req, res) => {
     SELECT pb.id, pb.click_id, pb.publisher_click_id, pb.event_type, pb.event_name,
            pb.goal_name, pb.payout, pb.revenue, pb.currency, pb.status,
            pb.blocked_reason, pb.advertising_id, pb.ip, pb.created_at,
+           pb.is_view_through,
            c.name AS campaign_name, c.campaign_token
     FROM postbacks pb
     LEFT JOIN campaigns c ON c.id = pb.campaign_id
