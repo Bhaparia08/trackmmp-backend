@@ -126,4 +126,95 @@ router.get('/dashboard', requireAM, (req, res) => {
   res.json({ am, stats, recentPostbacks });
 });
 
+// PUT /api/am/users/:id — edit an assigned advertiser or publisher
+router.put('/users/:id', requireAM, async (req, res, next) => {
+  try {
+    const am = getAMRecord(req.user.id);
+    if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+
+    // Only allow editing users assigned to this AM
+    const user = db.prepare(
+      "SELECT * FROM users WHERE id = ? AND account_manager_id = ? AND role IN ('advertiser','publisher')"
+    ).get(req.params.id, am.id);
+    if (!user) return res.status(403).json({ error: 'User not found or not assigned to you' });
+
+    const { name, company_name, status, password } = req.body;
+
+    if (password) {
+      const bcrypt = require('bcrypt');
+      const hash = await bcrypt.hash(password, 12);
+      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, user.id);
+    }
+    db.prepare(`UPDATE users SET
+      name = COALESCE(?, name),
+      company_name = COALESCE(?, company_name),
+      status = COALESCE(?, status)
+      WHERE id = ?`
+    ).run(name || null, company_name || null, status || null, user.id);
+
+    const updated = db.prepare('SELECT id, email, name, company_name, role, status, created_at FROM users WHERE id = ?').get(user.id);
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// GET /api/am/users/:id/integration — integration details for an assigned advertiser/publisher
+router.get('/users/:id/integration', requireAM, (req, res) => {
+  const am = getAMRecord(req.user.id);
+  if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+
+  const user = db.prepare(
+    "SELECT * FROM users WHERE id = ? AND account_manager_id = ? AND role IN ('advertiser','publisher')"
+  ).get(req.params.id, am.id);
+  if (!user) return res.status(403).json({ error: 'User not found or not assigned to you' });
+
+  const base = process.env.TRACKING_DOMAIN || 'https://track.apogeemobi.com';
+
+  // For publishers — get their publisher record and global postback URL
+  const publisher = db.prepare('SELECT * FROM publishers WHERE publisher_user_id = ?').get(user.id);
+
+  // For advertisers — get their campaigns with tracking URLs
+  const campaigns = db.prepare(`
+    SELECT id, name, campaign_token, destination_url, postback_url, status, payout, payout_type, preview_url
+    FROM campaigns WHERE advertiser_id = ? ORDER BY created_at DESC
+  `).all(user.id);
+
+  const campaignsWithUrls = campaigns.map(c => ({
+    ...c,
+    tracking_url: `${base}/track/click/${c.campaign_token}`,
+    postback_pixel_url: `${base}/pixel.gif?cid={click_id}&event=install&payout={payout}`,
+  }));
+
+  res.json({
+    user: { id: user.id, name: user.name, email: user.email, company_name: user.company_name, role: user.role, status: user.status },
+    postback_token: user.postback_token,
+    acquisition_postback: {
+      install: `${base}/acquisition?transaction_id={click_id}&security_token=${user.postback_token}&idfa={idfa}&gaid={gaid}`,
+      event: `${base}/acquisition?transaction_id={click_id}&security_token=${user.postback_token}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
+    },
+    publisher: publisher ? {
+      pub_token: publisher.pub_token,
+      global_postback_url: publisher.global_postback_url || '',
+      tracking_link_example: `${base}/track/click/{campaign_token}?pid=${publisher.pub_token}&clickid={your_click_id}`,
+    } : null,
+    campaigns: campaignsWithUrls,
+  });
+});
+
+// PUT /api/am/publishers/:id/postback — update global postback URL for an assigned publisher
+router.put('/publishers/:id/postback', requireAM, (req, res) => {
+  const am = getAMRecord(req.user.id);
+  if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+
+  const pub = db.prepare(`
+    SELECT p.* FROM publishers p
+    JOIN users u ON u.id = p.publisher_user_id
+    WHERE p.id = ? AND u.account_manager_id = ?
+  `).get(req.params.id, am.id);
+  if (!pub) return res.status(403).json({ error: 'Publisher not found or not assigned to you' });
+
+  const { global_postback_url } = req.body;
+  db.prepare('UPDATE publishers SET global_postback_url = ? WHERE id = ?').run(global_postback_url || '', pub.id);
+  res.json({ success: true });
+});
+
 module.exports = router;
