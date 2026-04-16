@@ -100,6 +100,24 @@ function handlePostback(params, ip, io) {
     }
 
     if (impression) {
+      // VTA dedup: reject if this device already has an attributed conversion
+      // for this campaign+event (prevents double-attribution on repeated postbacks)
+      const vtaDup = db.prepare(`
+        SELECT pb.id FROM postbacks pb
+        JOIN clicks cl ON cl.click_id = pb.click_id
+        WHERE pb.advertising_id = ? AND cl.campaign_id = ?
+          AND pb.event_type = ? AND pb.status = 'attributed'
+        LIMIT 1
+      `).get(deviceId, impression.campaign_id, eventType);
+
+      if (vtaDup) {
+        db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, campaign_id, user_id, event_type, payout, status, raw_params, ip)
+          VALUES (?,?,?,?,?,?,'duplicate',?,?)`)
+          .run(rawClickId||null, pubClickId||null, impression.campaign_id, impression.user_id,
+               eventType, +payout, JSON.stringify(params), ip);
+        return;
+      }
+
       // Create a synthetic click from the impression so the rest of the
       // attribution pipeline runs identically for VTA and click-based flows
       const syntheticClickId = nanoid16();
@@ -156,7 +174,9 @@ function handlePostback(params, ip, io) {
 
   // ── Fraud Detection ────────────────────────────────────────────────────────
   const timeDiff = Math.floor(Date.now() / 1000) - click.created_at;
-  if (eventType === 'install' && timeDiff < 5) {
+  // Skip time-to-install check for VTA: synthetic clicks are created at attribution
+  // time so timeDiff is always ~0, which would be a guaranteed false positive.
+  if (!isViewThrough && eventType === 'install' && timeDiff < 5) {
     logFraud(click, 'time_to_install', { seconds: timeDiff, click_id: click.click_id });
   }
   if (deviceId) {
