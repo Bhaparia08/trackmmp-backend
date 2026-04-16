@@ -34,18 +34,25 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       if (pub) publisher_id = pub.id;
     }
 
+    // ── Preview / test bypass ──────────────────────────────────────────────────
+    // If the correct campaign security_token is provided, skip all access and
+    // geo checks so the campaign can be fully tested regardless of visibility.
+    const previewBypass = !!(q.security_token && q.security_token === campaign.security_token);
+
     // ── Visibility / access check ──────────────────────────────────────────────
     const visibility = campaign.visibility || 'open';
-    if (visibility === 'private') {
-      return res.status(403).send('This campaign is not available.');
-    }
-    if (visibility === 'approval_required') {
-      if (!publisher_id) return res.status(403).send('Access to this campaign requires approval. Contact your account manager.');
-      const access = db.prepare(
-        "SELECT status FROM campaign_access_requests WHERE campaign_id = ? AND publisher_id = ?"
-      ).get(campaign.id, publisher_id);
-      if (!access || access.status !== 'approved') {
-        return res.status(403).send('Your access to this campaign is pending approval. Clicks are paused until approved.');
+    if (!previewBypass) {
+      if (visibility === 'private') {
+        return res.status(403).send('This campaign is not available.');
+      }
+      if (visibility === 'approval_required') {
+        if (!publisher_id) return res.status(403).send('Access to this campaign requires approval. Contact your account manager.');
+        const access = db.prepare(
+          "SELECT status FROM campaign_access_requests WHERE campaign_id = ? AND publisher_id = ?"
+        ).get(campaign.id, publisher_id);
+        if (!access || access.status !== 'approved') {
+          return res.status(403).send('Your access to this campaign is pending approval. Clicks are paused until approved.');
+        }
       }
     }
 
@@ -60,8 +67,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     // Blocked traffic is redirected to geo_fallback_url (should be a smart link)
     // so the traffic is not wasted. Click is NOT recorded on this campaign.
     // Skip geo check if: country is unknown (XX = GeoIP DB missing/lookup failed),
-    // or if a valid security_token is provided (preview/test mode).
-    const previewBypass = q.security_token && q.security_token === campaign.security_token;
+    // or if a valid security_token is provided (preview/test mode — set above).
     const countryUnknown = !country || country === 'XX';
     if (!previewBypass && campaign.allowed_countries) {
       const allowed = campaign.allowed_countries.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
