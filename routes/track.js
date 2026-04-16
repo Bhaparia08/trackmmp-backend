@@ -55,6 +55,30 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     // Support Adjust's gps_adid, idfa, adid
     const advertising_id = q.advertising_id || q.gps_adid || q.idfa || q.adid || null;
 
+    // ── Geo-targeting check ──────────────────────────────────────────────────
+    // If campaign has allowed_countries set, block traffic from other geos.
+    // Blocked traffic is redirected to geo_fallback_url (should be a smart link)
+    // so the traffic is not wasted. Click is NOT recorded on this campaign.
+    if (campaign.allowed_countries) {
+      const allowed = campaign.allowed_countries.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
+      if (allowed.length > 0 && !allowed.includes((country || '').toUpperCase())) {
+        const fallback = campaign.geo_fallback_url;
+        if (fallback) {
+          // Pass publisher params through so smart link can attribute the redirected click
+          const qs = [];
+          if (q.pid) qs.push('pid=' + encodeURIComponent(q.pid));
+          if (publisher_click_id) qs.push('clickid=' + encodeURIComponent(publisher_click_id));
+          if (advertising_id) qs.push('advertising_id=' + encodeURIComponent(advertising_id));
+          if (q.sub1) qs.push('sub1=' + encodeURIComponent(q.sub1));
+          if (q.sub2) qs.push('sub2=' + encodeURIComponent(q.sub2));
+          const dest = fallback + (qs.length ? (fallback.includes('?') ? '&' : '?') + qs.join('&') : '');
+          return res.redirect(302, dest);
+        }
+        // No fallback configured — silently return 200 (don't send error to publisher)
+        return res.status(200).send('OK');
+      }
+    }
+
     const click_id = nanoid16();
 
     db.prepare(`INSERT INTO clicks

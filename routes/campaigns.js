@@ -53,20 +53,22 @@ router.post('/', (req, res, next) => {
             publisher_payout = 0, publisher_payout_type = 'cpi',
             destination_url = '', preview_url = '', postback_url = '', cap_daily = 0, cap_total = 0,
             allowed_countries = '', click_lookback_days = 7, is_retargeting = 0,
-            visibility = 'open', approved_publishers = [], tags = '' } = req.body;
+            visibility = 'open', approved_publishers = [], tags = '',
+            geo_fallback_url = '' } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     const result = db.prepare(`
       INSERT INTO campaigns (user_id, advertiser_id, app_id, name, advertiser_name, campaign_token,
         security_token, payout, payout_type, publisher_payout, publisher_payout_type,
         destination_url, preview_url, postback_url, cap_daily, cap_total,
-        allowed_countries, click_lookback_days, is_retargeting, visibility, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_countries, click_lookback_days, is_retargeting, visibility, tags, geo_fallback_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
            destination_url, preview_url, postback_url, cap_daily, cap_total,
-           allowed_countries, click_lookback_days, is_retargeting ? 1 : 0, visibility, tags||'');
+           allowed_countries, click_lookback_days, is_retargeting ? 1 : 0, visibility, tags||'',
+           geo_fallback_url||'');
 
     const campaignId = result.lastInsertRowid;
     upsertApprovedPublishers(campaignId, approved_publishers, req.user.id);
@@ -120,7 +122,7 @@ router.put('/:id', (req, res, next) => {
             publisher_payout, publisher_payout_type,
             destination_url, preview_url, postback_url,
             status, cap_daily, cap_total, allowed_countries, click_lookback_days,
-            is_retargeting, visibility, approved_publishers, tags } = req.body;
+            is_retargeting, visibility, approved_publishers, tags, geo_fallback_url } = req.body;
 
     db.prepare(`UPDATE campaigns SET
       name=COALESCE(?,name), advertiser_name=COALESCE(?,advertiser_name),
@@ -131,14 +133,14 @@ router.put('/:id', (req, res, next) => {
       status=COALESCE(?,status), cap_daily=COALESCE(?,cap_daily), cap_total=COALESCE(?,cap_total),
       allowed_countries=COALESCE(?,allowed_countries), click_lookback_days=COALESCE(?,click_lookback_days),
       is_retargeting=COALESCE(?,is_retargeting), visibility=COALESCE(?,visibility),
-      tags=COALESCE(?,tags), updated_at=unixepoch()
+      tags=COALESCE(?,tags), geo_fallback_url=?, updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
            publisher_payout??null, publisher_payout_type||null,
            destination_url||null, preview_url||null, postback_url||null, status||null,
            cap_daily??null, cap_total??null, allowed_countries||null,
            click_lookback_days??null, is_retargeting!=null?+is_retargeting:null,
-           visibility||null, tags!=null?tags:null, c.id);
+           visibility||null, tags!=null?tags:null, geo_fallback_url||'', c.id);
 
     if (Array.isArray(approved_publishers)) {
       upsertApprovedPublishers(c.id, approved_publishers, req.user.id);
@@ -171,7 +173,7 @@ router.get('/:id/tracking-url', (req, res) => {
   const base = process.env.TRACKING_DOMAIN || 'https://track.apogeemobi.com';
 
   const urls = {
-    appsflyer: `${base}/track/click/${c.campaign_token}?pid={publisher_id}&c=${encodeURIComponent(c.name)}&af_c_id=${c.id}&af_siteid={site_id}&af_sub1={sub1}&af_sub2={sub2}&af_sub3={sub3}&af_sub4={sub4}&af_sub5={sub5}&clickid={publisher_click_id}&af_click_lookback=${c.click_lookback_days}d&advertising_id={gaid}`,
+    standard:  `${base}/track/click/${c.campaign_token}?pid={publisher_id}&campaign=${encodeURIComponent(c.name)}&campaign_id=${c.id}&site_id={site_id}&sub1={sub1}&sub2={sub2}&sub3={sub3}&sub4={sub4}&sub5={sub5}&clickid={publisher_click_id}&advertising_id={gaid}`,
     adjust:    `${base}/track/click/${c.campaign_token}?campaign=${encodeURIComponent(c.name)}&adgroup={adgroup}&creative={creative}&label={label}&gps_adid={gps_adid}&idfa={idfa}&clickid={publisher_click_id}&af_sub1={sub1}`,
     branch:    `${base}/track/click/${c.campaign_token}?~channel={channel}&~campaign=${encodeURIComponent(c.name)}&~feature=paid_advertising&clickid={publisher_click_id}&advertising_id={advertising_id}&af_sub1={sub1}`,
     impact:    `${base}/track/click/${c.campaign_token}?irclickid={irclickid}&mediapartnerid={media_partner_id}&clickid={irclickid}&af_sub1={sub1}&advertising_id={advertising_id}`,
@@ -195,8 +197,8 @@ router.get('/:id/tracking-url', (req, res) => {
     { macro: '{install_unix_ts}',    desc: 'Install timestamp (Unix)' },
     { macro: '{sub1}–{sub10}',       desc: 'Passthrough sub-parameters' },
     { macro: '{creative_id}',        desc: 'Creative identifier' },
-    { macro: '{af_c_id}',            desc: 'Campaign ID' },
-    { macro: '{af_siteid}',          desc: 'Site / placement ID' },
+    { macro: '{campaign_id}',         desc: 'Campaign ID' },
+    { macro: '{site_id}',             desc: 'Site / placement ID' },
     { macro: '{irclickid}',          desc: 'Impact Radius click ID' },
     { macro: '{mid}',                desc: 'Rakuten merchant ID' },
     { macro: '{channel}',            desc: 'Branch channel' },

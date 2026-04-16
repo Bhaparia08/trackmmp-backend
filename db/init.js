@@ -163,6 +163,9 @@ const migrations = [
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
 
+  // Geo fallback URL — redirect non-allowed-country traffic to a smart link
+  `ALTER TABLE campaigns ADD COLUMN geo_fallback_url TEXT NOT NULL DEFAULT ''`,
+
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
