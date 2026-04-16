@@ -37,14 +37,14 @@ function handlePostback(params, ip, io) {
     payout = 0,
     event = 'install',
     event_name,
-    advertising_id, gps_adid, idfa, idfv, android_id,
+    advertising_id, gps_adid, gaid, idfa, idfv, android_id,
     revenue = 0, currency = 'USD',
     event_value, blocked_reason,
     security_token,
   } = params;
 
   const eventType = event || 'install';
-  const deviceId  = advertising_id || gps_adid || idfa || null;
+  const deviceId  = advertising_id || gps_adid || gaid || idfa || null;
 
   // transaction_id is our primary click ID (advertiser passes it back after receiving
   // it via {click_id} macro in the destination URL). Treat it the same as click_id.

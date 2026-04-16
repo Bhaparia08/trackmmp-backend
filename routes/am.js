@@ -188,8 +188,8 @@ router.get('/users/:id/integration', requireAM, (req, res) => {
     user: { id: user.id, name: user.name, email: user.email, company_name: user.company_name, role: user.role, status: user.status },
     postback_token: user.postback_token,
     acquisition_postback: {
-      install: `${base}/acquisition?transaction_id={click_id}&security_token=${user.postback_token}&idfa={idfa}&gaid={gaid}`,
-      event: `${base}/acquisition?transaction_id={click_id}&security_token=${user.postback_token}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
+      install: `${base}/acquisition?click_id={click_id}&security_token=${user.postback_token}&idfa={idfa}&gaid={gaid}`,
+      event: `${base}/acquisition?click_id={click_id}&security_token=${user.postback_token}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
     },
     publisher: publisher ? {
       pub_token: publisher.pub_token,
