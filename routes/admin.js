@@ -60,17 +60,32 @@ router.put('/account-managers/:id', requireAdmin, async (req, res, next) => {
     db.prepare('UPDATE account_managers SET name = ?, email = ?, phone = ?, notes = ? WHERE id = ?')
       .run(name, email, phone || null, notes || null, req.params.id);
 
-    // Sync to user account
     if (am.user_id) {
+      // Update existing user account
       db.prepare('UPDATE users SET name = ?, email = ?, status = ? WHERE id = ?')
         .run(name, email, status || 'active', am.user_id);
       if (password) {
         const hash = await bcrypt.hash(password, SALT_ROUNDS);
         db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, am.user_id);
       }
+    } else if (password) {
+      // No user account yet — create one and link it
+      const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+      if (existingUser) {
+        // Link existing user to this AM record
+        db.prepare('UPDATE account_managers SET user_id = ? WHERE id = ?').run(existingUser.id, req.params.id);
+        db.prepare("UPDATE users SET role = 'account_manager', name = ?, email = ? WHERE id = ?").run(name, email, existingUser.id);
+      } else {
+        const hash = await bcrypt.hash(password, SALT_ROUNDS);
+        const nanoid20hex = customAlphabet('0123456789abcdef', 20);
+        const userResult = db.prepare(
+          'INSERT INTO users (email, password, name, role, created_by, postback_token, email_verified) VALUES (?, ?, ?, ?, ?, ?, 1)'
+        ).run(email, hash, name, 'account_manager', req.user.id, nanoid20hex());
+        db.prepare('UPDATE account_managers SET user_id = ? WHERE id = ?').run(userResult.lastInsertRowid, req.params.id);
+      }
     }
 
-    res.json(db.prepare('SELECT am.*, u.status AS user_status FROM account_managers am LEFT JOIN users u ON u.id = am.user_id WHERE am.id = ?').get(req.params.id));
+    res.json(db.prepare('SELECT am.*, u.status AS user_status, u.id AS user_id FROM account_managers am LEFT JOIN users u ON u.id = am.user_id WHERE am.id = ?').get(req.params.id));
   } catch (err) { next(err); }
 });
 
