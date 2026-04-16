@@ -41,8 +41,12 @@ router.get('/', (req, res) => {
     WHERE status='attributed' AND event_type='lead' AND created_at >= ?${pbFilter}`)
     .get(oneDayAgo, ...pbParam);
 
+  // Impressions last 24h
+  const impressions24h = db.prepare(`SELECT COALESCE(SUM(impressions),0) AS impressions
+    FROM daily_stats WHERE date = date('now')${dsFilter}`).get(...dsParam);
+
   // 7-day trend
-  const trend = db.prepare(`SELECT date, SUM(clicks) AS clicks, SUM(installs) AS installs,
+  const trend = db.prepare(`SELECT date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
     ROUND(SUM(revenue),2) AS revenue
     FROM daily_stats WHERE date >= date('now','-6 days')${dsFilter}
     GROUP BY date ORDER BY date ASC`).all(...dsParam);
@@ -59,6 +63,7 @@ router.get('/', (req, res) => {
 
   res.json({
     kpi: {
+      impressions: impressions24h.impressions,
       clicks: current.clicks,
       clicks_delta: pct(current.clicks, prior.clicks),
       installs: current.installs,

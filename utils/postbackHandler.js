@@ -1,6 +1,7 @@
 const db = require('../db/init');
 const fetch = require('node-fetch');
 const { macroReplace } = require('./macroReplace');
+const { nanoid16 } = require('./clickId');
 
 function logFraud(click, type, details, action = 'flagged') {
   try {
@@ -27,7 +28,7 @@ function logFraud(click, type, details, action = 'flagged') {
  *   idfv            – Apple IDFV
  *   android_id      – Android device ID
  *   blocked_reason  – fraud reason from network
- *   security_token  – campaign-level security token (optional extra validation)
+ *   security_token  – account-level postback token (optional extra validation)
  */
 function handlePostback(params, ip, io) {
   const {
@@ -55,17 +56,72 @@ function handlePostback(params, ip, io) {
   // 1. Try our platform click_id (or transaction_id which is the same thing)
   // 2. Fall back to publisher's own click_id (secondary key)
   let click = null;
+  let isViewThrough = false;
+
   if (primaryClickId) click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(primaryClickId);
   if (!click && pubClickId) click = db.prepare('SELECT * FROM clicks WHERE publisher_click_id = ?').get(pubClickId);
 
   // Validate security_token against users.postback_token (account-level token)
+  let tokenOwner = null;
   if (security_token) {
-    const owner = db.prepare('SELECT id FROM users WHERE postback_token = ?').get(security_token);
-    if (!owner) {
+    tokenOwner = db.prepare('SELECT id FROM users WHERE postback_token = ?').get(security_token);
+    if (!tokenOwner) {
       db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, event_type, payout, status, raw_params, ip, blocked_reason)
         VALUES (?,?,?,?,'rejected',?,?,?)`)
         .run(rawClickId||null, pubClickId||null, eventType, +payout, JSON.stringify(params), ip, 'invalid_security_token');
       return;
+    }
+  }
+
+  // ── View-Through Attribution (VTA) ─────────────────────────────────────────
+  // 3. No click found but device ID present → look for a prior impression
+  if (!click && deviceId) {
+    let impression = null;
+
+    if (tokenOwner) {
+      // Scoped to this advertiser's campaigns (most accurate)
+      impression = db.prepare(`
+        SELECT i.* FROM impressions i
+        JOIN campaigns c ON c.id = i.campaign_id
+        WHERE i.advertising_id = ?
+          AND i.user_id = ?
+          AND i.created_at > (unixepoch() - COALESCE(c.impression_lookback_days, 1) * 86400)
+        ORDER BY i.created_at DESC LIMIT 1
+      `).get(deviceId, tokenOwner.id);
+    } else {
+      // No security token — search all campaigns, use default 1-day lookback
+      impression = db.prepare(`
+        SELECT i.* FROM impressions i
+        JOIN campaigns c ON c.id = i.campaign_id
+        WHERE i.advertising_id = ?
+          AND i.created_at > (unixepoch() - COALESCE(c.impression_lookback_days, 1) * 86400)
+        ORDER BY i.created_at DESC LIMIT 1
+      `).get(deviceId);
+    }
+
+    if (impression) {
+      // Create a synthetic click from the impression so the rest of the
+      // attribution pipeline runs identically for VTA and click-based flows
+      const syntheticClickId = nanoid16();
+      db.prepare(`INSERT INTO clicks
+        (click_id, campaign_id, publisher_id, user_id,
+         pid, publisher_click_id,
+         ip, user_agent, country, device_type, os, platform,
+         advertising_id, af_sub1, af_sub2, af_sub3,
+         impression_id, status, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'clicked',unixepoch())`)
+        .run(
+          syntheticClickId,
+          impression.campaign_id, impression.publisher_id, impression.user_id,
+          impression.pid||null, impression.publisher_click_id||null,
+          ip, impression.user_agent||null, impression.country||null,
+          impression.device_type||null, impression.os||null, impression.platform||null,
+          deviceId,
+          impression.af_sub1||null, impression.af_sub2||null, impression.af_sub3||null,
+          impression.impression_id
+        );
+      click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(syntheticClickId);
+      isViewThrough = true;
     }
   }
 
@@ -134,15 +190,15 @@ function handlePostback(params, ip, io) {
   const pbResult = db.prepare(`INSERT INTO postbacks
     (click_id, publisher_click_id, campaign_id, user_id, event_type, event_name, event_value,
      payout, revenue, currency, advertising_id, idfa, idfv, android_id,
-     install_unix_ts, status, blocked_reason, raw_params, ip, goal_id, goal_name)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+     install_unix_ts, status, blocked_reason, raw_params, ip, goal_id, goal_name, is_view_through)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(click.click_id, click.publisher_click_id, click.campaign_id, click.user_id,
          eventType, event_name||null, event_value||null,
          finalPayout, finalRevenue, currency,
          deviceId||null, idfa||null, idfv||null, android_id||null,
          Math.floor(Date.now()/1000), 'attributed', blocked_reason||null,
          JSON.stringify(params), ip,
-         matchedGoal?.id||null, matchedGoal?.name||null);
+         matchedGoal?.id||null, matchedGoal?.name||null, isViewThrough ? 1 : 0);
 
   // Update click status
   const newStatus = eventType === 'install' ? 'installed' : 'converted';

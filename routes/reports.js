@@ -35,15 +35,17 @@ router.get('/summary', (req, res) => {
 
   const where = conditions.join(' AND ');
   const row = db.prepare(`SELECT
-    SUM(clicks) AS clicks, SUM(installs) AS installs,
+    SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
     SUM(leads) AS leads, SUM(conversions) AS conversions,
     ROUND(SUM(revenue),2) AS revenue
     FROM daily_stats WHERE ${where}`).get(...values);
 
+  const total_impressions = row.impressions || 0;
   const total_clicks = row.clicks || 0;
   const total_installs = row.installs || 0;
-  const cr = total_clicks > 0 ? ((total_installs / total_clicks) * 100).toFixed(2) : '0.00';
-  res.json({ ...row, conversion_rate: cr + '%' });
+  const cr  = total_clicks > 0 ? ((total_installs / total_clicks) * 100).toFixed(2) : '0.00';
+  const ctr = total_impressions > 0 ? ((total_clicks / total_impressions) * 100).toFixed(2) : '0.00';
+  res.json({ ...row, conversion_rate: cr + '%', ctr: ctr + '%' });
 });
 
 // GET /api/reports/by-day
@@ -55,7 +57,7 @@ router.get('/by-day', (req, res) => {
   if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
   if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
 
-  const rows = db.prepare(`SELECT date, SUM(clicks) AS clicks, SUM(installs) AS installs,
+  const rows = db.prepare(`SELECT date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
     SUM(leads) AS leads, ROUND(SUM(revenue),2) AS revenue
     FROM daily_stats WHERE ${conditions.join(' AND ')}
     GROUP BY date ORDER BY date ASC`).all(...values);

@@ -323,6 +323,13 @@ router.get('/imp/:campaign_token', impLimiter, async (req, res, next) => {
              ip, ua, country, device_type, os, platform,
              q.advertising_id||q.idfa||q.gps_adid||null,
              q.af_sub1||null, q.af_sub2||null, q.af_sub3||null);
+
+      // Upsert impression count into daily_stats
+      db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, impressions)
+        VALUES (?,?,?,?,date('now'),1)
+        ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
+        DO UPDATE SET impressions = impressions + 1`)
+        .run(campaign.user_id, campaign.app_id||0, campaign.id, publisher_id||0);
     }
 
     // Return 1x1 transparent GIF

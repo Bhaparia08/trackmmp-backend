@@ -166,6 +166,10 @@ const migrations = [
   // Geo fallback URL — redirect non-allowed-country traffic to a smart link
   `ALTER TABLE campaigns ADD COLUMN geo_fallback_url TEXT NOT NULL DEFAULT ''`,
 
+  // VTA: impression counts in daily stats + flag on attributed postbacks
+  `ALTER TABLE daily_stats ADD COLUMN impressions INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE postbacks ADD COLUMN is_view_through INTEGER NOT NULL DEFAULT 0`,
+
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
