@@ -11,6 +11,7 @@ router.use(requireAuth);
 // Helper: build campaign WHERE clause based on role
 function campaignFilter(user) {
   if (user.role === 'admin') return { clause: '1=1', params: [] }; // admin sees all campaigns
+  if (user.role === 'account_manager') return { clause: '1=1', params: [] }; // AM sees all campaigns
   if (user.role === 'advertiser') return { clause: 'c.advertiser_id = ?', params: [user.id] };
   return { clause: '1=0', params: [] }; // publishers use /api/publisher routes
 }

@@ -6,13 +6,23 @@ const { nanoid10 } = require('../utils/clickId');
 const router = express.Router();
 router.use(requireAuth);
 
+// Account managers see their admin's data — look up admin via created_by
+function getOwnerId(req) {
+  if (req.user.role === 'account_manager') {
+    const u = db.prepare('SELECT created_by FROM users WHERE id = ?').get(req.user.id);
+    return u?.created_by || req.user.id;
+  }
+  return req.user.id;
+}
+
 router.get('/', (req, res) => {
+  const ownerId = getOwnerId(req);
   const rows = db.prepare(`
     SELECT p.*, COUNT(c.id) AS click_count
     FROM publishers p
     LEFT JOIN clicks c ON c.publisher_id = p.id
     WHERE p.user_id = ? GROUP BY p.id ORDER BY p.created_at DESC
-  `).all(req.user.id);
+  `).all(ownerId);
   res.json(rows);
 });
 

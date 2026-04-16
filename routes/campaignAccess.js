@@ -15,6 +15,15 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
+// Account managers work for an admin — resolve their admin's user_id for ownership checks
+function getOwnerId(req) {
+  if (req.user.role === 'account_manager') {
+    const u = db.prepare('SELECT created_by FROM users WHERE id = ?').get(req.user.id);
+    return u?.created_by || req.user.id;
+  }
+  return req.user.id;
+}
+
 // Publisher: request access to a campaign
 router.post('/request/:campaign_id', (req, res, next) => {
   try {
@@ -74,8 +83,9 @@ router.get('/check/:campaign_id', (req, res, next) => {
 // Admin: list ALL publishers with their access status for a specific campaign
 router.get('/campaign/:campaign_id', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
+    const ownerId = getOwnerId(req);
     const campaign = db.prepare('SELECT id, user_id, visibility FROM campaigns WHERE id = ?').get(req.params.campaign_id);
-    if (!campaign || campaign.user_id !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+    if (!campaign || campaign.user_id !== ownerId) return res.status(404).json({ error: 'Campaign not found' });
 
     // All publishers for this account, LEFT JOIN so we see everyone regardless of request status
     const rows = db.prepare(`
@@ -85,7 +95,7 @@ router.get('/campaign/:campaign_id', requireRole('admin', 'account_manager'), (r
       LEFT JOIN campaign_access_requests r ON r.campaign_id = ? AND r.publisher_id = p.id
       WHERE p.user_id = ?
       ORDER BY r.status ASC, p.name ASC
-    `).all(campaign.id, req.user.id);
+    `).all(campaign.id, ownerId);
     res.json(rows);
   } catch (err) { next(err); }
 });
@@ -96,8 +106,9 @@ router.post('/grant', requireRole('admin', 'account_manager'), (req, res, next) 
     const { campaign_id, publisher_id } = req.body;
     if (!campaign_id || !publisher_id) return res.status(400).json({ error: 'campaign_id and publisher_id required' });
 
+    const ownerId = getOwnerId(req);
     const campaign = db.prepare('SELECT id, user_id FROM campaigns WHERE id = ?').get(campaign_id);
-    if (!campaign || campaign.user_id !== req.user.id) return res.status(404).json({ error: 'Campaign not found' });
+    if (!campaign || campaign.user_id !== ownerId) return res.status(404).json({ error: 'Campaign not found' });
 
     // Upsert: create if not exists, or update existing to approved
     const existing = db.prepare('SELECT id FROM campaign_access_requests WHERE campaign_id = ? AND publisher_id = ?')
@@ -111,7 +122,7 @@ router.post('/grant', requireRole('admin', 'account_manager'), (req, res, next) 
       const result = db.prepare(
         `INSERT INTO campaign_access_requests (campaign_id, publisher_id, user_id, status, reviewed_by, reviewed_at)
          VALUES (?, ?, ?, 'approved', ?, unixepoch())`
-      ).run(campaign_id, publisher_id, req.user.id, req.user.id);
+      ).run(campaign_id, publisher_id, ownerId, req.user.id);
       res.status(201).json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(result.lastInsertRowid));
     }
   } catch (err) { next(err); }
@@ -120,8 +131,9 @@ router.post('/grant', requireRole('admin', 'account_manager'), (req, res, next) 
 // Admin: revoke access from a publisher
 router.put('/:id/revoke', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
+    const ownerId = getOwnerId(req);
     const row = db.prepare('SELECT r.*, c.user_id FROM campaign_access_requests r JOIN campaigns c ON c.id = r.campaign_id WHERE r.id = ?').get(req.params.id);
-    if (!row || row.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
+    if (!row || row.user_id !== ownerId) return res.status(404).json({ error: 'Not found' });
     db.prepare("UPDATE campaign_access_requests SET status='rejected', reviewed_by=?, reviewed_at=unixepoch() WHERE id=?")
       .run(req.user.id, row.id);
     res.json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(row.id));
@@ -131,6 +143,7 @@ router.put('/:id/revoke', requireRole('admin', 'account_manager'), (req, res, ne
 // Admin: list all access requests
 router.get('/requests', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
+    const ownerId = getOwnerId(req);
     const { status } = req.query;
     let sql = `
       SELECT r.*, c.name AS campaign_name, p.name AS publisher_name, p.pub_token
@@ -139,7 +152,7 @@ router.get('/requests', requireRole('admin', 'account_manager'), (req, res, next
       JOIN publishers p ON p.id = r.publisher_id
       WHERE c.user_id = ?
     `;
-    const params = [req.user.id];
+    const params = [ownerId];
     if (status) { sql += ' AND r.status = ?'; params.push(status); }
     sql += ' ORDER BY r.created_at DESC LIMIT 200';
     res.json(db.prepare(sql).all(...params));
@@ -149,8 +162,9 @@ router.get('/requests', requireRole('admin', 'account_manager'), (req, res, next
 // Admin: approve a request
 router.put('/:id/approve', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
+    const ownerId = getOwnerId(req);
     const row = db.prepare('SELECT r.*, c.user_id FROM campaign_access_requests r JOIN campaigns c ON c.id = r.campaign_id WHERE r.id = ?').get(req.params.id);
-    if (!row || row.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
+    if (!row || row.user_id !== ownerId) return res.status(404).json({ error: 'Not found' });
     db.prepare("UPDATE campaign_access_requests SET status='approved', reviewed_by=?, reviewed_at=unixepoch() WHERE id=?")
       .run(req.user.id, row.id);
     res.json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(row.id));
@@ -160,8 +174,9 @@ router.put('/:id/approve', requireRole('admin', 'account_manager'), (req, res, n
 // Admin: reject a request
 router.put('/:id/reject', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
+    const ownerId = getOwnerId(req);
     const row = db.prepare('SELECT r.*, c.user_id FROM campaign_access_requests r JOIN campaigns c ON c.id = r.campaign_id WHERE r.id = ?').get(req.params.id);
-    if (!row || row.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
+    if (!row || row.user_id !== ownerId) return res.status(404).json({ error: 'Not found' });
     db.prepare("UPDATE campaign_access_requests SET status='rejected', reviewed_by=?, reviewed_at=unixepoch() WHERE id=?")
       .run(req.user.id, row.id);
     res.json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(row.id));
