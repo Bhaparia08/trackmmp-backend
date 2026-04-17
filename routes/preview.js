@@ -236,6 +236,8 @@ router.post('/goals', (req, res, next) => {
 // PUT goal
 router.put('/goals/:id', (req, res, next) => {
   try {
+    const existing = db.prepare('SELECT * FROM campaign_goals WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
+    if (!existing) return res.status(404).json({ error: 'Goal not found' });
     const { name, event_name, payout, revenue, payout_type, postback_url, is_default, status } = req.body;
     db.prepare(`UPDATE campaign_goals SET
       name=COALESCE(?,name), event_name=COALESCE(?,event_name),
