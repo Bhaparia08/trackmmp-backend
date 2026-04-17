@@ -180,9 +180,18 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       // Campaign identifiers
       '{campaign_id}':    String(campaign.id),
       '{campaign_token}': campaign.campaign_token,
+      '{c}':              campaign.name || '',
+      '{campaign_name}':  campaign.name || '',
       '{af_c_id}':        q.af_c_id || String(campaign.id),
       '{creative_id}':    q.creative_id || q.creative || '',
       '{ad_id}':          q.ad_id || '',
+      // Adjust-specific click-time macros
+      '{adgroup}':        q.adgroup || q.pid || '',
+      '{creative}':       q.creative || q.af_sub1 || '',
+      '{network}':        q.pid || '',
+      '{tracker}':        campaign.campaign_token || '',
+      '{label}':          q.label || q.af_sub1 || '',
+      '{deeplink}':       q.deeplink || '',
     };
 
     // Replace every macro in one pass (case-insensitive)
