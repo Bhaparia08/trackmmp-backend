@@ -30,9 +30,10 @@ router.post('/', (req, res, next) => {
   try {
     const { name, email, notes } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
+    const nextSeq = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM publishers').get().n);
     const result = db.prepare(
-      'INSERT INTO publishers (user_id, name, email, pub_token, notes) VALUES (?, ?, ?, ?, ?)'
-    ).run(req.user.id, name, email || null, nanoid10(), notes || null);
+      'INSERT INTO publishers (user_id, name, email, pub_token, notes, seq_num) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(req.user.id, name, email || null, nanoid10(), notes || null, nextSeq);
     res.status(201).json(db.prepare('SELECT * FROM publishers WHERE id = ?').get(result.lastInsertRowid));
   } catch (err) { next(err); }
 });

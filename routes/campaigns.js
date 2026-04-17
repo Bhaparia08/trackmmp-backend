@@ -58,18 +58,19 @@ router.post('/', (req, res, next) => {
             geo_fallback_url = '' } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
+    const nextSeq = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM campaigns').get().n);
     const result = db.prepare(`
       INSERT INTO campaigns (user_id, advertiser_id, app_id, name, advertiser_name, campaign_token,
         security_token, payout, payout_type, publisher_payout, publisher_payout_type,
         destination_url, preview_url, postback_url, cap_daily, cap_total,
-        allowed_countries, click_lookback_days, is_retargeting, visibility, tags, geo_fallback_url)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_countries, click_lookback_days, is_retargeting, visibility, tags, geo_fallback_url, seq_num)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
            destination_url, preview_url, postback_url, cap_daily, cap_total,
            allowed_countries, click_lookback_days, is_retargeting ? 1 : 0, visibility, tags||'',
-           geo_fallback_url||'');
+           geo_fallback_url||'', nextSeq);
 
     const campaignId = result.lastInsertRowid;
     upsertApprovedPublishers(campaignId, approved_publishers, req.user.id);

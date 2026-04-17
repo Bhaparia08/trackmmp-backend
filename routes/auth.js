@@ -50,9 +50,10 @@ router.post('/register', async (req, res, next) => {
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    const nextSeq = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role, postback_token) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'admin', newPostbackToken());
+      'INSERT INTO users (email, password, name, company_name, role, postback_token, seq_num) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'admin', newPostbackToken(), nextSeq);
 
     const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ token: signToken(user), user });
@@ -72,9 +73,10 @@ router.post('/register/advertiser', async (req, res, next) => {
     const needsVerification = !!mailer;
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    const nextSeq = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'advertiser', newPostbackToken(), needsVerification ? 0 : 1);
+      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified, seq_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'advertiser', newPostbackToken(), needsVerification ? 0 : 1, nextSeq);
 
     const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
 
@@ -129,9 +131,10 @@ router.post('/register/publisher', async (req, res, next) => {
     const needsVerification = !!mailer;
 
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    const nextSeqUser = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n);
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'publisher', newPostbackToken(), needsVerification ? 0 : 1);
+      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified, seq_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'publisher', newPostbackToken(), needsVerification ? 0 : 1, nextSeqUser);
 
     const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
 
@@ -140,9 +143,10 @@ router.post('/register/publisher', async (req, res, next) => {
     const pub_token = nanoid(10);
     const adminRow = db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get();
     const adminUserId = adminRow?.id || 1;
+    const nextSeqPub = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM publishers').get().n);
     db.prepare(
-      'INSERT INTO publishers (user_id, publisher_user_id, name, email, pub_token) VALUES (?, ?, ?, ?, ?)'
-    ).run(adminUserId, result.lastInsertRowid, name, email, pub_token);
+      'INSERT INTO publishers (user_id, publisher_user_id, name, email, pub_token, seq_num) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(adminUserId, result.lastInsertRowid, name, email, pub_token, nextSeqPub);
 
     if (needsVerification) {
       const verifyToken = nanoid32();
