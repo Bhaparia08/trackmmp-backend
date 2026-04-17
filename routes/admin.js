@@ -158,7 +158,7 @@ router.post('/users', requireAdmin, async (req, res, next) => {
       'INSERT INTO users (email, password, name, company_name, role, created_by, account_manager_id, postback_token, seq_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(email, hash, name, company_name || null, role, req.user.id, account_manager_id || null, nanoid20hex(), nextSeqUser);
 
-    const user = db.prepare('SELECT id, email, name, company_name, role, status, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const user = db.prepare('SELECT id, seq_num, email, name, company_name, role, status, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
 
     if (role === 'publisher') {
       const pub_token = nanoid(10);
