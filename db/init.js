@@ -166,6 +166,11 @@ const migrations = [
   // Geo fallback URL — redirect non-allowed-country traffic to a smart link
   `ALTER TABLE campaigns ADD COLUMN geo_fallback_url TEXT NOT NULL DEFAULT ''`,
 
+  // Stable sequential display numbers — assigned at INSERT, never change
+  `ALTER TABLE users ADD COLUMN seq_num INTEGER`,
+  `ALTER TABLE campaigns ADD COLUMN seq_num INTEGER`,
+  `ALTER TABLE publishers ADD COLUMN seq_num INTEGER`,
+
   // VTA: impression counts in daily stats + flag on attributed postbacks
   `ALTER TABLE daily_stats ADD COLUMN impressions INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE postbacks ADD COLUMN is_view_through INTEGER NOT NULL DEFAULT 0`,
@@ -223,6 +228,37 @@ for (const row of missingCamp) fillCamp.run(nanoid20hex(), row.id);
 const missingUsers = db.prepare("SELECT id FROM users WHERE postback_token IS NULL OR postback_token = ''").all();
 const fillUser = db.prepare("UPDATE users SET postback_token = ? WHERE id = ?");
 for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
+
+// Backfill seq_num for existing rows that don't have one yet
+// Users — assign in created_at ASC order so oldest gets seq 1
+{
+  const usersWithoutSeq = db.prepare('SELECT id FROM users WHERE seq_num IS NULL ORDER BY created_at ASC, id ASC').all();
+  if (usersWithoutSeq.length > 0) {
+    const maxSeq = db.prepare('SELECT COALESCE(MAX(seq_num), 0) AS m FROM users WHERE seq_num IS NOT NULL').get().m;
+    const fillSeq = db.prepare('UPDATE users SET seq_num = ? WHERE id = ?');
+    usersWithoutSeq.forEach((row, i) => fillSeq.run(maxSeq + i + 1, row.id));
+  }
+}
+
+// Campaigns
+{
+  const rowsWithoutSeq = db.prepare('SELECT id FROM campaigns WHERE seq_num IS NULL ORDER BY created_at ASC, id ASC').all();
+  if (rowsWithoutSeq.length > 0) {
+    const maxSeq = db.prepare('SELECT COALESCE(MAX(seq_num), 0) AS m FROM campaigns WHERE seq_num IS NOT NULL').get().m;
+    const fillSeq = db.prepare('UPDATE campaigns SET seq_num = ? WHERE id = ?');
+    rowsWithoutSeq.forEach((row, i) => fillSeq.run(maxSeq + i + 1, row.id));
+  }
+}
+
+// Publishers
+{
+  const rowsWithoutSeq = db.prepare('SELECT id FROM publishers WHERE seq_num IS NULL ORDER BY created_at ASC, id ASC').all();
+  if (rowsWithoutSeq.length > 0) {
+    const maxSeq = db.prepare('SELECT COALESCE(MAX(seq_num), 0) AS m FROM publishers WHERE seq_num IS NOT NULL').get().m;
+    const fillSeq = db.prepare('UPDATE publishers SET seq_num = ? WHERE id = ?');
+    rowsWithoutSeq.forEach((row, i) => fillSeq.run(maxSeq + i + 1, row.id));
+  }
+}
 
 // ── Auto-seed admin account ───────────────────────────────────────────────────
 // If SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set AND no admin
