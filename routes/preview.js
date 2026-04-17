@@ -98,11 +98,11 @@ router.get('/funnel', (req, res) => {
 
   let userClause = '';
   if (req.user.role === 'advertiser') {
-    userClause = ' AND c.advertiser_id = ' + req.user.id;
+    userClause = ' AND c.advertiser_id = ?'; params.push(req.user.id);
   }
 
   let pubClause = '';
-  if (publisher_id) pubClause = ' AND cl.publisher_id = ' + parseInt(publisher_id);
+  if (publisher_id) { pubClause = ' AND cl.publisher_id = ?'; params.push(parseInt(publisher_id)); }
 
   const campaigns = db.prepare(`
     SELECT c.id, c.name,
