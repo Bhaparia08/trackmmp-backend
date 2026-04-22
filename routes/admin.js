@@ -37,9 +37,10 @@ router.post('/account-managers', requireAdmin, async (req, res, next) => {
     // Create user account with account_manager role
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const nextSeqAM = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n);
+    // FIX #5: include postback_token and email_verified so AM account works immediately
     const userResult = db.prepare(
-      'INSERT INTO users (email, password, name, role, created_by, seq_num) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(email, hash, name, 'account_manager', req.user.id, nextSeqAM);
+      'INSERT INTO users (email, password, name, role, created_by, postback_token, email_verified, seq_num) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'
+    ).run(email, hash, name, 'account_manager', req.user.id, nanoid20hex(), nextSeqAM);
     const userId = userResult.lastInsertRowid;
 
     // Create account manager record linked to the user

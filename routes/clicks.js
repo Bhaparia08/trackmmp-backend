@@ -5,9 +5,18 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
+// FIX #1 & #2: cap limit at 500 and validate date params
+function parseUnixDate(str) {
+  if (!str) return null;
+  const ts = Math.floor(new Date(str) / 1000);
+  return isNaN(ts) ? null : ts;
+}
+
 router.get('/', (req, res) => {
   const { campaign_id, publisher_id, status, platform, country, from, to,
           page = 1, limit = 50 } = req.query;
+
+  const safeLimit = Math.min(Math.max(1, parseInt(limit) || 50), 500);
 
   // admin sees all clicks; other roles see only their own
   const scope = req.user.role === 'admin'
@@ -21,11 +30,13 @@ router.get('/', (req, res) => {
   if (status) { conditions.push('cl.status = ?'); values.push(status); }
   if (platform) { conditions.push('cl.platform = ?'); values.push(platform); }
   if (country) { conditions.push('cl.country = ?'); values.push(country); }
-  if (from) { conditions.push('cl.created_at >= ?'); values.push(Math.floor(new Date(from)/1000)); }
-  if (to) { conditions.push('cl.created_at <= ?'); values.push(Math.floor(new Date(to)/1000)); }
+  const fromTs = parseUnixDate(from);
+  const toTs   = parseUnixDate(to);
+  if (fromTs !== null) { conditions.push('cl.created_at >= ?'); values.push(fromTs); }
+  if (toTs   !== null) { conditions.push('cl.created_at <= ?'); values.push(toTs); }
 
   const where = conditions.join(' AND ');
-  const offset = (Math.max(1, +page) - 1) * +limit;
+  const offset = (Math.max(1, +page) - 1) * safeLimit;
 
   const total = db.prepare(`SELECT COUNT(*) AS cnt FROM clicks cl WHERE ${where}`).get(...values).cnt;
   const data = db.prepare(`
@@ -35,9 +46,9 @@ router.get('/', (req, res) => {
     LEFT JOIN publishers p ON p.id = cl.publisher_id
     WHERE ${where}
     ORDER BY cl.created_at DESC LIMIT ? OFFSET ?
-  `).all(...values, +limit, offset);
+  `).all(...values, safeLimit, offset);
 
-  res.json({ data, total, page: +page, limit: +limit });
+  res.json({ data, total, page: +page, limit: safeLimit });
 });
 
 module.exports = router;

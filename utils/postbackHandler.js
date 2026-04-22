@@ -227,7 +227,7 @@ function handlePostback(params, ip, io) {
   // Upsert daily stats
   const statsCol = eventType === 'install' ? 'installs' : eventType === 'lead' ? 'leads' : 'conversions';
   db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, ${statsCol}, revenue)
-    VALUES (?,?,?,?,date('now'),1,?)
+    VALUES (?,?,?,?,date('now','utc'),1,?)
     ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
     DO UPDATE SET ${statsCol} = ${statsCol} + 1, revenue = revenue + excluded.revenue`)
     .run(click.user_id, campaign?.app_id||0, click.campaign_id, click.publisher_id||0, finalRevenue);

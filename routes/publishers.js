@@ -21,7 +21,7 @@ router.get('/', (req, res) => {
     SELECT p.*, COUNT(c.id) AS click_count
     FROM publishers p
     LEFT JOIN clicks c ON c.publisher_id = p.id
-    WHERE p.user_id = ? GROUP BY p.id ORDER BY p.created_at DESC
+    WHERE p.user_id = ? AND p.status != 'deleted' GROUP BY p.id ORDER BY p.created_at DESC
   `).all(ownerId);
   res.json(rows);
 });
@@ -30,10 +30,14 @@ router.post('/', (req, res, next) => {
   try {
     const { name, email, notes } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
-    const nextSeq = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM publishers').get().n);
-    const result = db.prepare(
-      'INSERT INTO publishers (user_id, name, email, pub_token, notes, seq_num) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(req.user.id, name, email || null, nanoid10(), notes || null, nextSeq);
+    // FIX #11: transaction makes seq_num read+insert atomic
+    const insert = db.transaction(() => {
+      const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM publishers').get().n;
+      return db.prepare(
+        'INSERT INTO publishers (user_id, name, email, pub_token, notes, seq_num) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(req.user.id, name, email || null, nanoid10(), notes || null, nextSeq);
+    });
+    const result = insert();
     res.status(201).json(db.prepare('SELECT * FROM publishers WHERE id = ?').get(result.lastInsertRowid));
   } catch (err) { next(err); }
 });
@@ -48,11 +52,15 @@ router.put('/:id', (req, res, next) => {
   try {
     const p = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!p) return res.status(404).json({ error: 'Publisher not found' });
-    const { name, email, notes, status, global_postback_url } = req.body;
-    db.prepare(`UPDATE publishers SET name=COALESCE(?,name), email=COALESCE(?,email),
-      notes=COALESCE(?,notes), status=COALESCE(?,status),
-      global_postback_url=COALESCE(?,global_postback_url) WHERE id=?`)
-      .run(name||null, email||null, notes||null, status||null, global_postback_url ?? null, p.id);
+    const body = req.body;
+    // FIX #6: explicit field resolution so empty string correctly clears a field
+    const nameVal              = (body.name !== undefined && body.name) ? body.name : p.name; // name is NOT NULL — never blank it
+    const emailVal             = 'email'             in body ? (body.email || null)             : p.email;
+    const notesVal             = 'notes'             in body ? (body.notes || null)             : p.notes;
+    const statusVal            = body.status             !== undefined ? (body.status || p.status)       : p.status;
+    const postbackVal          = 'global_postback_url' in body ? (body.global_postback_url ?? '')        : p.global_postback_url;
+    db.prepare('UPDATE publishers SET name=?, email=?, notes=?, status=?, global_postback_url=? WHERE id=?')
+      .run(nameVal, emailVal, notesVal, statusVal, postbackVal, p.id);
     res.json(db.prepare('SELECT * FROM publishers WHERE id = ?').get(p.id));
   } catch (err) { next(err); }
 });
@@ -61,7 +69,8 @@ router.delete('/:id', (req, res, next) => {
   try {
     const p = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!p) return res.status(404).json({ error: 'Publisher not found' });
-    db.prepare('DELETE FROM publishers WHERE id = ?').run(p.id);
+    // FIX #3: soft-delete — preserve click history, just hide from UI
+    db.prepare("UPDATE publishers SET status='deleted' WHERE id = ?").run(p.id);
     res.json({ success: true });
   } catch (err) { next(err); }
 });

@@ -49,16 +49,29 @@ function normalise(raw) {
   };
 }
 
+// FIX #7: log when security_token is absent so admin can identify unprotected integrations
+function warnIfNoToken(params) {
+  if (!params.security_token && !params.click_id && !params.transaction_id) {
+    console.warn('[acquisition] postback with no security_token and no click_id — likely misconfigured integration. IP:', params._ip);
+  }
+}
+
 router.get('/', acqLimiter, (req, res, next) => {
   try {
-    handlePostback(normalise(req.query), getIp(req), req.app.get('io'));
+    const p = normalise(req.query);
+    p._ip = getIp(req);
+    warnIfNoToken(p);
+    handlePostback(p, getIp(req), req.app.get('io'));
     res.status(200).send('OK');
   } catch (err) { next(err); }
 });
 
 router.post('/', acqLimiter, express.json(), (req, res, next) => {
   try {
-    handlePostback(normalise({ ...req.query, ...req.body }), getIp(req), req.app.get('io'));
+    const p = normalise({ ...req.query, ...req.body });
+    p._ip = getIp(req);
+    warnIfNoToken(p);
+    handlePostback(p, getIp(req), req.app.get('io'));
     res.status(200).send('OK');
   } catch (err) { next(err); }
 });

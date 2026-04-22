@@ -33,7 +33,7 @@ router.get('/', (req, res, next) => {
 
           const statsCol = event === 'install' ? 'installs' : 'leads';
           db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, ${statsCol})
-            VALUES (?,?,?,?,date('now'),1)
+            VALUES (?,?,?,?,date('now','utc'),1)
             ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
             DO UPDATE SET ${statsCol} = ${statsCol} + 1`)
             .run(click.user_id, appId, click.campaign_id, click.publisher_id||0);

@@ -58,7 +58,16 @@ router.post('/', (req, res, next) => {
             geo_fallback_url = '' } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
-    const nextSeq = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM campaigns').get().n);
+    // FIX #11 + #13: transaction for atomic seq_num; validate URL scheme
+    if (destination_url && !/^https?:\/\//i.test(destination_url)) {
+      return res.status(400).json({ error: 'destination_url must start with http:// or https://' });
+    }
+    if (postback_url && !/^https?:\/\//i.test(postback_url)) {
+      return res.status(400).json({ error: 'postback_url must start with http:// or https://' });
+    }
+
+    const insertCampaign = db.transaction(() => {
+    const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM campaigns').get().n;
     const result = db.prepare(`
       INSERT INTO campaigns (user_id, advertiser_id, app_id, name, advertiser_name, campaign_token,
         security_token, payout, payout_type, publisher_payout, publisher_payout_type,
@@ -72,7 +81,9 @@ router.post('/', (req, res, next) => {
            allowed_countries, click_lookback_days, is_retargeting ? 1 : 0, visibility, tags||'',
            geo_fallback_url||'', nextSeq);
 
-    const campaignId = result.lastInsertRowid;
+      return result.lastInsertRowid;
+    });
+    const campaignId = insertCampaign();
     upsertApprovedPublishers(campaignId, approved_publishers, req.user.id);
 
     const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);

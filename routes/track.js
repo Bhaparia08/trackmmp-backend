@@ -17,7 +17,8 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       "SELECT * FROM campaigns WHERE campaign_token = ? AND status = 'active'"
     ).get(req.params.campaign_token);
 
-    if (!campaign) return res.status(404).send('Campaign not found or inactive');
+    // FIX #10: friendly message for inactive/unknown campaign token
+    if (!campaign) return res.status(404).send('This tracking link is no longer active. Please contact your account manager.');
 
     const q = req.query;
     const ua = req.headers['user-agent'] || '';
@@ -90,8 +91,15 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
           const dest = fallback + (qs.length ? (fallback.includes('?') ? '&' : '?') + qs.join('&') : '');
           return res.redirect(302, dest);
         }
-        // No fallback configured — silently return 200 (don't send error to publisher)
-        return res.status(200).send('OK');
+        // FIX #4: log a rejected click so publisher can debug, still return 200
+        db.prepare(`INSERT INTO clicks
+          (click_id, campaign_id, publisher_id, user_id, pid, publisher_click_id,
+           ip, user_agent, country, device_type, os, platform, advertising_id, status)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'geo_blocked')`)
+          .run(nanoid16(), campaign.id, publisher_id, campaign.user_id,
+               q.pid||null, publisher_click_id, ip, ua, country,
+               device_type, os, platform, advertising_id||null);
+        return res.status(200).send('GEO_BLOCKED');
       }
     }
 
@@ -118,7 +126,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
 
     // Daily stats upsert
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
-      VALUES (?,?,?,?,date('now'),1)
+      VALUES (?,?,?,?,date('now','utc'),1)
       ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
       DO UPDATE SET clicks = clicks + 1`)
       .run(campaign.user_id, campaign.app_id||0, campaign.id, publisher_id||0);
@@ -204,6 +212,11 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       dest += (dest.includes('?') ? '&' : '?') + 'click_id=' + click_id;
     }
 
+    // FIX #13: only redirect to safe http/https URLs
+    if (!/^https?:\/\//i.test(dest)) {
+      return res.status(400).send('Invalid destination URL. Contact your account manager.');
+    }
+
     return res.redirect(302, dest);
   } catch (err) { next(err); }
 });
@@ -257,10 +270,11 @@ router.get('/smart/:token', clickLimiter, async (req, res, next) => {
       if (!selected) selected = matching[matching.length - 1];
     }
 
-    // No matching rule → use fallback URL
+    // FIX #9: no matching rule → use fallback URL (if none configured, return 200 not login redirect)
     if (!selected) {
-      const fallback = sl.fallback_url || '/';
-      return res.redirect(302, fallback);
+      const fallback = sl.fallback_url;
+      if (fallback && /^https?:\/\//i.test(fallback)) return res.redirect(302, fallback);
+      return res.status(200).send('No matching offer available for your region or device.');
     }
 
     // Record a click on the selected campaign
@@ -290,7 +304,7 @@ router.get('/smart/:token', clickLimiter, async (req, res, next) => {
            sl.id);
 
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
-      VALUES (?,?,?,?,date('now'),1)
+      VALUES (?,?,?,?,date('now','utc'),1)
       ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
       DO UPDATE SET clicks = clicks + 1`)
       .run(selected.user_id, selected.app_id||0, selected.campaign_id, publisher_id||0);
@@ -351,7 +365,7 @@ router.get('/imp/:campaign_token', impLimiter, async (req, res, next) => {
 
       // Upsert impression count into daily_stats
       db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, impressions)
-        VALUES (?,?,?,?,date('now'),1)
+        VALUES (?,?,?,?,date('now','utc'),1)
         ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
         DO UPDATE SET impressions = impressions + 1`)
         .run(campaign.user_id, campaign.app_id||0, campaign.id, publisher_id||0);

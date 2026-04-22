@@ -43,7 +43,7 @@ router.get('/', (req, res) => {
 
   // Impressions last 24h
   const impressions24h = db.prepare(`SELECT COALESCE(SUM(impressions),0) AS impressions
-    FROM daily_stats WHERE date = date('now')${dsFilter}`).get(...dsParam);
+    FROM daily_stats WHERE date = date('now','utc')${dsFilter}`).get(...dsParam);
 
   // 7-day trend
   const trend = db.prepare(`SELECT date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
