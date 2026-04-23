@@ -127,6 +127,7 @@ router.get('/users', requireAdmin, (req, res) => {
            am.email AS account_manager_email,
            am.phone AS account_manager_phone,
            p.id        AS publisher_id,
+           p.name      AS publisher_name,
            p.pub_token AS pub_token,
            p.status    AS publisher_status
     FROM users u
@@ -137,6 +138,65 @@ router.get('/users', requireAdmin, (req, res) => {
   if (role) { query += ' AND u.role = ?'; params.push(role); }
   query += ' ORDER BY u.created_at DESC';
   res.json(db.prepare(query).all(...params));
+});
+
+// GET /api/admin/publishers-all — all publisher entities (for assignment picker)
+router.get('/publishers-all', requireAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT p.id, p.name, p.email, p.pub_token, p.status, p.publisher_user_id,
+           u.name AS linked_user_name, u.email AS linked_user_email
+    FROM publishers p
+    LEFT JOIN users u ON u.id = p.publisher_user_id
+    WHERE p.status != 'deleted'
+    ORDER BY p.name ASC
+  `).all();
+  res.json(rows);
+});
+
+// POST /api/admin/users/:id/assign-publisher — link user login to a publisher entity
+router.post('/users/:id/assign-publisher', requireAdmin, (req, res) => {
+  const { publisher_id } = req.body;
+  const user = db.prepare("SELECT id, role FROM users WHERE id = ? AND role NOT IN ('admin','account_manager')").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (!publisher_id) {
+    // Unassign: remove publisher_user_id link and reset role if no other publisher
+    db.prepare('UPDATE publishers SET publisher_user_id = NULL WHERE publisher_user_id = ?').run(req.params.id);
+    return res.json({ success: true, action: 'unassigned' });
+  }
+
+  const pub = db.prepare('SELECT id, publisher_user_id FROM publishers WHERE id = ? AND status != ?').get(publisher_id, 'deleted');
+  if (!pub) return res.status(404).json({ error: 'Publisher not found' });
+
+  // Remove any existing link for this user
+  db.prepare('UPDATE publishers SET publisher_user_id = NULL WHERE publisher_user_id = ?').run(req.params.id);
+  // Remove any existing user link on the target publisher
+  if (pub.publisher_user_id && pub.publisher_user_id !== +req.params.id) {
+    // Previous user loses link — they keep their role but publisher is unlinked
+    db.prepare('UPDATE publishers SET publisher_user_id = NULL WHERE id = ?').run(publisher_id);
+  }
+  // Create the new link
+  db.prepare('UPDATE publishers SET publisher_user_id = ? WHERE id = ?').run(req.params.id, publisher_id);
+  // Ensure user has publisher role
+  db.prepare("UPDATE users SET role = 'publisher' WHERE id = ?").run(req.params.id);
+
+  const updated = db.prepare(`
+    SELECT u.id, u.email, u.name, u.role,
+           p.id AS publisher_id, p.name AS publisher_name, p.pub_token
+    FROM users u
+    LEFT JOIN publishers p ON p.publisher_user_id = u.id
+    WHERE u.id = ?`).get(req.params.id);
+  res.json({ success: true, user: updated });
+});
+
+// POST /api/admin/users/:id/assign-advertiser — set advertiser role (no separate entity needed)
+router.post('/users/:id/assign-advertiser', requireAdmin, (req, res) => {
+  const user = db.prepare("SELECT id FROM users WHERE id = ? AND role NOT IN ('admin','account_manager')").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  // Remove any publisher link if switching role
+  db.prepare('UPDATE publishers SET publisher_user_id = NULL WHERE publisher_user_id = ?').run(req.params.id);
+  db.prepare("UPDATE users SET role = 'advertiser' WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
 });
 
 // POST /api/admin/users  — create advertiser or publisher
