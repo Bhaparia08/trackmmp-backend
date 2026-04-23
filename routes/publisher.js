@@ -26,16 +26,29 @@ router.get('/campaigns', (req, res) => {
            c.destination_url, c.click_lookback_days, c.status,
            COALESCE(c.visibility, 'open') AS visibility,
            c.preview_url, c.allowed_countries, COALESCE(c.tags, '') AS tags,
+           COALESCE(c.description, '') AS description,
+           COALESCE(c.channel, 'all') AS channel,
+           COALESCE(c.allowed_devices, 'all') AS allowed_devices,
+           COALESCE(c.featured, 0) AS featured,
            a.name AS app_name, a.platform AS app_platform,
-           r.status AS access_status
+           r.status AS access_status,
+           COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id AND publisher_id = ?), 0) AS my_clicks,
+           COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id AND publisher_id = ? AND status='installed'), 0) AS my_installs,
+           COALESCE((SELECT SUM(payout) FROM postbacks pb JOIN clicks cl ON cl.click_id = pb.click_id WHERE pb.campaign_id = c.id AND cl.publisher_id = ? AND pb.status='attributed'), 0) AS my_earnings
     FROM campaigns c
     LEFT JOIN apps a ON a.id = c.app_id
     LEFT JOIN campaign_access_requests r ON r.campaign_id = c.id AND r.publisher_id = ?
     WHERE c.status = 'active'
       AND COALESCE(c.visibility, 'open') != 'private'
-    ORDER BY c.created_at DESC
-  `).all(pubId);
-  res.json(campaigns);
+    ORDER BY c.featured DESC, c.created_at DESC
+  `).all(pubId, pubId, pubId, pubId);
+
+  const enriched = campaigns.map(c => ({
+    ...c,
+    epc: c.my_clicks > 0 ? +(c.my_earnings / c.my_clicks).toFixed(4) : 0,
+    cr:  c.my_clicks > 0 ? +((c.my_installs / c.my_clicks) * 100).toFixed(2) : 0,
+  }));
+  res.json(enriched);
 });
 
 // GET /api/publisher/tracking-url/:campaign_id — generate publisher-specific tracking link

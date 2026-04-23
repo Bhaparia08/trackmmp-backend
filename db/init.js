@@ -175,6 +175,17 @@ const migrations = [
   `ALTER TABLE daily_stats ADD COLUMN impressions INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE postbacks ADD COLUMN is_view_through INTEGER NOT NULL DEFAULT 0`,
 
+  // ── Campaign enhancements ─────────────────────────────────────────────────
+  `ALTER TABLE campaigns ADD COLUMN start_date TEXT`,
+  `ALTER TABLE campaigns ADD COLUMN end_date TEXT`,
+  `ALTER TABLE campaigns ADD COLUMN description TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN channel TEXT NOT NULL DEFAULT 'all'`,
+  `ALTER TABLE campaigns ADD COLUMN allowed_devices TEXT NOT NULL DEFAULT 'all'`,
+  `ALTER TABLE campaigns ADD COLUMN cap_monthly INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE campaigns ADD COLUMN cap_redirect_url TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN conversion_hold_days INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE campaigns ADD COLUMN featured INTEGER NOT NULL DEFAULT 0`,
+
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,

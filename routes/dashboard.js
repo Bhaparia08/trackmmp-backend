@@ -56,6 +56,57 @@ router.get('/', (req, res) => {
     LEFT JOIN campaigns c ON c.id = pb.campaign_id
     WHERE 1=1${pbFilter} ORDER BY pb.created_at DESC LIMIT 20`).all(...pbParam);
 
+  // Top 5 campaigns (by clicks last 7 days)
+  const campFilter = isAdmin ? '' : ' AND ds.user_id = ?';
+  const topCampaigns = db.prepare(`
+    SELECT c.id, c.name, c.status,
+      COALESCE(SUM(ds.clicks),0) AS clicks,
+      COALESCE(SUM(ds.installs),0) AS installs,
+      ROUND(COALESCE(SUM(ds.revenue),0),2) AS revenue,
+      CASE WHEN SUM(ds.clicks)>0 THEN ROUND(CAST(SUM(ds.installs) AS REAL)/SUM(ds.clicks)*100,1) ELSE 0 END AS cr
+    FROM campaigns c
+    LEFT JOIN daily_stats ds ON ds.campaign_id = c.id AND ds.date >= date('now','-6 days')
+    WHERE c.status != 'archived'${campFilter}
+    GROUP BY c.id ORDER BY clicks DESC LIMIT 5
+  `).all(...(isAdmin ? [] : [req.user.id]));
+
+  // Top 5 publishers (by clicks last 7 days)
+  const pubFilterDs = isAdmin ? '' : ' AND ds.user_id = ?';
+  const topPublishers = db.prepare(`
+    SELECT p.id, p.name, p.pub_token,
+      COALESCE(SUM(ds.clicks),0) AS clicks,
+      COALESCE(SUM(ds.installs),0) AS installs,
+      ROUND(COALESCE(SUM(ds.revenue),0),2) AS revenue
+    FROM publishers p
+    LEFT JOIN daily_stats ds ON ds.publisher_id = p.id AND ds.date >= date('now','-6 days')
+    WHERE p.status != 'deleted'${pubFilterDs}
+    GROUP BY p.id ORDER BY clicks DESC LIMIT 5
+  `).all(...(isAdmin ? [] : [req.user.id]));
+
+  // Pending publisher signup approvals count
+  const pendingPublishers = isAdmin
+    ? db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='publisher' AND status='pending'").get().n
+    : 0;
+
+  // Pending campaign access requests count
+  const pendingAccess = db.prepare(`
+    SELECT COUNT(*) AS n FROM campaign_access_requests r
+    JOIN campaigns c ON c.id = r.campaign_id
+    WHERE r.status='pending'${isAdmin ? '' : ' AND c.user_id=?'}
+  `).get(...(isAdmin ? [] : [req.user.id])).n;
+
+  // Campaigns nearing their daily cap (>=80% used today)
+  const capsNearing = isAdmin ? db.prepare(`
+    SELECT c.id, c.name, c.cap_daily,
+      COALESCE(SUM(ds.installs),0) AS used_today
+    FROM campaigns c
+    LEFT JOIN daily_stats ds ON ds.campaign_id=c.id AND ds.date=date('now','utc')
+    WHERE c.cap_daily > 0 AND c.status='active'
+    GROUP BY c.id
+    HAVING used_today >= c.cap_daily*0.8
+    LIMIT 5
+  `).all() : [];
+
   function pct(a, b) {
     if (!b) return a > 0 ? 100 : 0;
     return +(((a - b) / b) * 100).toFixed(1);
@@ -74,6 +125,11 @@ router.get('/', (req, res) => {
     },
     trend,
     recent_postbacks: recent,
+    top_campaigns: topCampaigns,
+    top_publishers: topPublishers,
+    pending_publishers: pendingPublishers,
+    pending_access: pendingAccess,
+    caps_nearing: capsNearing,
   });
 });
 

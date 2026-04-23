@@ -90,6 +90,7 @@ app.use('/api/campaign-access', require('./routes/campaignAccess'));
 app.use('/api/smart-links',    require('./routes/smartLinks'));
 app.use('/api/automation',     require('./routes/automation'));
 app.use('/api/preview',        require('./routes/preview'));
+app.use('/api/impact',         require('./routes/impact'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

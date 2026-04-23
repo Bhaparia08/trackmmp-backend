@@ -26,12 +26,19 @@ router.get('/', (req, res) => {
       COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id AND status = 'installed'), 0) AS total_installs,
       COALESCE((SELECT SUM(revenue) FROM postbacks WHERE campaign_id = c.id AND status = 'attributed'), 0) AS total_revenue,
       COALESCE(u.name, NULLIF(c.advertiser_name,'')) AS advertiser_display,
-      u.email AS advertiser_email
+      u.email AS advertiser_email,
+      COALESCE((SELECT SUM(installs) FROM daily_stats WHERE campaign_id=c.id AND date=date('now','utc')),0) AS cap_used_today
     FROM campaigns c
     LEFT JOIN users u ON u.id = c.advertiser_id
     WHERE ${clause}${archivedClause} ORDER BY c.created_at DESC
   `).all(...params);
-  res.json(rows);
+  // compute EPC and CR for each row
+  const enriched = rows.map(r => ({
+    ...r,
+    epc: r.total_clicks > 0 ? +(r.total_revenue / r.total_clicks).toFixed(4) : 0,
+    cr:  r.total_clicks > 0 ? +((r.total_installs / r.total_clicks) * 100).toFixed(2) : 0,
+  }));
+  res.json(enriched);
 });
 
 // Helper: upsert approved access records for a list of publisher IDs
@@ -55,7 +62,10 @@ router.post('/', (req, res, next) => {
             destination_url = '', preview_url = '', postback_url = '', cap_daily = 0, cap_total = 0,
             allowed_countries = '', click_lookback_days = 7, is_retargeting = 0,
             visibility = 'open', approved_publishers = [], tags = '',
-            geo_fallback_url = '' } = req.body;
+            geo_fallback_url = '',
+            start_date = null, end_date = null, description = '',
+            channel = 'all', allowed_devices = 'all',
+            cap_monthly = 0, cap_redirect_url = '', conversion_hold_days = 0, featured = 0 } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     // FIX #11 + #13: transaction for atomic seq_num; validate URL scheme
@@ -72,14 +82,20 @@ router.post('/', (req, res, next) => {
       INSERT INTO campaigns (user_id, advertiser_id, app_id, name, advertiser_name, campaign_token,
         security_token, payout, payout_type, publisher_payout, publisher_payout_type,
         destination_url, preview_url, postback_url, cap_daily, cap_total,
-        allowed_countries, click_lookback_days, is_retargeting, visibility, tags, geo_fallback_url, seq_num)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_countries, click_lookback_days, is_retargeting, visibility, tags, geo_fallback_url,
+        start_date, end_date, description, channel, allowed_devices,
+        cap_monthly, cap_redirect_url, conversion_hold_days, featured, seq_num)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
            destination_url, preview_url, postback_url, cap_daily, cap_total,
            allowed_countries, click_lookback_days, is_retargeting ? 1 : 0, visibility, tags||'',
-           geo_fallback_url||'', nextSeq);
+           geo_fallback_url||'',
+           start_date||null, end_date||null, description||'',
+           channel||'all', allowed_devices||'all',
+           cap_monthly||0, cap_redirect_url||'', conversion_hold_days||0, featured ? 1 : 0,
+           nextSeq);
 
       return result.lastInsertRowid;
     });
@@ -135,7 +151,9 @@ router.put('/:id', (req, res, next) => {
             publisher_payout, publisher_payout_type,
             destination_url, preview_url, postback_url,
             status, cap_daily, cap_total, allowed_countries, click_lookback_days,
-            is_retargeting, visibility, approved_publishers, tags, geo_fallback_url } = req.body;
+            is_retargeting, visibility, approved_publishers, tags, geo_fallback_url,
+            start_date, end_date, description, channel, allowed_devices,
+            cap_monthly, cap_redirect_url, conversion_hold_days, featured } = req.body;
 
     db.prepare(`UPDATE campaigns SET
       name=COALESCE(?,name), advertiser_name=COALESCE(?,advertiser_name),
@@ -146,7 +164,13 @@ router.put('/:id', (req, res, next) => {
       status=COALESCE(?,status), cap_daily=COALESCE(?,cap_daily), cap_total=COALESCE(?,cap_total),
       allowed_countries=?, click_lookback_days=COALESCE(?,click_lookback_days),
       is_retargeting=COALESCE(?,is_retargeting), visibility=COALESCE(?,visibility),
-      tags=COALESCE(?,tags), geo_fallback_url=?, updated_at=unixepoch()
+      tags=COALESCE(?,tags), geo_fallback_url=?,
+      start_date=COALESCE(?,start_date), end_date=COALESCE(?,end_date),
+      description=COALESCE(?,description), channel=COALESCE(?,channel),
+      allowed_devices=COALESCE(?,allowed_devices),
+      cap_monthly=COALESCE(?,cap_monthly), cap_redirect_url=COALESCE(?,cap_redirect_url),
+      conversion_hold_days=COALESCE(?,conversion_hold_days), featured=COALESCE(?,featured),
+      updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
            publisher_payout??null, publisher_payout_type||null,
@@ -154,7 +178,12 @@ router.put('/:id', (req, res, next) => {
            cap_daily??null, cap_total??null,
            allowed_countries !== undefined ? allowed_countries : c.allowed_countries,
            click_lookback_days??null, is_retargeting!=null?+is_retargeting:null,
-           visibility||null, tags!=null?tags:null, geo_fallback_url||'', c.id);
+           visibility||null, tags!=null?tags:null, geo_fallback_url!=null?geo_fallback_url:c.geo_fallback_url,
+           start_date!=null?start_date:null, end_date!=null?end_date:null,
+           description!=null?description:null, channel||null, allowed_devices||null,
+           cap_monthly??null, cap_redirect_url!=null?cap_redirect_url:null,
+           conversion_hold_days??null, featured!=null?+featured:null,
+           c.id);
 
     if (Array.isArray(approved_publishers)) {
       upsertApprovedPublishers(c.id, approved_publishers, req.user.id);
