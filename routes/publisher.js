@@ -121,6 +121,30 @@ router.get('/stats', (req, res) => {
   res.json({ ...totals, campaigns: byCampaign });
 });
 
+// GET /api/publisher/stats/by-day — time-series clicks/installs/revenue for publisher
+router.get('/stats/by-day', (req, res) => {
+  const pub = db.prepare('SELECT * FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
+  if (!pub) return res.json([]);
+  const { from, to, campaign_id } = req.query;
+  const conditions = ['cl.publisher_id = ?'];
+  const values = [pub.id];
+  if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); values.push(to); }
+  if (campaign_id) { conditions.push('cl.campaign_id = ?'); values.push(campaign_id); }
+  const rows = db.prepare(`
+    SELECT date(cl.created_at,'unixepoch') AS date,
+      COUNT(DISTINCT cl.id) AS clicks,
+      COUNT(DISTINCT CASE WHEN cl.status='installed' THEN cl.id END) AS installs,
+      ROUND(COALESCE(SUM(pb.payout),0),2) AS revenue
+    FROM clicks cl
+    LEFT JOIN postbacks pb ON pb.click_id = cl.click_id AND pb.status = 'attributed'
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY date(cl.created_at,'unixepoch')
+    ORDER BY date ASC
+  `).all(...values);
+  res.json(rows);
+});
+
 // GET /api/publisher/postbacks — recent postbacks for this publisher
 router.get('/postbacks', (req, res) => {
   const pub = db.prepare('SELECT * FROM publishers WHERE publisher_user_id = ?').get(req.user.id);

@@ -16,6 +16,13 @@ function userScope(user, alias = '') {
   return { clause: `${col} = ?`, params: [user.id] };
 }
 
+// Admin-only: filter by advertiser via campaign ownership (works for both self-created and admin-created campaigns)
+function advertiserFilter(advertiser_id, alias = '') {
+  if (!advertiser_id) return null;
+  const col = alias ? `${alias}.campaign_id` : 'campaign_id';
+  return { clause: `${col} IN (SELECT id FROM campaigns WHERE advertiser_id = ?)`, params: [advertiser_id] };
+}
+
 function dateFilter(from, to) {
   const conditions = [];
   const values = [];
@@ -26,12 +33,14 @@ function dateFilter(from, to) {
 
 // GET /api/reports/summary
 router.get('/summary', (req, res) => {
-  const { from, to, campaign_id, publisher_id } = req.query;
+  const { from, to, campaign_id, publisher_id, advertiser_id } = req.query;
   const { conditions, values } = dateFilter(from, to);
   const scope = userScope(req.user);
   conditions.push(scope.clause); values.push(...scope.params);
-  if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
+  if (campaign_id)  { conditions.push('campaign_id = ?');  values.push(campaign_id); }
   if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
+  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id) : null;
+  if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const where = conditions.join(' AND ');
   const row = db.prepare(`SELECT
@@ -50,12 +59,14 @@ router.get('/summary', (req, res) => {
 
 // GET /api/reports/by-day
 router.get('/by-day', (req, res) => {
-  const { from, to, campaign_id, publisher_id } = req.query;
+  const { from, to, campaign_id, publisher_id, advertiser_id } = req.query;
   const { conditions, values } = dateFilter(from, to);
   const scope = userScope(req.user);
   conditions.push(scope.clause); values.push(...scope.params);
-  if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
+  if (campaign_id)  { conditions.push('campaign_id = ?');  values.push(campaign_id); }
   if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
+  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id) : null;
+  if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
     SUM(leads) AS leads, ROUND(SUM(revenue),2) AS revenue
@@ -66,10 +77,12 @@ router.get('/by-day', (req, res) => {
 
 // GET /api/reports/by-campaign
 router.get('/by-campaign', (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, advertiser_id } = req.query;
   const { conditions, values } = dateFilter(from, to);
   const scope = userScope(req.user, 'ds');
   conditions.push(scope.clause); values.push(...scope.params);
+  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id, 'ds') : null;
+  if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT c.name AS campaign, c.id AS campaign_id,
     SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
@@ -83,10 +96,12 @@ router.get('/by-campaign', (req, res) => {
 
 // GET /api/reports/by-publisher
 router.get('/by-publisher', (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, advertiser_id } = req.query;
   const { conditions, values } = dateFilter(from, to);
   const scope = userScope(req.user, 'ds');
   conditions.push(scope.clause); values.push(...scope.params);
+  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id, 'ds') : null;
+  if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT p.name AS publisher, p.id AS publisher_id,
     SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
@@ -100,12 +115,14 @@ router.get('/by-publisher', (req, res) => {
 
 // GET /api/reports/by-country
 router.get('/by-country', (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, advertiser_id } = req.query;
   const scope = userScope(req.user, 'cl');
   const conditions = [scope.clause];
   const values = [...scope.params];
   if (from) { conditions.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
+  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id, 'cl') : null;
+  if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT country, COUNT(*) AS clicks,
     SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installs
@@ -116,12 +133,14 @@ router.get('/by-country', (req, res) => {
 
 // GET /api/reports/by-device
 router.get('/by-device', (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, advertiser_id } = req.query;
   const scope = userScope(req.user, 'cl');
   const conditions = [scope.clause];
   const values = [...scope.params];
   if (from) { conditions.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
+  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id, 'cl') : null;
+  if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT device_type, os, platform, COUNT(*) AS clicks,
     SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installs
@@ -132,13 +151,15 @@ router.get('/by-device', (req, res) => {
 
 // GET /api/reports/by-event
 router.get('/by-event', (req, res) => {
-  const { from, to, campaign_id } = req.query;
+  const { from, to, campaign_id, advertiser_id } = req.query;
   const scope = userScope(req.user);
   const conditions = [scope.clause, "status = 'attributed'"];
   const values = [...scope.params];
   if (from) { conditions.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
   if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
+  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id) : null;
+  if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT event_type, event_name, COUNT(*) AS count,
     SUM(revenue) AS revenue FROM postbacks
@@ -149,13 +170,15 @@ router.get('/by-event', (req, res) => {
 
 // GET /api/reports/by-goal
 router.get('/by-goal', (req, res) => {
-  const { from, to, campaign_id } = req.query;
+  const { from, to, campaign_id, advertiser_id } = req.query;
   const scope = userScope(req.user, 'pb');
   const conditions = [scope.clause, "pb.status = 'attributed'"];
   const values = [...scope.params];
   if (from) { conditions.push("date(pb.created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(pb.created_at,'unixepoch') <= ?"); values.push(to); }
   if (campaign_id) { conditions.push('pb.campaign_id = ?'); values.push(campaign_id); }
+  const afGoal = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id, 'pb') : null;
+  if (afGoal) { conditions.push(afGoal.clause); values.push(...afGoal.params); }
 
   const rows = db.prepare(`
     SELECT pb.goal_name, pb.event_type, pb.event_name,
@@ -172,7 +195,7 @@ router.get('/by-goal', (req, res) => {
 
 // GET /api/reports/by-sub
 router.get('/by-sub', (req, res) => {
-  const { from, to, campaign_id, sub = 'af_sub1' } = req.query;
+  const { from, to, campaign_id, advertiser_id, sub = 'af_sub1' } = req.query;
   const allowedSubs = ['af_sub1','af_sub2','af_sub3','af_sub4','af_sub5','sub6','sub7','sub8','sub9','sub10','pid'];
   const col = allowedSubs.includes(sub) ? sub : 'af_sub1';
   const scope = userScope(req.user, 'cl');
@@ -181,6 +204,8 @@ router.get('/by-sub', (req, res) => {
   if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); values.push(to); }
   if (campaign_id) { conditions.push('cl.campaign_id = ?'); values.push(campaign_id); }
+  const afSub = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id, 'cl') : null;
+  if (afSub) { conditions.push(afSub.clause); values.push(...afSub.params); }
 
   const rows = db.prepare(`
     SELECT cl.${col} AS sub_value,
@@ -198,12 +223,14 @@ router.get('/by-sub', (req, res) => {
 
 // GET /api/reports/by-os
 router.get('/by-os', (req, res) => {
-  const { from, to } = req.query;
+  const { from, to, advertiser_id } = req.query;
   const scope = userScope(req.user, 'cl');
   const conditions = [scope.clause];
   const values = [...scope.params];
   if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); values.push(to); }
+  const afOs = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id, 'cl') : null;
+  if (afOs) { conditions.push(afOs.clause); values.push(...afOs.params); }
 
   const rows = db.prepare(`
     SELECT cl.os, cl.platform,
