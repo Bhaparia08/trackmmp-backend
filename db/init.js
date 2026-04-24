@@ -186,6 +186,14 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN conversion_hold_days INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE campaigns ADD COLUMN featured INTEGER NOT NULL DEFAULT 0`,
 
+  // ── Multi-AM assignment: many-to-many between users and account_managers ──
+  `CREATE TABLE IF NOT EXISTS user_account_managers (
+    user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    account_manager_id INTEGER NOT NULL REFERENCES account_managers(id) ON DELETE CASCADE,
+    assigned_at        INTEGER NOT NULL DEFAULT (unixepoch()),
+    PRIMARY KEY (user_id, account_manager_id)
+  )`,
+
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -269,6 +277,17 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
     const fillSeq = db.prepare('UPDATE publishers SET seq_num = ? WHERE id = ?');
     rowsWithoutSeq.forEach((row, i) => fillSeq.run(maxSeq + i + 1, row.id));
   }
+}
+
+// Backfill user_account_managers from existing users.account_manager_id
+{
+  try {
+    const existing = db.prepare(
+      "SELECT id, account_manager_id FROM users WHERE account_manager_id IS NOT NULL AND role IN ('advertiser','publisher')"
+    ).all();
+    const ins = db.prepare('INSERT OR IGNORE INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)');
+    for (const u of existing) ins.run(u.id, u.account_manager_id);
+  } catch {}
 }
 
 // ── One-time admin password reset (migration: reset_admin_v2) ────────────────

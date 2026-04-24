@@ -137,7 +137,58 @@ router.get('/users', requireAdmin, (req, res) => {
   const params = [];
   if (role) { query += ' AND u.role = ?'; params.push(role); }
   query += ' ORDER BY u.created_at DESC';
-  res.json(db.prepare(query).all(...params));
+  const rows = db.prepare(query).all(...params);
+
+  // Attach full list of assigned account managers (from junction table)
+  const amList = db.prepare(`
+    SELECT uam.user_id, am.id AS am_id, am.name, am.email, am.user_id AS am_user_id
+    FROM user_account_managers uam
+    JOIN account_managers am ON am.id = uam.account_manager_id
+  `).all();
+  const amMap = {};
+  for (const r of amList) {
+    if (!amMap[r.user_id]) amMap[r.user_id] = [];
+    amMap[r.user_id].push({ id: r.am_id, name: r.name, email: r.email, user_id: r.am_user_id });
+  }
+  res.json(rows.map(r => ({ ...r, assigned_ams: amMap[r.id] || [] })));
+});
+
+// POST /api/admin/users/:id/account-managers — assign an AM to a user
+router.post('/users/:id/account-managers', requireAdmin, (req, res) => {
+  const { account_manager_id } = req.body;
+  if (!account_manager_id) return res.status(400).json({ error: 'account_manager_id required' });
+  const user = db.prepare("SELECT id FROM users WHERE id = ? AND role NOT IN ('admin','account_manager')").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const am = db.prepare('SELECT id FROM account_managers WHERE id = ?').get(account_manager_id);
+  if (!am) return res.status(404).json({ error: 'Account manager not found' });
+  db.prepare('INSERT OR IGNORE INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)').run(user.id, am.id);
+  // Also update legacy single FK for backward compat if this is the first AM
+  const current = db.prepare('SELECT account_manager_id FROM users WHERE id = ?').get(user.id);
+  if (!current.account_manager_id) db.prepare('UPDATE users SET account_manager_id = ? WHERE id = ?').run(am.id, user.id);
+  const ams = db.prepare(`
+    SELECT am.id, am.name, am.email, am.user_id FROM user_account_managers uam
+    JOIN account_managers am ON am.id = uam.account_manager_id
+    WHERE uam.user_id = ?
+  `).all(user.id);
+  res.json({ success: true, assigned_ams: ams });
+});
+
+// DELETE /api/admin/users/:id/account-managers/:amId — unassign an AM from a user
+router.delete('/users/:id/account-managers/:amId', requireAdmin, (req, res) => {
+  const user = db.prepare("SELECT id, account_manager_id FROM users WHERE id = ?").get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  db.prepare('DELETE FROM user_account_managers WHERE user_id = ? AND account_manager_id = ?').run(user.id, req.params.amId);
+  // If the removed AM was the legacy FK, update it to the next remaining AM (or null)
+  if (String(user.account_manager_id) === String(req.params.amId)) {
+    const next = db.prepare('SELECT account_manager_id FROM user_account_managers WHERE user_id = ? LIMIT 1').get(user.id);
+    db.prepare('UPDATE users SET account_manager_id = ? WHERE id = ?').run(next?.account_manager_id || null, user.id);
+  }
+  const ams = db.prepare(`
+    SELECT am.id, am.name, am.email, am.user_id FROM user_account_managers uam
+    JOIN account_managers am ON am.id = uam.account_manager_id
+    WHERE uam.user_id = ?
+  `).all(user.id);
+  res.json({ success: true, assigned_ams: ams });
 });
 
 // GET /api/admin/publishers-all — all publisher entities (for assignment picker)

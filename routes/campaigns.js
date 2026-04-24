@@ -8,11 +8,17 @@ const nanoid20hex = customAlphabet('0123456789abcdef', 20);
 const router = express.Router();
 router.use(requireAuth);
 
-// Helper: advertiser IDs assigned to an account manager
+// Helper: advertiser IDs assigned to an account manager (uses junction table + legacy FK)
 function getAMAdvertiserIds(userId) {
   const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(userId);
   if (!am) return [];
-  return db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+  return db.prepare(`
+    SELECT DISTINCT u.id FROM users u
+    WHERE u.role = 'advertiser' AND (
+      u.account_manager_id = ?
+      OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = u.id AND uam.account_manager_id = ?)
+    )
+  `).all(am.id, am.id).map(u => u.id);
 }
 
 // Helper: build campaign WHERE clause based on role

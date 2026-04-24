@@ -12,16 +12,29 @@ function getAMRecord(userId) {
   return db.prepare('SELECT * FROM account_managers WHERE user_id = ?').get(userId);
 }
 
+// Helper: get all user IDs assigned to an AM (uses junction table + legacy FK)
+function getAMUserIds(amId, role) {
+  return db.prepare(`
+    SELECT DISTINCT u.id FROM users u
+    WHERE u.role = ? AND (
+      u.account_manager_id = ?
+      OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = u.id AND uam.account_manager_id = ?)
+    )
+  `).all(role, amId, amId).map(u => u.id);
+}
+
 // GET /api/am/me — AM profile + stats summary
 router.get('/me', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);
   if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
-  const advertisers = db.prepare("SELECT COUNT(*) as n FROM users WHERE account_manager_id = ? AND role = 'advertiser'").get(am.id).n;
-  const publishers  = db.prepare("SELECT COUNT(*) as n FROM users WHERE account_manager_id = ? AND role = 'publisher'").get(am.id).n;
+  const advUserIds = getAMUserIds(am.id, 'advertiser');
+  const pubUserIds = getAMUserIds(am.id, 'publisher');
+  const advertisers = advUserIds.length;
+  const publishers  = pubUserIds.length;
 
   // Get campaigns linked to assigned advertisers
-  const advIds = db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+  const advIds = advUserIds;
   let campaigns = 0, clicks = 0, conversions = 0, revenue = 0;
 
   if (advIds.length > 0) {
@@ -40,16 +53,30 @@ router.get('/advertisers', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);
   if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
+  const advIds = getAMUserIds(am.id, 'advertiser');
+  if (advIds.length === 0) return res.json([]);
+  const ph = advIds.map(() => '?').join(',');
   const advertisers = db.prepare(`
-    SELECT u.id, u.email, u.name, u.company_name, u.status, u.plan, u.created_at,
+    SELECT u.id, u.email, u.name, u.company_name, u.status, u.plan, u.created_at, u.account_manager_id,
            (SELECT COUNT(*) FROM campaigns c WHERE c.advertiser_id = u.id) as campaign_count,
            (SELECT COUNT(*) FROM clicks cl WHERE cl.user_id = u.id) as click_count
     FROM users u
-    WHERE u.account_manager_id = ? AND u.role = 'advertiser'
+    WHERE u.id IN (${ph}) AND u.role = 'advertiser'
     ORDER BY u.name ASC
-  `).all(am.id);
+  `).all(...advIds);
 
-  res.json(advertisers);
+  // Attach full AM list from junction table
+  const amRows = db.prepare(`
+    SELECT uam.user_id, am2.id AS am_id, am2.name, am2.email
+    FROM user_account_managers uam JOIN account_managers am2 ON am2.id = uam.account_manager_id
+    WHERE uam.user_id IN (${ph})
+  `).all(...advIds);
+  const amMap = {};
+  for (const r of amRows) {
+    if (!amMap[r.user_id]) amMap[r.user_id] = [];
+    amMap[r.user_id].push({ id: r.am_id, name: r.name, email: r.email });
+  }
+  res.json(advertisers.map(a => ({ ...a, assigned_ams: amMap[a.id] || [] })));
 });
 
 // GET /api/am/publishers — publishers assigned to this AM
@@ -57,6 +84,9 @@ router.get('/publishers', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);
   if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
+  const pubIds = getAMUserIds(am.id, 'publisher');
+  if (pubIds.length === 0) return res.json([]);
+  const ph2 = pubIds.map(() => '?').join(',');
   const publishers = db.prepare(`
     SELECT u.id, u.email, u.name, u.company_name, u.status, u.created_at,
            p.pub_token, p.id as publisher_id,
@@ -64,9 +94,9 @@ router.get('/publishers', requireAM, (req, res) => {
            (SELECT COUNT(*) FROM postbacks pb WHERE pb.campaign_id IN (SELECT id FROM campaigns WHERE user_id = u.id) AND pb.status = 'attributed') as conversion_count
     FROM users u
     LEFT JOIN publishers p ON p.publisher_user_id = u.id
-    WHERE u.account_manager_id = ? AND u.role = 'publisher'
+    WHERE u.id IN (${ph2}) AND u.role = 'publisher'
     ORDER BY u.name ASC
-  `).all(am.id);
+  `).all(...pubIds);
 
   res.json(publishers);
 });
@@ -76,7 +106,7 @@ router.get('/campaigns', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);
   if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
-  const advIds = db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+  const advIds = getAMUserIds(am.id, 'advertiser');
   if (advIds.length === 0) return res.json([]);
 
   const placeholders = advIds.map(() => '?').join(',');
@@ -100,8 +130,8 @@ router.get('/dashboard', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);
   if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
-  const advIds = db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
-  const pubIds = db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'publisher'").all(am.id).map(u => u.id);
+  const advIds = getAMUserIds(am.id, 'advertiser');
+  const pubIds = getAMUserIds(am.id, 'publisher');
 
   let stats = { advertisers: advIds.length, publishers: pubIds.length, campaigns: 0, clicks: 0, conversions: 0, revenue: 0 };
   let recentPostbacks = [];
@@ -133,9 +163,10 @@ router.put('/users/:id', requireAM, async (req, res, next) => {
     if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
     // Only allow editing users assigned to this AM
-    const user = db.prepare(
-      "SELECT * FROM users WHERE id = ? AND account_manager_id = ? AND role IN ('advertiser','publisher')"
-    ).get(req.params.id, am.id);
+    const user = db.prepare(`
+      SELECT * FROM users WHERE id = ? AND role IN ('advertiser','publisher')
+      AND (account_manager_id = ? OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = id AND uam.account_manager_id = ?))
+    `).get(req.params.id, am.id, am.id);
     if (!user) return res.status(403).json({ error: 'User not found or not assigned to you' });
 
     const { name, company_name, status, password } = req.body;
@@ -162,9 +193,10 @@ router.get('/users/:id/integration', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);
   if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
-  const user = db.prepare(
-    "SELECT * FROM users WHERE id = ? AND account_manager_id = ? AND role IN ('advertiser','publisher')"
-  ).get(req.params.id, am.id);
+  const user = db.prepare(`
+    SELECT * FROM users WHERE id = ? AND role IN ('advertiser','publisher')
+    AND (account_manager_id = ? OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = id AND uam.account_manager_id = ?))
+  `).get(req.params.id, am.id, am.id);
   if (!user) return res.status(403).json({ error: 'User not found or not assigned to you' });
 
   const base = process.env.TRACKING_DOMAIN || 'https://track.apogeemobi.com';
@@ -236,9 +268,10 @@ router.put('/advertisers/:id', requireAM, async (req, res, next) => {
     const am = getAMRecord(req.user.id);
     if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
-    const user = db.prepare(
-      "SELECT * FROM users WHERE id = ? AND account_manager_id = ? AND role = 'advertiser'"
-    ).get(req.params.id, am.id);
+    const user = db.prepare(`
+      SELECT * FROM users WHERE id = ? AND role = 'advertiser'
+      AND (account_manager_id = ? OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = id AND uam.account_manager_id = ?))
+    `).get(req.params.id, am.id, am.id);
     if (!user) return res.status(404).json({ error: 'Advertiser not found or not assigned to you' });
 
     const { name, company_name, status, password } = req.body;
@@ -304,15 +337,16 @@ router.get('/publisher-manager', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);
   if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
-  const publishers = db.prepare(`
+  const pubUserIds = getAMUserIds(am.id, 'publisher');
+  const publishers = pubUserIds.length === 0 ? [] : db.prepare(`
     SELECT u.id, u.seq_num, u.email, u.name, u.status, u.created_at, p.pub_token
     FROM users u
     LEFT JOIN publishers p ON p.publisher_user_id = u.id
-    WHERE u.account_manager_id = ? AND u.role = 'publisher'
+    WHERE u.id IN (${pubUserIds.map(() => '?').join(',')}) AND u.role = 'publisher'
     ORDER BY u.created_at DESC
-  `).all(am.id);
+  `).all(...pubUserIds);
 
-  const advIds = db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+  const advIds = getAMUserIds(am.id, 'advertiser');
   let camReqs = [];
   if (advIds.length > 0) {
     const ph = advIds.map(() => '?').join(',');
@@ -337,7 +371,7 @@ router.get('/clicks', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);
   if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
-  const advIds = db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+  const advIds = getAMUserIds(am.id, 'advertiser');
   if (advIds.length === 0) return res.json({ data: [], total: 0, page: 1, limit: 50 });
 
   const { from, to, campaign_id, publisher_id, status, page = 1, limit = 50 } = req.query;
@@ -375,8 +409,11 @@ router.put('/publishers/:id/postback', requireAM, (req, res) => {
   const pub = db.prepare(`
     SELECT p.* FROM publishers p
     JOIN users u ON u.id = p.publisher_user_id
-    WHERE p.id = ? AND u.account_manager_id = ?
-  `).get(req.params.id, am.id);
+    WHERE p.id = ? AND (
+      u.account_manager_id = ?
+      OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = u.id AND uam.account_manager_id = ?)
+    )
+  `).get(req.params.id, am.id, am.id);
   if (!pub) return res.status(403).json({ error: 'Publisher not found or not assigned to you' });
 
   const { global_postback_url } = req.body;

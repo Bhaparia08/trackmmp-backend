@@ -23,7 +23,13 @@ router.get('/', (req, res) => {
   } else if (isAM) {
     const amRec  = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(req.user.id);
     const advIds = amRec
-      ? db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(amRec.id).map(u => u.id)
+      ? db.prepare(`
+          SELECT DISTINCT u.id FROM users u
+          WHERE u.role = 'advertiser' AND (
+            u.account_manager_id = ?
+            OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = u.id AND uam.account_manager_id = ?)
+          )
+        `).all(amRec.id, amRec.id).map(u => u.id)
       : [];
     if (advIds.length > 0) {
       const ph = advIds.map(() => '?').join(',');

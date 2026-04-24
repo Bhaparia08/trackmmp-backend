@@ -23,7 +23,23 @@ router.get('/', (req, res) => {
     LEFT JOIN clicks c ON c.publisher_id = p.id
     WHERE p.user_id = ? AND p.status != 'deleted' GROUP BY p.id ORDER BY p.created_at DESC
   `).all(ownerId);
-  res.json(rows);
+
+  // Attach assigned AMs for publishers that have a user account
+  const userIds = rows.map(r => r.publisher_user_id).filter(Boolean);
+  const amMap = {};
+  if (userIds.length > 0) {
+    const ph = userIds.map(() => '?').join(',');
+    const amRows = db.prepare(`
+      SELECT uam.user_id, am.id AS am_id, am.name, am.email
+      FROM user_account_managers uam JOIN account_managers am ON am.id = uam.account_manager_id
+      WHERE uam.user_id IN (${ph})
+    `).all(...userIds);
+    for (const r of amRows) {
+      if (!amMap[r.user_id]) amMap[r.user_id] = [];
+      amMap[r.user_id].push({ id: r.am_id, name: r.name, email: r.email });
+    }
+  }
+  res.json(rows.map(r => ({ ...r, assigned_ams: amMap[r.publisher_user_id] || [] })));
 });
 
 router.post('/', (req, res, next) => {
