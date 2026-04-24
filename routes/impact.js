@@ -122,7 +122,7 @@ const PARTNERSHIP_PLATFORMS = [
     key: 'impact',
     name: 'Impact.com',
     color: '#6366f1',
-    patterns: ['impact.com', 'imp.pxf.io', 'pjatr.com', 'pjtra.com', 'clkde.com'],
+    patterns: ['impact.com', 'imp.pxf.io', 'pjatr.com', 'pjtra.com', 'clkde.com', 'sjv.io', 'ojrq.net'],
     sub_param: 'subId1',
     postback_macro: '{subId1}',
     dashboard_hint: 'Impact dashboard → Offers → edit offer → Tracking Settings → Server Postback → Add for Install event.',
