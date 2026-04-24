@@ -138,6 +138,11 @@ function toOurMacros(url, platform, options = {}) {
       ['{offer_id}',        '{campaign_id}'],
       ['[offer_id]',        '{campaign_id}'],
     ],
+    admitad: [
+      // Admitad deeplink subid params — these are already embedded as query params
+      // when we construct the deeplink URL; no macro replacement needed here.
+      // This entry is a no-op placeholder kept for consistency.
+    ],
   };
 
   const pairs = maps[platform] || [];
@@ -479,7 +484,122 @@ async function fetchSwaarm(cred) {
   });
 }
 
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm };
+async function fetchAdmitad(cred) {
+  // ── Admitad OAuth2 client_credentials token fetch ──────────────────────────
+  // cred.api_key    = client_id
+  // cred.api_secret = client_secret
+  // extra.website_id = Apogeemobi's Admitad publisher website ID (for deeplinks)
+  const clientId     = cred.api_key;
+  const clientSecret = cred.api_secret;
+  if (!clientId || !clientSecret)
+    throw new Error('Admitad requires Client ID (api_key) and Client Secret (api_secret)');
+
+  const base64Auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+
+  let extraCfg = {};
+  try { extraCfg = JSON.parse(cred.extra || '{}'); } catch {}
+  const websiteId = extraCfg.website_id || '';
+
+  // Step 1 — get Bearer token
+  const tokenRes = await fetch('https://api.admitad.com/token/', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${base64Auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&scope=advcampaigns+statistics`,
+  });
+  if (!tokenRes.ok) {
+    const txt = await tokenRes.text().catch(() => '');
+    throw new Error(`Admitad token error ${tokenRes.status}: ${txt.slice(0, 300)}`);
+  }
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData.access_token;
+  if (!accessToken) throw new Error('Admitad: no access_token in response');
+
+  // Step 2 — fetch campaigns (advcampaigns) the publisher is approved for
+  let allOffers = [];
+  let offset    = 0;
+  const limit   = 200;
+  let total     = Infinity;
+
+  while (offset < total) {
+    const campRes = await fetch(
+      `https://api.admitad.com/advcampaigns/?limit=${limit}&offset=${offset}&language=en`,
+      { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } },
+    );
+    if (!campRes.ok) {
+      const txt = await campRes.text().catch(() => '');
+      throw new Error(`Admitad campaigns error ${campRes.status}: ${txt.slice(0, 300)}`);
+    }
+    const campData = await campRes.json();
+    const results  = campData.results || campData.campaigns || [];
+    total          = campData._meta?.count ?? campData.count ?? results.length;
+    allOffers      = allOffers.concat(results);
+    offset        += results.length;
+    if (results.length === 0) break;
+  }
+
+  return allOffers.map(o => {
+    // ── Payout: pick the highest-value action from the actions[] array ──────
+    let payout      = 0;
+    let payout_type = 'cpa';
+    const actions   = Array.isArray(o.actions) ? o.actions : [];
+    for (const act of actions) {
+      const amount = parseFloat(act.payment_size || act.payout || 0);
+      if (amount > payout) {
+        payout      = amount;
+        payout_type = normPayoutType(act.type || 'cpa');
+      }
+    }
+
+    // ── Tracking URL: Admitad deeplink format ────────────────────────────────
+    // If we have a website_id we build the full deeplink URL with our macros.
+    // Otherwise we use the site_url as a plain destination with a note that
+    // the user should configure their Admitad website ID in credentials.
+    let tracking_url = '';
+    if (websiteId && o.id) {
+      // Admitad deeplink: subid is the primary passthrough for our click_id
+      tracking_url = `https://ad.admitad.com/g/${websiteId}/${o.id}/`
+        + `?subid={click_id}&subid1={sub1}&subid2={sub2}&subid3={sub3}`;
+    } else {
+      // Fallback: direct site URL (no postback attribution until website_id set)
+      tracking_url = o.site_url || '';
+    }
+
+    // ── Geo: geotargeting.allow[] is array of ISO-2 codes ───────────────────
+    let countries = '';
+    try {
+      const geo = o.geotargeting || {};
+      if (Array.isArray(geo.allow))         countries = geo.allow.join(',');
+      else if (Array.isArray(geo.allowed))  countries = geo.allowed.join(',');
+    } catch {}
+
+    // ── Status ───────────────────────────────────────────────────────────────
+    const status = (String(o.status || '').toLowerCase() === 'active' ||
+                    o.is_active === true || o.is_active === 1) ? 'active' : 'paused';
+
+    return {
+      external_id:       String(o.id || ''),
+      name:              o.name || 'Unnamed Offer',
+      description:       o.description || o.short_description || '',
+      payout,
+      payout_type,
+      currency:          o.currency || 'USD',
+      status,
+      tracking_url,
+      preview_url:       o.site_url || '',
+      allowed_countries: countries,
+      advertiser_name:   o.company || o.advertiser || 'Admitad',
+      categories:        Array.isArray(o.categories)
+                           ? o.categories.map(c => c.name || c).join(', ')
+                           : '',
+      raw: o,
+    };
+  });
+}
+
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {
