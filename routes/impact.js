@@ -7,7 +7,7 @@ router.use(requireAuth);
 
 const BASE = process.env.TRACKING_DOMAIN || 'https://track.apogeemobi.com';
 
-// SDK Inventory definitions — click ID macro + device ID macro per network
+// ── SDK Inventory definitions ─────────────────────────────────────────────────
 const SDK_INVENTORIES = [
   {
     key: 'unity',
@@ -115,13 +115,119 @@ const SDK_INVENTORIES = [
   },
 ];
 
+// ── Partnership Platform definitions ─────────────────────────────────────────
+// Each entry describes how to inject our click_id and how the platform returns it.
+const PARTNERSHIP_PLATFORMS = [
+  {
+    key: 'impact',
+    name: 'Impact.com',
+    color: '#6366f1',
+    patterns: ['impact.com', 'imp.pxf.io', 'pjatr.com', 'pjtra.com', 'clkde.com'],
+    sub_param: 'subId1',
+    postback_macro: '{subId1}',
+    dashboard_hint: 'Impact dashboard → Offers → edit offer → Tracking Settings → Server Postback → Add for Install event.',
+    dest_hint: 'In Impact dashboard → edit offer → Destination URL, ensure the URL includes subId1={click_id}.',
+  },
+  {
+    key: 'cj',
+    name: 'CJ Affiliate',
+    color: '#003087',
+    patterns: ['anrdoezrs.net', 'dpbolvw.net', 'kqzyfj.com', 'jdoqocy.com', 'qksrv.net', 'emjcd.com', 'tkqlhce.com'],
+    sub_param: 'sid',
+    postback_macro: '%%SID%%',
+    dashboard_hint: 'CJ dashboard → Advertisers → Account → Tracking → Server Postback. Add Install Postback URL and enable SID passthrough.',
+    dest_hint: 'Append ?sid={click_id} to your CJ affiliate link. CJ returns %%SID%% in the postback.',
+  },
+  {
+    key: 'rakuten',
+    name: 'Rakuten Advertising',
+    color: '#bf0000',
+    patterns: ['linksynergy.com', 'rakuten.com', 'rakutenadvertising.com'],
+    sub_param: 'u1',
+    postback_macro: '[U1]',
+    dashboard_hint: 'Rakuten dashboard → Programs → Program Settings → Pixels → Add Server-to-Server Pixel for Install event with U1 passthrough.',
+    dest_hint: 'Append ?u1={click_id} to your Rakuten link. Rakuten returns [U1] in the postback.',
+  },
+  {
+    key: 'awin',
+    name: 'Awin',
+    color: '#00b9a8',
+    patterns: ['awin1.com', 'awin.com'],
+    sub_param: 'clickref',
+    postback_macro: 'CLICKREF',
+    dashboard_hint: 'Awin → Advertisers → Program Settings → Conversion Tracking → Server-to-Server. Add Install Postback URL with CLICKREF substitution.',
+    dest_hint: 'Append ?clickref={click_id} to your Awin link (max 50 chars — our 12-char ID fits fine).',
+  },
+  {
+    key: 'partnerize',
+    name: 'Partnerize',
+    color: '#ff6900',
+    patterns: ['prf.hn', 'partnerize.com'],
+    sub_param: 'pubref',
+    postback_macro: '{PUBREF}',
+    dashboard_hint: 'Partnerize dashboard → Program → Tracking → Server Postback. Add Install Postback URL with {PUBREF} substitution.',
+    dest_hint: 'Append ?pubref={click_id} to your Partnerize link.',
+  },
+  {
+    key: 'admitad',
+    name: 'Admitad',
+    color: '#e63946',
+    patterns: ['admitad.com'],
+    sub_param: 'subid',
+    postback_macro: '{subid}',
+    dashboard_hint: 'Admitad dashboard → Offers → Postback URL. Paste the Install Postback URL with {subid} substitution.',
+    dest_hint: 'Append ?subid={click_id} to your Admitad offer link.',
+  },
+  {
+    key: 'tune',
+    name: 'TUNE / Assembly',
+    color: '#5c6bc0',
+    patterns: ['go2cloud.org', 'go2jump.org', 'tune.com', 'hasoffers.com'],
+    sub_param: 'aff_sub',
+    postback_macro: '{aff_sub}',
+    dashboard_hint: 'TUNE dashboard → Offer → Conversion Pixels / Postback URL. Add Install Postback URL with {aff_sub} substitution.',
+    dest_hint: 'Append ?aff_sub={click_id} to your TUNE offer link.',
+  },
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function detectPlatform(url) {
+  if (!url) return null;
+  const lower = url.toLowerCase();
+  for (const p of PARTNERSHIP_PLATFORMS) {
+    if (p.patterns.some(pat => lower.includes(pat))) return p;
+  }
+  return null;
+}
+
+// Inject sub_param={click_id} into a URL, preserving any # fragment.
+// If the param already exists it is replaced; otherwise appended.
+function injectSubParam(url, paramName) {
+  if (!url) return url;
+  // Separate fragment
+  const hashIdx = url.indexOf('#');
+  const base = hashIdx >= 0 ? url.slice(0, hashIdx) : url;
+  const fragment = hashIdx >= 0 ? url.slice(hashIdx) : '';
+  // Replace existing occurrence
+  const regex = new RegExp(`${paramName}=[^&#]*`);
+  if (regex.test(base)) {
+    return base.replace(regex, `${paramName}={click_id}`) + fragment;
+  }
+  // Append
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}${paramName}={click_id}${fragment}`;
+}
+
 function campaignFilter(user) {
   if (user.role === 'admin' || user.role === 'account_manager') return { clause: '1=1', params: [] };
   if (user.role === 'advertiser') return { clause: 'c.advertiser_id = ?', params: [user.id] };
   return { clause: '1=0', params: [] };
 }
 
-// GET /api/impact/campaigns — list campaigns
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+// GET /api/impact/campaigns
 router.get('/campaigns', (req, res) => {
   const { clause, params } = campaignFilter(req.user);
   const rows = db.prepare(`
@@ -134,17 +240,22 @@ router.get('/campaigns', (req, res) => {
     ORDER BY c.created_at DESC
   `).all(...params);
 
-  const IMPACT_PATTERNS = ['impact.com', 'imp.pxf.io', 'linksynergy', 'pjatr', 'pjtra', 'dpbolvw', 'tkqlhce', 'clkde.com'];
-  const enriched = rows.map(r => ({
-    ...r,
-    is_impact: IMPACT_PATTERNS.some(p => (r.destination_url || '').toLowerCase().includes(p)),
-    cr: r.total_clicks > 0 ? +((r.total_installs / r.total_clicks) * 100).toFixed(2) : 0,
-  }));
+  const enriched = rows.map(r => {
+    const platform = detectPlatform(r.destination_url);
+    return {
+      ...r,
+      platform_key: platform ? platform.key : null,
+      platform_name: platform ? platform.name : null,
+      platform_color: platform ? platform.color : null,
+      is_partnership: !!platform,
+      cr: r.total_clicks > 0 ? +((r.total_installs / r.total_clicks) * 100).toFixed(2) : 0,
+    };
+  });
 
   res.json(enriched);
 });
 
-// GET /api/impact/sdk-links/:id — generate SDK inventory links for a campaign
+// GET /api/impact/sdk-links/:id
 router.get('/sdk-links/:id', (req, res) => {
   const { clause, params } = campaignFilter(req.user);
   const c = db.prepare(
@@ -155,28 +266,26 @@ router.get('/sdk-links/:id', (req, res) => {
   const owner = db.prepare('SELECT postback_token FROM users WHERE id = ?').get(c.user_id);
   const postbackToken = owner?.postback_token || '';
 
-  // Build click URL without URLSearchParams — macros like {clickid} must not be percent-encoded
+  // Build click URL — manual string building preserves macro braces (URLSearchParams would encode them)
   function buildClickUrl(base, campaignId, clickIdMacro, deviceMacro) {
     return `${base}?pid={YOUR_PUB_TOKEN}&af_c_id=${campaignId}&clickid=${clickIdMacro}&advertising_id=${deviceMacro}&af_sub1={sub1}&af_sub2={sub2}`;
   }
 
-  // Postback URL uses clickid= (not click_id=) so the attribution lookup uses publisher_click_id
+  // Postback URL uses clickid= so attribution lookup uses publisher_click_id column
   function buildPostbackUrl(clickIdMacro) {
     return `${BASE}/pb?clickid=${clickIdMacro}&event=install&advertising_id={advertising_id}${postbackToken ? `&security_token=${postbackToken}` : ''}`;
   }
 
   const sdkLinks = SDK_INVENTORIES.map(sdk => {
     const base = `${BASE}/track/click/${c.campaign_token}`;
-
     if (sdk.separate_ios_android) {
       return {
         ...sdk,
-        click_url_ios:    buildClickUrl(base, c.id, sdk.click_id_macro, sdk.device_ios),
+        click_url_ios:     buildClickUrl(base, c.id, sdk.click_id_macro, sdk.device_ios),
         click_url_android: buildClickUrl(base, c.id, sdk.click_id_macro, sdk.device_android),
-        postback_url:     buildPostbackUrl(sdk.click_id_macro),
+        postback_url:      buildPostbackUrl(sdk.click_id_macro),
       };
     }
-
     return {
       ...sdk,
       click_url:    buildClickUrl(base, c.id, sdk.click_id_macro, sdk.device_ios),
@@ -184,44 +293,50 @@ router.get('/sdk-links/:id', (req, res) => {
     };
   });
 
-  // Impact integration config
-  const IMPACT_PATTERNS = ['impact.com', 'imp.pxf.io', 'linksynergy', 'pjatr', 'pjtra', 'dpbolvw'];
-  const isImpactCampaign = IMPACT_PATTERNS.some(p => (c.destination_url || '').toLowerCase().includes(p));
-  const destUrl = c.destination_url || 'YOUR_IMPACT_LINK';
-  // If subId1 already present, replace it; otherwise append
-  let destinationWithMacro;
-  if (destUrl.includes('subId1=')) {
-    destinationWithMacro = destUrl.replace(/subId1=[^&]*/, 'subId1={click_id}');
-  } else {
-    const destSep = destUrl.includes('?') ? '&' : '?';
-    destinationWithMacro = `${destUrl}${destSep}subId1={click_id}`;
-  }
+  // Partnership platform detection and config
+  const platform = detectPlatform(c.destination_url);
+  const destUrl = c.destination_url || '';
+  const subParam = platform ? platform.sub_param : 'subId1';
 
-  const impactConfig = {
-    is_impact_campaign: isImpactCampaign,
+  const destinationWithMacro = destUrl
+    ? injectSubParam(destUrl, subParam)
+    : `YOUR_PARTNERSHIP_LINK?${subParam}={click_id}`;
+
+  // Partnership postbacks use click_id= (our nanoid) — the platform returns it via their sub_param macro
+  const secStr = postbackToken ? `&security_token=${postbackToken}` : '';
+  const macro  = platform ? platform.postback_macro : '{click_id}';
+
+  const partnershipConfig = {
+    platform: platform
+      ? { key: platform.key, name: platform.name, color: platform.color }
+      : null,
+    detected: !!platform,
+    sub_param: subParam,
+    postback_macro: macro,
     destination_url_with_macro: destinationWithMacro,
-    impact_postback_to_us: `${BASE}/pb?click_id={subId1}&event=install${postbackToken ? `&security_token=${postbackToken}` : ''}`,
-    impact_event_postback: `${BASE}/pb?click_id={subId1}&event={event_name}${postbackToken ? `&security_token=${postbackToken}` : ''}`,
-    instructions: [
-      'In your Impact dashboard, edit the offer\'s Destination URL to include ?subId1={click_id}',
-      'In Impact → Offer → Postback URL, add the "Postback to Us" URL above',
-      'Impact will fire the postback when a conversion happens, passing back our click_id in subId1',
-      'Our platform matches the click_id and attributes the conversion',
-    ],
+    postback_to_us:       `${BASE}/pb?click_id=${macro}&event=install${secStr}`,
+    event_postback_to_us: `${BASE}/pb?click_id=${macro}&event={event_name}${secStr}`,
+    dashboard_hint: platform ? platform.dashboard_hint : '',
+    dest_hint:      platform ? platform.dest_hint : '',
   };
 
   res.json({
     campaign: { id: c.id, name: c.name, token: c.campaign_token, destination_url: c.destination_url, status: c.status },
     sdk_links: sdkLinks,
-    impact_config: impactConfig,
+    partnership_config: partnershipConfig,
     postback_token: postbackToken,
     base_url: BASE,
   });
 });
 
-// GET /api/impact/sdk-definitions — return static SDK list (no auth needed for labels)
+// GET /api/impact/sdk-definitions — static SDK list
 router.get('/sdk-definitions', (req, res) => {
   res.json(SDK_INVENTORIES.map(s => ({ key: s.key, name: s.name, color: s.color })));
+});
+
+// GET /api/impact/platform-definitions — static partnership platform list
+router.get('/platform-definitions', (req, res) => {
+  res.json(PARTNERSHIP_PLATFORMS.map(p => ({ key: p.key, name: p.name, color: p.color, sub_param: p.sub_param })));
 });
 
 module.exports = router;
