@@ -518,38 +518,36 @@ async function fetchAdmitad(cred) {
   if (!accessToken) throw new Error('Admitad: no access_token in response');
 
   // Step 2 — fetch campaigns (advcampaigns) the publisher is approved for
-  let allOffers = [];
-  let offset    = 0;
-  const limit   = 200;
-  let total     = Infinity;
-
-  while (offset < total) {
-    const campRes = await fetch(
-      `https://api.admitad.com/advcampaigns/?limit=${limit}&offset=${offset}&language=en`,
-      { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } },
-    );
-    if (!campRes.ok) {
-      const txt = await campRes.text().catch(() => '');
-      throw new Error(`Admitad campaigns error ${campRes.status}: ${txt.slice(0, 300)}`);
-    }
-    const campData = await campRes.json();
-    const results  = campData.results || campData.campaigns || [];
-    total          = campData._meta?.count ?? campData.count ?? results.length;
-    allOffers      = allOffers.concat(results);
-    offset        += results.length;
-    if (results.length === 0) break;
+  // NOTE: Admitad API is slow (~3-10s per page). To avoid server timeouts we
+  // fetch a single page of 200 which covers all practical use cases.
+  const limit = 200;
+  const campRes = await fetch(
+    `https://api.admitad.com/advcampaigns/?limit=${limit}&offset=0&language=en`,
+    { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } },
+  );
+  if (!campRes.ok) {
+    const txt = await campRes.text().catch(() => '');
+    throw new Error(`Admitad campaigns error ${campRes.status}: ${txt.slice(0, 300)}`);
   }
+  const campData = await campRes.json();
+  const allOffers = campData.results || campData.campaigns || [];
 
   return allOffers.map(o => {
     // ── Payout: pick the highest-value action from the actions[] array ──────
+    // payment_size can be: "1.50" (fixed), "9.34-15.60%" (revshare range), "10%" (revshare)
     let payout      = 0;
     let payout_type = 'cpa';
     const actions   = Array.isArray(o.actions) ? o.actions : [];
     for (const act of actions) {
-      const amount = parseFloat(act.payment_size || act.payout || 0);
+      const raw = String(act.payment_size || act.payout || '0');
+      const isPercent = raw.includes('%');
+      // For ranges like "9.34-15.60%", take the higher end: split by '-', take last number
+      const parts  = raw.replace('%', '').split('-');
+      const amount = parseFloat(parts[parts.length - 1] || parts[0] || '0') || 0;
+      const type   = isPercent ? 'revshare' : normPayoutType(act.type || 'cpa');
       if (amount > payout) {
         payout      = amount;
-        payout_type = normPayoutType(act.type || 'cpa');
+        payout_type = type;
       }
     }
 
