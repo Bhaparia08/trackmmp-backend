@@ -1,9 +1,9 @@
 const express = require('express');
 const db = require('../db/init');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireAuth);
+router.use(requireRole('admin', 'account_manager'));
 
 // FIX #1 & #2: cap limit at 500 and validate date params
 function parseUnixDate(str) {

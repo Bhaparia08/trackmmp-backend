@@ -1,9 +1,10 @@
 const express = require('express');
 const db = require('../db/init');
-const { requireAuth } = require('../middleware/auth');
+const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireAuth);
+// Publishers use /api/publisher/stats instead; block them here
+router.use(requireRole('admin', 'advertiser', 'account_manager'));
 
 /* ── Role-aware data scope ───────────────────────────────────────────────────
    admin        → sees ALL data (no user_id filter)
@@ -54,7 +55,16 @@ router.get('/summary', (req, res) => {
   const total_installs = row.installs || 0;
   const cr  = total_clicks > 0 ? ((total_installs / total_clicks) * 100).toFixed(2) : '0.00';
   const ctr = total_impressions > 0 ? ((total_clicks / total_impressions) * 100).toFixed(2) : '0.00';
-  res.json({ ...row, conversion_rate: cr + '%', ctr: ctr + '%' });
+  res.json({
+    impressions: total_impressions,
+    clicks: total_clicks,
+    installs: total_installs,
+    leads: row.leads || 0,
+    conversions: row.conversions || 0,
+    revenue: row.revenue || 0,
+    conversion_rate: cr + '%',
+    ctr: ctr + '%'
+  });
 });
 
 // GET /api/reports/by-day
