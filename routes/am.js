@@ -200,6 +200,173 @@ router.get('/users/:id/integration', requireAM, (req, res) => {
   });
 });
 
+// POST /api/am/advertisers — create advertiser and auto-assign to this AM
+router.post('/advertisers', requireAM, async (req, res, next) => {
+  try {
+    const am = getAMRecord(req.user.id);
+    if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+
+    const { name, email, password, company_name } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'name, email and password are required' });
+
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existing) return res.status(409).json({ error: 'Email already registered' });
+
+    const bcrypt = require('bcrypt');
+    const hash = await bcrypt.hash(password, 12);
+    const postback_token = require('crypto').randomBytes(16).toString('hex');
+
+    const result = db.prepare(
+      `INSERT INTO users (email, password, name, company_name, role, status, account_manager_id, postback_token)
+       VALUES (?, ?, ?, ?, 'advertiser', 'active', ?, ?)`
+    ).run(email, hash, name, company_name || null, am.id, postback_token);
+
+    const user = db.prepare(`
+      SELECT u.id, u.email, u.name, u.company_name, u.role, u.status, u.created_at, u.account_manager_id,
+             am2.name AS account_manager_name, am2.email AS account_manager_email
+      FROM users u LEFT JOIN account_managers am2 ON am2.id = u.account_manager_id
+      WHERE u.id = ?`).get(result.lastInsertRowid);
+    res.status(201).json(user);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/am/advertisers/:id — edit/suspend assigned advertiser
+router.put('/advertisers/:id', requireAM, async (req, res, next) => {
+  try {
+    const am = getAMRecord(req.user.id);
+    if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+
+    const user = db.prepare(
+      "SELECT * FROM users WHERE id = ? AND account_manager_id = ? AND role = 'advertiser'"
+    ).get(req.params.id, am.id);
+    if (!user) return res.status(404).json({ error: 'Advertiser not found or not assigned to you' });
+
+    const { name, company_name, status, password } = req.body;
+
+    if (password) {
+      const bcrypt = require('bcrypt');
+      const hash = await bcrypt.hash(password, 12);
+      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, user.id);
+    }
+
+    const setClauses = []; const setValues = [];
+    if ('name'         in req.body) { setClauses.push('name = ?');         setValues.push(name); }
+    if ('company_name' in req.body) { setClauses.push('company_name = ?'); setValues.push(company_name || null); }
+    if ('status'       in req.body) { setClauses.push('status = ?');       setValues.push(status || 'active'); }
+    if (setClauses.length > 0)
+      db.prepare(`UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`).run(...setValues, user.id);
+
+    const updated = db.prepare(`
+      SELECT u.id, u.email, u.name, u.company_name, u.role, u.status, u.created_at, u.account_manager_id,
+             am2.name AS account_manager_name, am2.email AS account_manager_email
+      FROM users u LEFT JOIN account_managers am2 ON am2.id = u.account_manager_id
+      WHERE u.id = ?`).get(user.id);
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// POST /api/am/publishers — create publisher user + entity, auto-assign to this AM
+router.post('/publishers', requireAM, async (req, res, next) => {
+  try {
+    const am = getAMRecord(req.user.id);
+    if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+
+    const { name, email, password, company_name, notes } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ error: 'name, email and password are required' });
+
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existing) return res.status(409).json({ error: 'Email already registered' });
+
+    const bcrypt  = require('bcrypt');
+    const crypto  = require('crypto');
+    const hash    = await bcrypt.hash(password, 12);
+    const postback_token = crypto.randomBytes(16).toString('hex');
+    const pub_token      = crypto.randomBytes(5).toString('hex');
+
+    const userRes = db.prepare(
+      `INSERT INTO users (email, password, name, company_name, role, status, account_manager_id, postback_token)
+       VALUES (?, ?, ?, ?, 'publisher', 'active', ?, ?)`
+    ).run(email, hash, name, company_name || null, am.id, postback_token);
+
+    const nextSeq = (db.prepare('SELECT MAX(seq_num) as m FROM publishers').get().m || 0) + 1;
+    db.prepare(
+      `INSERT INTO publishers (user_id, publisher_user_id, name, email, pub_token, status, notes, seq_num)
+       VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`
+    ).run(req.user.id, userRes.lastInsertRowid, name, email, pub_token, notes || '', nextSeq);
+
+    const user = db.prepare('SELECT id, email, name, company_name, role, status, created_at FROM users WHERE id = ?').get(userRes.lastInsertRowid);
+    res.status(201).json(user);
+  } catch (err) { next(err); }
+});
+
+// GET /api/am/publisher-manager — publisher signups + campaign access requests for AM's accounts
+router.get('/publisher-manager', requireAM, (req, res) => {
+  const am = getAMRecord(req.user.id);
+  if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+
+  const publishers = db.prepare(`
+    SELECT u.id, u.seq_num, u.email, u.name, u.status, u.created_at, p.pub_token
+    FROM users u
+    LEFT JOIN publishers p ON p.publisher_user_id = u.id
+    WHERE u.account_manager_id = ? AND u.role = 'publisher'
+    ORDER BY u.created_at DESC
+  `).all(am.id);
+
+  const advIds = db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+  let camReqs = [];
+  if (advIds.length > 0) {
+    const ph = advIds.map(() => '?').join(',');
+    camReqs = db.prepare(`
+      SELECT ca.id, ca.status, ca.created_at,
+             u.name AS publisher_name, p.pub_token,
+             c.name AS campaign_name, c.id AS campaign_id
+      FROM campaign_access_requests ca
+      JOIN publishers p ON p.id = ca.publisher_id
+      JOIN users u ON u.id = p.publisher_user_id
+      JOIN campaigns c ON c.id = ca.campaign_id
+      WHERE c.advertiser_id IN (${ph})
+      ORDER BY ca.created_at DESC
+    `).all(...advIds);
+  }
+
+  res.json({ publishers, camReqs });
+});
+
+// GET /api/am/clicks — paginated clicks scoped to AM's advertisers' campaigns
+router.get('/clicks', requireAM, (req, res) => {
+  const am = getAMRecord(req.user.id);
+  if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+
+  const advIds = db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+  if (advIds.length === 0) return res.json({ data: [], total: 0, page: 1, limit: 50 });
+
+  const { from, to, campaign_id, publisher_id, status, page = 1, limit = 50 } = req.query;
+  const safeLimit = Math.min(Math.max(1, parseInt(limit) || 50), 500);
+  const offset    = (Math.max(1, parseInt(page) || 1) - 1) * safeLimit;
+  const ph        = advIds.map(() => '?').join(',');
+  const conditions = [`cl.user_id IN (${ph})`];
+  const values     = [...advIds];
+
+  if (from)         { conditions.push("date(cl.created_at,'unixepoch') >= ?"); values.push(from); }
+  if (to)           { conditions.push("date(cl.created_at,'unixepoch') <= ?"); values.push(to); }
+  if (campaign_id)  { conditions.push('cl.campaign_id = ?');  values.push(campaign_id); }
+  if (publisher_id) { conditions.push('cl.publisher_id = ?'); values.push(publisher_id); }
+  if (status)       { conditions.push('cl.status = ?');       values.push(status); }
+
+  const where = conditions.join(' AND ');
+  const total = db.prepare(`SELECT COUNT(*) as n FROM clicks cl WHERE ${where}`).get(...values).n;
+  const data  = db.prepare(`
+    SELECT cl.id, cl.click_id, cl.status, cl.country, cl.device_type, cl.os, cl.ip, cl.created_at,
+           c.name AS campaign_name, p.name AS publisher_name
+    FROM clicks cl
+    LEFT JOIN campaigns c ON c.id = cl.campaign_id
+    LEFT JOIN publishers p ON p.id = cl.publisher_id
+    WHERE ${where} ORDER BY cl.created_at DESC LIMIT ? OFFSET ?
+  `).all(...values, safeLimit, offset);
+
+  res.json({ data, total, page: parseInt(page), limit: safeLimit });
+});
+
 // PUT /api/am/publishers/:id/postback — update global postback URL for an assigned publisher
 router.put('/publishers/:id/postback', requireAM, (req, res) => {
   const am = getAMRecord(req.user.id);

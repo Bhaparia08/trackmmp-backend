@@ -1,9 +1,9 @@
 const express = require('express');
 const db = require('../db/init');
-const { requireAuth } = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireAuth);
+router.use(requireAdmin);
 
 // GET /api/automation
 router.get('/', (req, res) => {
