@@ -8,10 +8,22 @@ const nanoid20hex = customAlphabet('0123456789abcdef', 20);
 const router = express.Router();
 router.use(requireAuth);
 
+// Helper: advertiser IDs assigned to an account manager
+function getAMAdvertiserIds(userId) {
+  const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(userId);
+  if (!am) return [];
+  return db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+}
+
 // Helper: build campaign WHERE clause based on role
 function campaignFilter(user) {
-  if (user.role === 'admin') return { clause: '1=1', params: [] }; // admin sees all campaigns
-  if (user.role === 'account_manager') return { clause: '1=1', params: [] }; // AM sees all campaigns
+  if (user.role === 'admin') return { clause: '1=1', params: [] };
+  if (user.role === 'account_manager') {
+    const advIds = getAMAdvertiserIds(user.id);
+    if (advIds.length === 0) return { clause: '1=0', params: [] };
+    const ph = advIds.map(() => '?').join(',');
+    return { clause: `c.advertiser_id IN (${ph})`, params: advIds };
+  }
   if (user.role === 'advertiser') return { clause: 'c.advertiser_id = ?', params: [user.id] };
   return { clause: '1=0', params: [] }; // publishers use /api/publisher routes
 }
@@ -55,7 +67,14 @@ function upsertApprovedPublishers(campaignId, publisherIds, userId) {
 
 router.post('/', (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    if (req.user.role === 'account_manager') {
+      const advIds = getAMAdvertiserIds(req.user.id);
+      if (!advIds.includes(Number(req.body.advertiser_id))) {
+        return res.status(403).json({ error: 'Advertiser not assigned to you' });
+      }
+    } else if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin or Account Manager only' });
+    }
 
     const { name, advertiser_name, advertiser_id, app_id, payout = 0, payout_type = 'cpi',
             publisher_payout = 0, publisher_payout_type = 'cpi',
@@ -143,9 +162,17 @@ router.get('/:id', (req, res) => {
 
 router.put('/:id', (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    if (req.user.role !== 'admin' && req.user.role !== 'account_manager') {
+      return res.status(403).json({ error: 'Admin or Account Manager only' });
+    }
     const c = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
     if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    if (req.user.role === 'account_manager') {
+      const advIds = getAMAdvertiserIds(req.user.id);
+      if (!advIds.includes(c.advertiser_id)) {
+        return res.status(403).json({ error: 'Campaign not assigned to your advertisers' });
+      }
+    }
 
     const { name, advertiser_name, advertiser_id, payout, payout_type,
             publisher_payout, publisher_payout_type,
@@ -199,9 +226,17 @@ router.put('/:id', (req, res, next) => {
 
 router.delete('/:id', (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    if (req.user.role !== 'admin' && req.user.role !== 'account_manager') {
+      return res.status(403).json({ error: 'Admin or Account Manager only' });
+    }
     const c = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
     if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    if (req.user.role === 'account_manager') {
+      const advIds = getAMAdvertiserIds(req.user.id);
+      if (!advIds.includes(c.advertiser_id)) {
+        return res.status(403).json({ error: 'Campaign not assigned to your advertisers' });
+      }
+    }
     db.prepare("UPDATE campaigns SET status='archived', updated_at=unixepoch() WHERE id=?").run(c.id);
     res.json({ success: true });
   } catch (err) { next(err); }

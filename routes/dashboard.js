@@ -10,14 +10,36 @@ router.get('/', (req, res) => {
   const oneDayAgo  = nowSec - 86400;
   const twoDaysAgo = nowSec - 172800;
 
-  // admin sees all data; other roles see only their own
+  // admin sees all data; AM sees assigned advertisers; others see own
   const isAdmin = req.user.role === 'admin';
-  const userFilter = isAdmin ? '' : ' AND cl.user_id = ?';
-  const userParam  = isAdmin ? [] : [req.user.id];
-  const pbFilter   = isAdmin ? '' : ' AND pb.user_id = ?';
-  const pbParam    = isAdmin ? [] : [req.user.id];
-  const dsFilter   = isAdmin ? '' : ' AND user_id = ?';
-  const dsParam    = isAdmin ? [] : [req.user.id];
+  const isAM    = req.user.role === 'account_manager';
+
+  let userFilter, userParam, pbFilter, pbParam, dsFilter, dsParam;
+
+  if (isAdmin) {
+    userFilter = ''; userParam = [];
+    pbFilter   = ''; pbParam   = [];
+    dsFilter   = ''; dsParam   = [];
+  } else if (isAM) {
+    const amRec  = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(req.user.id);
+    const advIds = amRec
+      ? db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(amRec.id).map(u => u.id)
+      : [];
+    if (advIds.length > 0) {
+      const ph = advIds.map(() => '?').join(',');
+      userFilter = ` AND cl.user_id IN (${ph})`; userParam = advIds;
+      pbFilter   = ` AND pb.user_id IN (${ph})`; pbParam   = advIds;
+      dsFilter   = ` AND user_id IN (${ph})`;    dsParam   = advIds;
+    } else {
+      userFilter = ' AND 1=0'; userParam = [];
+      pbFilter   = ' AND 1=0'; pbParam   = [];
+      dsFilter   = ' AND 1=0'; dsParam   = [];
+    }
+  } else {
+    userFilter = ' AND cl.user_id = ?'; userParam = [req.user.id];
+    pbFilter   = ' AND pb.user_id = ?'; pbParam   = [req.user.id];
+    dsFilter   = ' AND user_id = ?';    dsParam   = [req.user.id];
+  }
 
   // Last 24h KPIs
   const current = db.prepare(`SELECT
@@ -37,8 +59,8 @@ router.get('/', (req, res) => {
     WHERE cl.created_at >= ? AND cl.created_at < ?${userFilter}`)
     .get(twoDaysAgo, oneDayAgo, ...userParam);
 
-  const leads24h = db.prepare(`SELECT COUNT(*) AS leads FROM postbacks
-    WHERE status='attributed' AND event_type='lead' AND created_at >= ?${pbFilter}`)
+  const leads24h = db.prepare(`SELECT COUNT(*) AS leads FROM postbacks pb
+    WHERE pb.status='attributed' AND pb.event_type='lead' AND pb.created_at >= ?${pbFilter}`)
     .get(oneDayAgo, ...pbParam);
 
   // Impressions last 24h
@@ -57,7 +79,6 @@ router.get('/', (req, res) => {
     WHERE 1=1${pbFilter} ORDER BY pb.created_at DESC LIMIT 20`).all(...pbParam);
 
   // Top 5 campaigns (by clicks last 7 days)
-  const campFilter = isAdmin ? '' : ' AND ds.user_id = ?';
   const topCampaigns = db.prepare(`
     SELECT c.id, c.name, c.status,
       COALESCE(SUM(ds.clicks),0) AS clicks,
@@ -66,12 +87,11 @@ router.get('/', (req, res) => {
       CASE WHEN SUM(ds.clicks)>0 THEN ROUND(CAST(SUM(ds.installs) AS REAL)/SUM(ds.clicks)*100,1) ELSE 0 END AS cr
     FROM campaigns c
     LEFT JOIN daily_stats ds ON ds.campaign_id = c.id AND ds.date >= date('now','-6 days')
-    WHERE c.status != 'archived'${campFilter}
+    WHERE c.status != 'archived'${dsFilter.replace(/user_id/g, 'ds.user_id')}
     GROUP BY c.id ORDER BY clicks DESC LIMIT 5
-  `).all(...(isAdmin ? [] : [req.user.id]));
+  `).all(...dsParam);
 
   // Top 5 publishers (by clicks last 7 days)
-  const pubFilterDs = isAdmin ? '' : ' AND ds.user_id = ?';
   const topPublishers = db.prepare(`
     SELECT p.id, p.name, p.pub_token,
       COALESCE(SUM(ds.clicks),0) AS clicks,
@@ -79,9 +99,9 @@ router.get('/', (req, res) => {
       ROUND(COALESCE(SUM(ds.revenue),0),2) AS revenue
     FROM publishers p
     LEFT JOIN daily_stats ds ON ds.publisher_id = p.id AND ds.date >= date('now','-6 days')
-    WHERE p.status != 'deleted'${pubFilterDs}
+    WHERE p.status != 'deleted'${dsFilter.replace(/user_id/g, 'ds.user_id')}
     GROUP BY p.id ORDER BY clicks DESC LIMIT 5
-  `).all(...(isAdmin ? [] : [req.user.id]));
+  `).all(...dsParam);
 
   // Pending publisher signup approvals count
   const pendingPublishers = isAdmin
@@ -92,8 +112,8 @@ router.get('/', (req, res) => {
   const pendingAccess = db.prepare(`
     SELECT COUNT(*) AS n FROM campaign_access_requests r
     JOIN campaigns c ON c.id = r.campaign_id
-    WHERE r.status='pending'${isAdmin ? '' : ' AND c.user_id=?'}
-  `).get(...(isAdmin ? [] : [req.user.id])).n;
+    WHERE r.status='pending'${isAdmin ? '' : dsFilter.replace(/user_id/g, 'c.user_id')}
+  `).get(...(isAdmin ? [] : dsParam)).n;
 
   // Campaigns nearing their daily cap (>=80% used today)
   const capsNearing = isAdmin ? db.prepare(`

@@ -6,18 +6,31 @@ const router = express.Router();
 // Publishers use /api/publisher/stats instead; block them here
 router.use(requireRole('admin', 'advertiser', 'account_manager'));
 
+// Helper: advertiser IDs assigned to an account manager
+function getAMAdvertiserIds(userId) {
+  const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(userId);
+  if (!am) return [];
+  return db.prepare("SELECT id FROM users WHERE account_manager_id = ? AND role = 'advertiser'").all(am.id).map(u => u.id);
+}
+
 /* ── Role-aware data scope ───────────────────────────────────────────────────
-   admin        → sees ALL data (no user_id filter)
+   admin        → sees ALL data
    advertiser   → sees only their own user_id
-   account_mgr  → their /api/am/* routes handle scoping; here fallback to own
+   account_mgr  → sees data for all their assigned advertisers' user_ids
 ─────────────────────────────────────────────────────────────────────────────*/
 function userScope(user, alias = '') {
   const col = alias ? `${alias}.user_id` : 'user_id';
   if (user.role === 'admin') return { clause: '1=1', params: [] };
+  if (user.role === 'account_manager') {
+    const advIds = getAMAdvertiserIds(user.id);
+    if (advIds.length === 0) return { clause: '1=0', params: [] };
+    const ph = advIds.map(() => '?').join(',');
+    return { clause: `${col} IN (${ph})`, params: advIds };
+  }
   return { clause: `${col} = ?`, params: [user.id] };
 }
 
-// Admin-only: filter by advertiser via campaign ownership (works for both self-created and admin-created campaigns)
+// Admin/AM: filter by a specific advertiser
 function advertiserFilter(advertiser_id, alias = '') {
   if (!advertiser_id) return null;
   const col = alias ? `${alias}.campaign_id` : 'campaign_id';
@@ -40,7 +53,7 @@ router.get('/summary', (req, res) => {
   conditions.push(scope.clause); values.push(...scope.params);
   if (campaign_id)  { conditions.push('campaign_id = ?');  values.push(campaign_id); }
   if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
-  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id) : null;
+  const af = advertiser_id && (req.user.role === 'admin' || req.user.role === 'account_manager') ? advertiserFilter(advertiser_id) : null;
   if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const where = conditions.join(' AND ');
@@ -75,7 +88,7 @@ router.get('/by-day', (req, res) => {
   conditions.push(scope.clause); values.push(...scope.params);
   if (campaign_id)  { conditions.push('campaign_id = ?');  values.push(campaign_id); }
   if (publisher_id) { conditions.push('publisher_id = ?'); values.push(publisher_id); }
-  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id) : null;
+  const af = advertiser_id && (req.user.role === 'admin' || req.user.role === 'account_manager') ? advertiserFilter(advertiser_id) : null;
   if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
@@ -168,7 +181,7 @@ router.get('/by-event', (req, res) => {
   if (from) { conditions.push("date(created_at,'unixepoch') >= ?"); values.push(from); }
   if (to)   { conditions.push("date(created_at,'unixepoch') <= ?"); values.push(to); }
   if (campaign_id) { conditions.push('campaign_id = ?'); values.push(campaign_id); }
-  const af = advertiser_id && req.user.role === 'admin' ? advertiserFilter(advertiser_id) : null;
+  const af = advertiser_id && (req.user.role === 'admin' || req.user.role === 'account_manager') ? advertiserFilter(advertiser_id) : null;
   if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT event_type, event_name, COUNT(*) AS count,
