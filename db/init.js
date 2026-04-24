@@ -271,26 +271,27 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
-// ── One-time admin password reset (migration: reset_admin_v1) ────────────────
+// ── One-time admin password reset (migration: reset_admin_v2) ────────────────
 {
   db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
-  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'reset_admin_v1'").get();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'reset_admin_v2'").get();
   if (!done) {
     try {
       const bcrypt = require('bcrypt');
       const hash = bcrypt.hashSync('admin@test.com', 12);
-      const existing = db.prepare("SELECT id FROM users WHERE email = 'admin@test.com'").get();
-      if (existing) {
-        db.prepare("UPDATE users SET password = ? WHERE email = 'admin@test.com'").run(hash);
-        console.log('[migration] reset_admin_v1: password updated for admin@test.com');
+      const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
+      if (existingAdmin) {
+        // Reset email + password for whatever admin account exists on this server
+        db.prepare("UPDATE users SET email = 'admin@test.com', password = ? WHERE id = ?").run(hash, existingAdmin.id);
+        console.log('[migration] reset_admin_v2: admin account updated → admin@test.com');
       } else {
-        const { nanoid } = require('nanoid');
-        db.prepare("INSERT INTO users (email, password, name, role, status, postback_token) VALUES (?, ?, 'Admin', 'admin', 'active', ?)").run('admin@test.com', hash, nanoid(20));
-        console.log('[migration] reset_admin_v1: admin@test.com created');
+        // No admin exists at all — create one
+        db.prepare("INSERT INTO users (email, password, name, role, status, postback_token) VALUES (?, ?, 'Admin', 'admin', 'active', ?)").run('admin@test.com', hash, nanoid20hex());
+        console.log('[migration] reset_admin_v2: admin@test.com created');
       }
-      db.prepare("INSERT INTO migrations (name) VALUES ('reset_admin_v1')").run();
+      db.prepare("INSERT INTO migrations (name) VALUES ('reset_admin_v2')").run();
     } catch (e) {
-      console.error('[migration] reset_admin_v1 failed:', e.message);
+      console.error('[migration] reset_admin_v2 failed:', e.message);
     }
   }
 }
