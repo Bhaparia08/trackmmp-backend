@@ -36,8 +36,10 @@ function campaignFilter(user) {
 
 router.get('/', (req, res) => {
   const { clause, params } = campaignFilter(req.user);
-  const { include_archived } = req.query;
+  const { include_archived, advertiser_id } = req.query;
   const archivedClause = include_archived === '1' ? '' : " AND c.status != 'archived'";
+  const advClause = advertiser_id ? ' AND c.advertiser_id = ?' : '';
+  const advParams = advertiser_id ? [Number(advertiser_id)] : [];
   const rows = db.prepare(`
     SELECT c.*,
       COALESCE((SELECT COUNT(*) FROM clicks WHERE campaign_id = c.id), 0) AS total_clicks,
@@ -48,8 +50,8 @@ router.get('/', (req, res) => {
       COALESCE((SELECT SUM(installs) FROM daily_stats WHERE campaign_id=c.id AND date=date('now','utc')),0) AS cap_used_today
     FROM campaigns c
     LEFT JOIN users u ON u.id = c.advertiser_id
-    WHERE ${clause}${archivedClause} ORDER BY c.created_at DESC
-  `).all(...params);
+    WHERE ${clause}${archivedClause}${advClause} ORDER BY c.created_at DESC
+  `).all(...params, ...advParams);
   // compute EPC and CR for each row
   const enriched = rows.map(r => ({
     ...r,
