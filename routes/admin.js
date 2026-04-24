@@ -244,8 +244,17 @@ router.put('/users/:id', requireAdmin, async (req, res, next) => {
       const hash = await bcrypt.hash(password, SALT_ROUNDS);
       db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, req.params.id);
     }
-    db.prepare('UPDATE users SET name = ?, company_name = ?, status = ?, account_manager_id = ? WHERE id = ?')
-      .run(name, company_name || null, status || 'active', account_manager_id || null, req.params.id);
+    // Build dynamic UPDATE — only touch fields that were actually sent in the request body
+    // This prevents suspend/activate (which only sends `status`) from wiping name/company/AM
+    const setClauses = [];
+    const setValues  = [];
+    if ('name'               in req.body) { setClauses.push('name = ?');               setValues.push(name); }
+    if ('company_name'       in req.body) { setClauses.push('company_name = ?');       setValues.push(company_name || null); }
+    if ('status'             in req.body) { setClauses.push('status = ?');             setValues.push(status || 'active'); }
+    if ('account_manager_id' in req.body) { setClauses.push('account_manager_id = ?'); setValues.push(account_manager_id || null); }
+    if (setClauses.length > 0) {
+      db.prepare(`UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`).run(...setValues, req.params.id);
+    }
 
     const updated = db.prepare(`
       SELECT u.id, u.email, u.name, u.company_name, u.role, u.status, u.created_at,
