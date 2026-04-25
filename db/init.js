@@ -315,6 +315,57 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
+// ── Migration: fix_campaign_click_id_params ──────────────────────────────────
+// Scans all imported campaigns (source_credential_id IS NOT NULL) whose
+// destination_url does NOT contain {click_id}, and injects the correct
+// platform-specific click_id parameter based on URL pattern detection.
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'fix_campaign_click_id_params'").get();
+  if (!done) {
+    try {
+      // Detect platform from URL domain/path patterns → correct click_id param name
+      function detectClickIdParam(url) {
+        if (!url) return null;
+        const u = url.toLowerCase();
+        if (u.includes('ad.admitad.com') || u.includes('admitad'))           return 'subid';
+        if (u.includes('.eflow.team') || u.includes('everflow'))              return 'transaction_id';
+        if (u.includes('hasoffers.com') || u.includes('.go2cloud.org') ||
+            u.includes('.go2jump.org')  || u.includes('tune.com'))            return 'transaction_id';
+        if (u.includes('impact.com') || u.includes('impactradius') ||
+            u.includes('.sjv.io')    || u.includes('.pxf.io') ||
+            u.includes('.7eer.net'))                                           return 'irclickid';
+        if (u.includes('trckswrm.com') || u.includes('swaarm'))              return 'sub1';
+        if (u.includes('cityads.com') || u.includes('cityad'))               return 'click_id';
+        if (u.includes('appsflyer.com') || u.includes('onelink'))            return 'clickid';
+        if (u.includes('adjust.com') || u.includes('adj.st'))                return 'reftag';
+        // Generic fallback for any imported campaign
+        return 'click_id';
+      }
+
+      const campaigns = db.prepare(
+        "SELECT id, name, destination_url FROM campaigns WHERE source_credential_id IS NOT NULL AND destination_url IS NOT NULL AND destination_url != '' AND destination_url NOT LIKE '%{click_id}%'"
+      ).all();
+
+      let fixed = 0;
+      for (const c of campaigns) {
+        const param = detectClickIdParam(c.destination_url);
+        if (!param) continue;
+        const sep    = c.destination_url.includes('?') ? '&' : '?';
+        const newUrl = c.destination_url + sep + param + '={click_id}';
+        db.prepare("UPDATE campaigns SET destination_url = ?, updated_at = unixepoch() WHERE id = ?")
+          .run(newUrl, c.id);
+        fixed++;
+        console.log(`[migration] fix_click_id: campaign #${c.id} "${c.name}" → injected ${param}={click_id}`);
+      }
+      console.log(`[migration] fix_campaign_click_id_params: fixed ${fixed} / ${campaigns.length} campaigns`);
+      db.prepare("INSERT INTO migrations (name) VALUES ('fix_campaign_click_id_params')").run();
+    } catch (e) {
+      console.error('[migration] fix_campaign_click_id_params failed:', e.message);
+    }
+  }
+}
+
 // ── Auto-seed admin account ───────────────────────────────────────────────────
 // If SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set AND no admin
 // exists yet, create the admin account automatically on first start.
