@@ -151,6 +151,25 @@ function toOurMacros(url, platform, options = {}) {
     // Case-insensitive replace for bracket-style macros; exact for curly-brace
     result = result.split(from).join(to);
   }
+
+  // If {click_id} is still not in the URL after macro conversion, auto-inject it
+  // using the canonical click_id param name for this platform.
+  if (result && !result.includes('{click_id}')) {
+    const clickIdParams = {
+      impact:    'irclickid={click_id}',
+      everflow:  'transaction_id={click_id}',
+      tune:      'transaction_id={click_id}',
+      cityads:   'click_id={click_id}',
+      appsflyer: 'clickid={click_id}',
+      swaarm:    'sub1={click_id}',
+      admitad:   'subid={click_id}',
+    };
+    const param = clickIdParams[platform];
+    if (param) {
+      result = result + (result.includes('?') ? '&' : '?') + param;
+    }
+  }
+
   return result;
 }
 
@@ -561,8 +580,13 @@ async function fetchAdmitad(cred) {
       tracking_url = `https://ad.admitad.com/g/${websiteId}/${o.id}/`
         + `?subid={click_id}&subid1={sub1}&subid2={sub2}&subid3={sub3}`;
     } else {
-      // Fallback: direct site URL (no postback attribution until website_id set)
-      tracking_url = o.site_url || '';
+      // Fallback: direct site URL — still inject subid={click_id} so attribution works
+      const fallbackUrl = o.site_url || '';
+      if (fallbackUrl && !fallbackUrl.includes('{click_id}')) {
+        tracking_url = fallbackUrl + (fallbackUrl.includes('?') ? '&' : '?') + 'subid={click_id}';
+      } else {
+        tracking_url = fallbackUrl;
+      }
     }
 
     // ── Geo: geotargeting.allow[] is array of ISO-2 codes ───────────────────
