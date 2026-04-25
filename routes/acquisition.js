@@ -36,13 +36,15 @@ function normalise(raw) {
     event: raw.goal_value ? (raw.event || 'custom') : (raw.event || 'install'),
     // Primary click ID — our platform's click_id returned by any MMP:
     //   click_id       — generic / standard
-    //   transaction_id — Trackier / generic
-    click_id: raw.click_id || raw.transaction_id || null,
+    //   transaction_id — Trackier / HasOffers / generic
+    //   irclickid      — Impact Radius (we inject our click_id into irclickid in the dest URL)
+    //   subid          — Admitad (we inject our click_id into subid in the dest URL)
+    //   aff_click_id   — HasOffers/TUNE alternative
+    click_id: raw.click_id || raw.transaction_id || raw.irclickid || raw.subid || raw.aff_click_id || null,
     transaction_id: raw.transaction_id || raw.click_id || null,
     // Publisher's own click ID for secondary attribution:
     //   clickid       — standard / AppsFlyer / Adjust
-    //   irclickid     — Impact Radius
-    //   aff_click_id  — HasOffers / TUNE / Affiliate
+    //   irclickid     — Impact Radius (secondary fallback if not used as primary)
     //   aff_sub       — HasOffers alternative click ID passthrough
     //   u1            — Rakuten LinkShare
     clickid: raw.clickid || raw.irclickid || raw.aff_click_id || raw.aff_sub || raw.u1 || null,

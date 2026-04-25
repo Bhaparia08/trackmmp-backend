@@ -103,6 +103,31 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       }
     }
 
+    // ── Cap enforcement ───────────────────────────────────────────────────────
+    // Check daily / monthly / total click caps before recording the click.
+    // If a cap is hit, redirect to cap_redirect_url (if set) or return a soft block.
+    if (campaign.cap_daily > 0 || campaign.cap_monthly > 0 || campaign.cap_total > 0) {
+      const todayClicks = campaign.cap_daily > 0
+        ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND date(created_at,'unixepoch') = date('now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
+        : 0;
+      const monthClicks = campaign.cap_monthly > 0
+        ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND strftime('%Y-%m', created_at,'unixepoch') = strftime('%Y-%m','now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
+        : 0;
+      const totalClicks = campaign.cap_total > 0
+        ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
+        : 0;
+
+      const capHit = (campaign.cap_daily   > 0 && todayClicks  >= campaign.cap_daily)
+                  || (campaign.cap_monthly  > 0 && monthClicks  >= campaign.cap_monthly)
+                  || (campaign.cap_total    > 0 && totalClicks  >= campaign.cap_total);
+
+      if (capHit) {
+        const capRedirect = campaign.cap_redirect_url;
+        if (capRedirect && /^https?:\/\//i.test(capRedirect)) return res.redirect(302, capRedirect);
+        return res.status(200).send('CAP_REACHED');
+      }
+    }
+
     const click_id = nanoid16();
 
     db.prepare(`INSERT INTO clicks

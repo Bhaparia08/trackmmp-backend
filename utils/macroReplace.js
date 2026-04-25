@@ -24,6 +24,7 @@ function macroReplace(url, data) {
     '{idfv}':               data.idfv || '',
     '{android_id}':         data.android_id || '',
     '{gps_adid}':           data.gps_adid || data.advertising_id || '',
+    '{gaid}':               data.advertising_id || data.gps_adid || '',   // Android GAID alias
     '{adid}':               data.adid || '',
     '{google_app_set_id}':  data.google_app_set_id || '',
     '{att_status}':         String(data.att_status || ''),
