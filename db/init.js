@@ -366,6 +366,85 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
+// ── Migration: fix_campaign_visibility_and_urls ──────────────────────────────
+// Fixes ALL campaigns (imported or manually created) that have:
+//   1. visibility = 'private'  → set to 'open'
+//   2. destination_url missing {click_id} → inject platform-specific param
+// Also logs a full audit report of every campaign's status.
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'fix_campaign_visibility_and_urls_v2'").get();
+  if (!done) {
+    try {
+      function detectClickIdParam(url) {
+        if (!url) return null;
+        const u = url.toLowerCase();
+        if (u.includes('ad.admitad.com') || u.includes('admitad'))           return 'subid';
+        if (u.includes('.eflow.team')    || u.includes('everflow'))           return 'transaction_id';
+        if (u.includes('hasoffers.com') || u.includes('.go2cloud.org') ||
+            u.includes('.go2jump.org')  || u.includes('tune.com'))            return 'transaction_id';
+        if (u.includes('impact.com')    || u.includes('impactradius') ||
+            u.includes('.sjv.io')       || u.includes('.pxf.io') ||
+            u.includes('.7eer.net'))                                           return 'irclickid';
+        if (u.includes('trckswrm.com') || u.includes('swaarm'))              return 'sub1';
+        if (u.includes('cityads.com')  || u.includes('cityad'))              return 'click_id';
+        if (u.includes('appsflyer.com')|| u.includes('onelink'))             return 'clickid';
+        if (u.includes('adjust.com')   || u.includes('adj.st'))              return 'reftag';
+        return 'click_id';
+      }
+
+      const allCampaigns = db.prepare(
+        "SELECT id, name, campaign_token, status, visibility, destination_url, source_credential_id FROM campaigns ORDER BY id"
+      ).all();
+
+      let fixedVisibility = 0;
+      let fixedClickId    = 0;
+      let alreadyOk       = 0;
+
+      console.log(`\n[campaign-audit] Checking ${allCampaigns.length} campaigns...\n`);
+
+      for (const c of allCampaigns) {
+        const issues = [];
+        let newVisibility  = c.visibility;
+        let newDestUrl     = c.destination_url;
+
+        // Fix 1: private visibility → open
+        if (c.visibility === 'private') {
+          newVisibility = 'open';
+          issues.push('visibility: private → open');
+          fixedVisibility++;
+        }
+
+        // Fix 2: destination_url missing {click_id}
+        if (c.destination_url && !c.destination_url.includes('{click_id}')) {
+          const param = detectClickIdParam(c.destination_url);
+          if (param) {
+            const sep  = c.destination_url.includes('?') ? '&' : '?';
+            newDestUrl = c.destination_url + sep + param + '={click_id}';
+            issues.push(`click_id missing → injected ${param}={click_id}`);
+            fixedClickId++;
+          }
+        }
+
+        if (issues.length > 0) {
+          db.prepare("UPDATE campaigns SET visibility = ?, destination_url = ?, updated_at = unixepoch() WHERE id = ?")
+            .run(newVisibility, newDestUrl, c.id);
+          console.log(`[campaign-audit] FIXED #${c.id} "${c.name}" (${c.campaign_token}): ${issues.join(' | ')}`);
+        } else {
+          alreadyOk++;
+          const dest = c.destination_url ? c.destination_url.substring(0, 80) + (c.destination_url.length > 80 ? '…' : '') : '(none)';
+          console.log(`[campaign-audit] OK    #${c.id} "${c.name}" | vis=${c.visibility} | dest=${dest}`);
+        }
+      }
+
+      console.log(`\n[campaign-audit] SUMMARY: ${allCampaigns.length} total | ${alreadyOk} ok | ${fixedVisibility} visibility fixed | ${fixedClickId} click_id injected\n`);
+      db.prepare("INSERT INTO migrations (name) VALUES ('fix_campaign_visibility_and_urls_v2')").run();
+    } catch (e) {
+      console.error('[migration] fix_campaign_visibility_and_urls_v2 failed:', e.message);
+    }
+  }
+}
+
 // ── Auto-seed admin account ───────────────────────────────────────────────────
 // If SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set AND no admin
 // exists yet, create the admin account automatically on first start.
