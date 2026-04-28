@@ -214,8 +214,8 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       // Campaign identifiers
       '{campaign_id}':    String(campaign.id),
       '{campaign_token}': campaign.campaign_token,
-      '{c}':              campaign.name || '',
-      '{campaign_name}':  campaign.name || '',
+      '{c}':              q.c || campaign.name || '',   // c= query param first (AF standard), fallback to DB name
+      '{campaign_name}':  q.c || campaign.name || '',
       '{af_c_id}':        q.af_c_id || String(campaign.id),
       '{creative_id}':    q.creative_id || q.creative || '',
       '{ad_id}':          q.ad_id || '',
