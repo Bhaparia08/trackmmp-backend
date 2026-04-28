@@ -58,6 +58,7 @@ router.get('/advertisers', requireAM, (req, res) => {
   const ph = advIds.map(() => '?').join(',');
   const advertisers = db.prepare(`
     SELECT u.id, u.email, u.name, u.company_name, u.status, u.plan, u.created_at, u.account_manager_id,
+           u.legal_name, u.legal_address, u.legal_country, u.tax_id, u.company_reg_no,
            (SELECT COUNT(*) FROM campaigns c WHERE c.advertiser_id = u.id) as campaign_count,
            (SELECT COUNT(*) FROM clicks cl WHERE cl.user_id = u.id) as click_count
     FROM users u
@@ -169,7 +170,7 @@ router.put('/users/:id', requireAM, async (req, res, next) => {
     `).get(req.params.id, am.id, am.id);
     if (!user) return res.status(403).json({ error: 'User not found or not assigned to you' });
 
-    const { name, company_name, status, password } = req.body;
+    const { name, company_name, status, password, legal_name, legal_address, legal_country, tax_id, company_reg_no } = req.body;
 
     if (password) {
       const bcrypt = require('bcrypt');
@@ -179,11 +180,18 @@ router.put('/users/:id', requireAM, async (req, res, next) => {
     db.prepare(`UPDATE users SET
       name = COALESCE(?, name),
       company_name = COALESCE(?, company_name),
-      status = COALESCE(?, status)
+      status = COALESCE(?, status),
+      legal_name = COALESCE(?, legal_name),
+      legal_address = COALESCE(?, legal_address),
+      legal_country = COALESCE(?, legal_country),
+      tax_id = COALESCE(?, tax_id),
+      company_reg_no = COALESCE(?, company_reg_no)
       WHERE id = ?`
-    ).run(name || null, company_name || null, status || null, user.id);
+    ).run(name || null, company_name || null, status || null,
+          legal_name || null, legal_address || null, legal_country || null,
+          tax_id || null, company_reg_no || null, user.id);
 
-    const updated = db.prepare('SELECT id, email, name, company_name, role, status, created_at FROM users WHERE id = ?').get(user.id);
+    const updated = db.prepare('SELECT id, email, name, company_name, legal_name, legal_address, legal_country, tax_id, company_reg_no, role, status, created_at FROM users WHERE id = ?').get(user.id);
     res.json(updated);
   } catch (err) { next(err); }
 });

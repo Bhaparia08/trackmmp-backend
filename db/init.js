@@ -186,6 +186,35 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN conversion_hold_days INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE campaigns ADD COLUMN featured INTEGER NOT NULL DEFAULT 0`,
 
+  // ── Advertiser legal entity fields ───────────────────────────────────────
+  `ALTER TABLE users ADD COLUMN legal_name TEXT`,
+  `ALTER TABLE users ADD COLUMN legal_address TEXT`,
+  `ALTER TABLE users ADD COLUMN legal_country TEXT`,
+  `ALTER TABLE users ADD COLUMN tax_id TEXT`,
+  `ALTER TABLE users ADD COLUMN company_reg_no TEXT`,
+
+  // ── Invoices ──────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS invoices (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_number  TEXT    NOT NULL UNIQUE,
+    entity          TEXT    NOT NULL DEFAULT 'sg',
+    advertiser_id   INTEGER NOT NULL REFERENCES users(id),
+    created_by      INTEGER NOT NULL REFERENCES users(id),
+    issue_date      TEXT    NOT NULL,
+    due_date        TEXT    NOT NULL,
+    currency        TEXT    NOT NULL DEFAULT 'USD',
+    line_items      TEXT    NOT NULL DEFAULT '[]',
+    subtotal        REAL    NOT NULL DEFAULT 0,
+    tax_rate        REAL    NOT NULL DEFAULT 0,
+    tax_amount      REAL    NOT NULL DEFAULT 0,
+    total           REAL    NOT NULL DEFAULT 0,
+    status          TEXT    NOT NULL DEFAULT 'draft',
+    notes           TEXT    NOT NULL DEFAULT '',
+    paid_at         INTEGER,
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+
   // ── Multi-AM assignment: many-to-many between users and account_managers ──
   `CREATE TABLE IF NOT EXISTS user_account_managers (
     user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

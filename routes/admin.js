@@ -123,6 +123,7 @@ router.get('/users', requireAdmin, (req, res) => {
   let query = `
     SELECT u.id, u.seq_num, u.email, u.name, u.company_name, u.role, u.status, u.plan, u.created_at,
            u.account_manager_id, u.postback_token,
+           u.legal_name, u.legal_address, u.legal_country, u.tax_id, u.company_reg_no,
            am.name  AS account_manager_name,
            am.email AS account_manager_email,
            am.phone AS account_manager_phone,
@@ -299,10 +300,16 @@ router.put('/users/:id', requireAdmin, async (req, res, next) => {
     // This prevents suspend/activate (which only sends `status`) from wiping name/company/AM
     const setClauses = [];
     const setValues  = [];
+    const { legal_name, legal_address, legal_country, tax_id, company_reg_no } = req.body;
     if ('name'               in req.body) { setClauses.push('name = ?');               setValues.push(name); }
     if ('company_name'       in req.body) { setClauses.push('company_name = ?');       setValues.push(company_name || null); }
     if ('status'             in req.body) { setClauses.push('status = ?');             setValues.push(status || 'active'); }
     if ('account_manager_id' in req.body) { setClauses.push('account_manager_id = ?'); setValues.push(account_manager_id || null); }
+    if ('legal_name'         in req.body) { setClauses.push('legal_name = ?');         setValues.push(legal_name || null); }
+    if ('legal_address'      in req.body) { setClauses.push('legal_address = ?');      setValues.push(legal_address || null); }
+    if ('legal_country'      in req.body) { setClauses.push('legal_country = ?');      setValues.push(legal_country || null); }
+    if ('tax_id'             in req.body) { setClauses.push('tax_id = ?');             setValues.push(tax_id || null); }
+    if ('company_reg_no'     in req.body) { setClauses.push('company_reg_no = ?');     setValues.push(company_reg_no || null); }
     if (setClauses.length > 0) {
       db.prepare(`UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`).run(...setValues, req.params.id);
     }
