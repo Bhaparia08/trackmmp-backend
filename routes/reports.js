@@ -97,10 +97,20 @@ router.get('/by-day', (req, res) => {
   const af = advertiser_id && (req.user.role === 'admin' || req.user.role === 'account_manager') ? advertiserFilter(advertiser_id) : null;
   if (af) { conditions.push(af.clause); values.push(...af.params); }
 
-  const rows = db.prepare(`SELECT date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
-    SUM(leads) AS leads, ROUND(SUM(revenue),2) AS revenue
-    FROM daily_stats WHERE ${conditions.join(' AND ')}
-    GROUP BY date ORDER BY date ASC`).all(...values);
+  // For admin/AM: group by date + advertiser so each row shows who the data belongs to
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'account_manager';
+  const rows = isAdmin
+    ? db.prepare(`SELECT ds.date, COALESCE(u.name, u.email, 'Unknown') AS advertiser, u.id AS advertiser_id,
+        SUM(ds.impressions) AS impressions, SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
+        SUM(ds.leads) AS leads, ROUND(SUM(ds.revenue),2) AS revenue
+        FROM daily_stats ds
+        LEFT JOIN users u ON u.id = ds.user_id
+        WHERE ${conditions.join(' AND ')}
+        GROUP BY ds.date, ds.user_id ORDER BY ds.date ASC`).all(...values)
+    : db.prepare(`SELECT date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
+        SUM(leads) AS leads, ROUND(SUM(revenue),2) AS revenue
+        FROM daily_stats WHERE ${conditions.join(' AND ')}
+        GROUP BY date ORDER BY date ASC`).all(...values);
   res.json(rows);
 });
 
@@ -114,10 +124,12 @@ router.get('/by-campaign', (req, res) => {
   if (af) { conditions.push(af.clause); values.push(...af.params); }
 
   const rows = db.prepare(`SELECT c.name AS campaign, c.id AS campaign_id,
+    COALESCE(u.name, u.email, 'Unknown') AS advertiser,
     SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
     SUM(ds.leads) AS leads, ROUND(SUM(ds.revenue),2) AS revenue
     FROM daily_stats ds
     LEFT JOIN campaigns c ON c.id = ds.campaign_id
+    LEFT JOIN users u ON u.id = ds.user_id
     WHERE ${conditions.join(' AND ')}
     GROUP BY ds.campaign_id ORDER BY revenue DESC`).all(...values);
   res.json(rows);
