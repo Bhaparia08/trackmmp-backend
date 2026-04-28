@@ -62,9 +62,10 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     //   click_id     — generic
     //   irclickid    — Impact Radius
     //   aff_click_id — HasOffers / TUNE / Affiliate
-    //   aff_sub      — HasOffers alternative click ID param
     //   u1           — Rakuten LinkShare
-    const publisher_click_id = q.clickid || q.click_id || q.irclickid || q.aff_click_id || q.u1 || q.aff_sub || null;
+    // Note: aff_sub is intentionally excluded — it is a sub-parameter in HasOffers/Everflow,
+    // not a click ID, and storing it here would break attribution.
+    const publisher_click_id = q.clickid || q.click_id || q.irclickid || q.aff_click_id || q.u1 || null;
 
     // Support Adjust's gps_adid, idfa, adid
     const advertising_id = q.advertising_id || q.gps_adid || q.idfa || q.adid || null;

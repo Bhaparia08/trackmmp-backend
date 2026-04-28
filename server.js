@@ -54,7 +54,8 @@ io.on('connection', (socket) => {
 app.set('io', io);
 
 // Middleware
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173', credentials: true }));
+const corsOrigin = process.env.NODE_ENV === 'production' ? true : (process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
