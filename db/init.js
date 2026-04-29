@@ -341,7 +341,7 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   if (!done) {
     try {
       const bcrypt = require('bcrypt');
-      const hash = bcrypt.hashSync('admin@test.com', 12);
+      const hash = bcrypt.hashSync('admin123', 12);
       const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
       if (existingAdmin) {
         // Reset email + password for whatever admin account exists on this server
@@ -501,6 +501,26 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
       console.log('[migration] seed_historical_invoices_v1: complete');
     } catch (e) {
       console.error('[migration] seed_historical_invoices_v1 failed:', e.message);
+    }
+  }
+}
+
+// ── Migration: reset_admin_v3 — fix password from email-as-password to admin123 ─
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'reset_admin_v3'").get();
+  if (!done) {
+    try {
+      const bcrypt = require('bcrypt');
+      const hash = bcrypt.hashSync('admin123', 12);
+      const admin = db.prepare("SELECT id FROM users WHERE email = 'admin@test.com' AND role = 'admin' LIMIT 1").get();
+      if (admin) {
+        db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hash, admin.id);
+        console.log('[migration] reset_admin_v3: admin@test.com password → admin123');
+      }
+      db.prepare("INSERT INTO migrations (name) VALUES ('reset_admin_v3')").run();
+    } catch (e) {
+      console.error('[migration] reset_admin_v3 failed:', e.message);
     }
   }
 }
