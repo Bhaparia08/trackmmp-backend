@@ -1,6 +1,7 @@
 /**
  * /api/apikeys  — manage publisher API keys and advertiser external credentials
  * Admin: full CRUD on all keys + advertiser credentials
+ * Account Manager: CRUD on adv-credentials scoped to their assigned advertisers
  * Publisher: view/manage own API keys only
  */
 const express = require('express');
@@ -12,6 +13,19 @@ const nanoid32 = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 
 const router = express.Router();
 router.use(requireAuth);
+
+// Helper: get advertiser IDs assigned to an account manager
+function getAMAdvertiserIds(userId) {
+  const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(userId);
+  if (!am) return [];
+  return db.prepare(`
+    SELECT DISTINCT u.id FROM users u
+    WHERE u.role = 'advertiser' AND (
+      u.account_manager_id = ?
+      OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = u.id AND uam.account_manager_id = ?)
+    )
+  `).all(am.id, am.id).map(u => u.id);
+}
 
 // ─── Publisher API Keys ───────────────────────────────────────────────────────
 
@@ -106,23 +120,44 @@ router.delete('/:id', (req, res, next) => {
 
 // GET /api/apikeys/adv-credentials — list stored advertiser credentials
 router.get('/adv-credentials', (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-  // Admins see ALL credentials saved by any admin
-  const rows = db.prepare(`
-    SELECT c.*, u.name AS advertiser_name, u.email AS advertiser_email,
-           cu.name AS created_by_name, cu.email AS created_by_email
-    FROM advertiser_api_credentials c
-    LEFT JOIN users u ON u.id = c.advertiser_id
-    LEFT JOIN users cu ON cu.id = c.user_id
-    ORDER BY c.created_at DESC
-  `).all();
-  res.json(rows);
+  if (req.user.role === 'admin') {
+    const rows = db.prepare(`
+      SELECT c.*, u.name AS advertiser_name, u.email AS advertiser_email,
+             cu.name AS created_by_name, cu.email AS created_by_email
+      FROM advertiser_api_credentials c
+      LEFT JOIN users u ON u.id = c.advertiser_id
+      LEFT JOIN users cu ON cu.id = c.user_id
+      ORDER BY c.created_at DESC
+    `).all();
+    return res.json(rows);
+  }
+  if (req.user.role === 'account_manager') {
+    const advIds = getAMAdvertiserIds(req.user.id);
+    if (advIds.length === 0) return res.json([]);
+    const ph = advIds.map(() => '?').join(',');
+    const rows = db.prepare(`
+      SELECT c.*, u.name AS advertiser_name, u.email AS advertiser_email,
+             cu.name AS created_by_name, cu.email AS created_by_email
+      FROM advertiser_api_credentials c
+      LEFT JOIN users u ON u.id = c.advertiser_id
+      LEFT JOIN users cu ON cu.id = c.user_id
+      WHERE c.advertiser_id IN (${ph})
+      ORDER BY c.created_at DESC
+    `).all(...advIds);
+    return res.json(rows);
+  }
+  res.status(403).json({ error: 'Not allowed' });
 });
 
 // POST /api/apikeys/adv-credentials — store new advertiser credential
 router.post('/adv-credentials', (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    if (!['admin','account_manager'].includes(req.user.role)) return res.status(403).json({ error: 'Not allowed' });
+    // Account managers can only save credentials for their assigned advertisers
+    if (req.user.role === 'account_manager' && req.body.advertiser_id) {
+      const advIds = getAMAdvertiserIds(req.user.id);
+      if (!advIds.includes(Number(req.body.advertiser_id))) return res.status(403).json({ error: 'Advertiser not assigned to you' });
+    }
     const { advertiser_id, platform, label, api_key, api_secret, network_id, extra } = req.body;
     if (!platform || !api_key) return res.status(400).json({ error: 'platform and api_key are required' });
 
@@ -138,9 +173,13 @@ router.post('/adv-credentials', (req, res, next) => {
 // PUT /api/apikeys/adv-credentials/:id — update a saved credential
 router.put('/adv-credentials/:id', (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    if (!['admin','account_manager'].includes(req.user.role)) return res.status(403).json({ error: 'Not allowed' });
     const row = db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Not found' });
+    if (req.user.role === 'account_manager') {
+      const advIds = getAMAdvertiserIds(req.user.id);
+      if (row.advertiser_id && !advIds.includes(row.advertiser_id)) return res.status(403).json({ error: 'Advertiser not assigned to you' });
+    }
     const { label, api_key, api_secret, network_id, extra } = req.body;
     if (!api_key) return res.status(400).json({ error: 'api_key is required' });
     db.prepare(`
@@ -155,9 +194,13 @@ router.put('/adv-credentials/:id', (req, res, next) => {
 // DELETE /api/apikeys/adv-credentials/:id
 router.delete('/adv-credentials/:id', (req, res, next) => {
   try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    if (!['admin','account_manager'].includes(req.user.role)) return res.status(403).json({ error: 'Not allowed' });
     const row = db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Not found' });
+    if (req.user.role === 'account_manager') {
+      const advIds = getAMAdvertiserIds(req.user.id);
+      if (row.advertiser_id && !advIds.includes(row.advertiser_id)) return res.status(403).json({ error: 'Advertiser not assigned to you' });
+    }
     db.prepare('DELETE FROM advertiser_api_credentials WHERE id = ?').run(row.id);
     res.json({ success: true });
   } catch (err) { next(err); }
