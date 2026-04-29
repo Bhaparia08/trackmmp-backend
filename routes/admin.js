@@ -122,7 +122,7 @@ router.get('/users', requireAdmin, (req, res) => {
   const { role } = req.query;
   let query = `
     SELECT u.id, u.seq_num, u.email, u.name, u.company_name, u.role, u.status, u.plan, u.created_at,
-           u.account_manager_id, u.postback_token,
+           u.account_manager_id, u.postback_token, u.email_verified,
            u.legal_name, u.legal_address, u.legal_country, u.tax_id, u.company_reg_no,
            am.name  AS account_manager_name,
            am.email AS account_manager_email,
@@ -152,6 +152,14 @@ router.get('/users', requireAdmin, (req, res) => {
     amMap[r.user_id].push({ id: r.am_id, name: r.name, email: r.email, user_id: r.am_user_id });
   }
   res.json(rows.map(r => ({ ...r, assigned_ams: amMap[r.id] || [] })));
+});
+
+// PATCH /api/admin/users/:id/verify — manually verify a user's email (unblock login)
+router.patch('/users/:id/verify', requireAdmin, (req, res) => {
+  const user = db.prepare('SELECT id, email, email_verified FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(user.id);
+  res.json({ success: true, email: user.email });
 });
 
 // POST /api/admin/users/:id/account-managers — assign an AM to a user
