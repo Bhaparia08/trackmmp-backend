@@ -489,6 +489,22 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
+// ── Migration: seed historical invoices (one-time, on first deploy) ──────────
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'seed_historical_invoices_v1'").get();
+  if (!done) {
+    try {
+      const { seed } = require('../scripts/seed_historical_invoices');
+      seed(db);
+      db.prepare("INSERT INTO migrations (name) VALUES ('seed_historical_invoices_v1')").run();
+      console.log('[migration] seed_historical_invoices_v1: complete');
+    } catch (e) {
+      console.error('[migration] seed_historical_invoices_v1 failed:', e.message);
+    }
+  }
+}
+
 // ── Auto-seed admin account ───────────────────────────────────────────────────
 // If SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set AND no admin
 // exists yet, create the admin account automatically on first start.

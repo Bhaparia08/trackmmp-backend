@@ -14,8 +14,8 @@
  *  - AM/2025/074/077 → stored as "AM/2025/074" (compound number)
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
-const db = require('../db/init');
+// Can be run standalone:  node scripts/seed_historical_invoices.js
+// Or called from init.js: require('./scripts/seed_historical_invoices').seed(db)
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -316,52 +316,45 @@ const RAW_2025_P2_AND_2026 = [
 
 const ALL_ROWS = [...RAW_2024, ...RAW_2025_P1, ...RAW_2025_P2_AND_2026];
 
-/* ── migration: ensure table exists ─────────────────────────────────────── */
-db.exec(`
-  CREATE TABLE IF NOT EXISTS historical_invoices (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    invoice_number  TEXT    NOT NULL UNIQUE,
-    client_name     TEXT    NOT NULL,
-    entity          TEXT    NOT NULL DEFAULT 'sg',
-    issue_date      TEXT,
-    payment_date    TEXT,
-    amount          REAL    NOT NULL DEFAULT 0,
-    currency        TEXT    NOT NULL DEFAULT 'USD',
-    status          TEXT    NOT NULL DEFAULT 'pending',
-    notes           TEXT    NOT NULL DEFAULT '',
-    created_at      INTEGER NOT NULL DEFAULT (unixepoch())
-  )
-`);
+/* ── exported seed function (called from init.js migration) ──────────────── */
+function seed(db) {
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO historical_invoices
+      (invoice_number, client_name, entity, issue_date, payment_date, amount, currency, status, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
 
-/* ── seed ─────────────────────────────────────────────────────────────────── */
-const insert = db.prepare(`
-  INSERT OR REPLACE INTO historical_invoices
-    (invoice_number, client_name, entity, issue_date, payment_date, amount, currency, status, notes)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
+  let ok = 0, skipped = 0;
 
-let ok = 0, skipped = 0;
+  const run = db.transaction(() => {
+    for (const [inv_no, client, issue_raw, pay_raw, amt_raw, curr_raw, status_raw, entity_raw, notes] of ALL_ROWS) {
+      const invoice_number = parseInvNumber(inv_no);
+      if (!invoice_number) { skipped++; continue; }
 
-const seed = db.transaction(() => {
-  for (const [inv_no, client, issue_raw, pay_raw, amt_raw, curr_raw, status_raw, entity_raw, notes] of ALL_ROWS) {
-    const invoice_number = parseInvNumber(inv_no);
-    if (!invoice_number) { skipped++; continue; }
+      const currency     = parseCurrency(curr_raw + ' ' + (amt_raw || ''));
+      const amount       = parseAmount(amt_raw, currency);
+      const entity       = parseEntity(entity_raw);
+      const status       = parseStatus(status_raw);
+      const issue_date   = parseDate(issue_raw);
+      const payment_date = parseDate(pay_raw);
 
-    const currency    = parseCurrency(curr_raw + ' ' + (amt_raw || ''));
-    const amount      = parseAmount(amt_raw, currency);
-    const entity      = parseEntity(entity_raw);
-    const status      = parseStatus(status_raw);
-    const issue_date  = parseDate(issue_raw);
-    const payment_date = parseDate(pay_raw);
+      insert.run(invoice_number, client, entity, issue_date, payment_date, amount, currency, status, notes || '');
+      ok++;
+    }
+  });
 
-    insert.run(invoice_number, client, entity, issue_date, payment_date, amount, currency, status, notes || '');
-    ok++;
-  }
-});
+  run();
+  console.log(`[seed] historical_invoices: inserted/replaced ${ok}, skipped ${skipped}`);
+  return ok;
+}
 
-seed();
-console.log(`[seed] historical_invoices: inserted/replaced ${ok} records, skipped ${skipped}`);
+module.exports = { seed };
 
-// verify
-const count = db.prepare('SELECT COUNT(*) AS c FROM historical_invoices').get().c;
-console.log(`[seed] Total rows in historical_invoices: ${count}`);
+/* ── standalone: node scripts/seed_historical_invoices.js ───────────────── */
+if (require.main === module) {
+  require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+  const db = require('../db/init');
+  seed(db);
+  const count = db.prepare('SELECT COUNT(*) AS c FROM historical_invoices').get().c;
+  console.log(`[seed] Total rows in historical_invoices: ${count}`);
+}
