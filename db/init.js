@@ -223,6 +223,21 @@ const migrations = [
     PRIMARY KEY (user_id, account_manager_id)
   )`,
 
+  // ── Historical Invoices ────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS historical_invoices (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_number  TEXT    NOT NULL UNIQUE,
+    client_name     TEXT    NOT NULL,
+    entity          TEXT    NOT NULL DEFAULT 'sg',
+    issue_date      TEXT,
+    payment_date    TEXT,
+    amount          REAL    NOT NULL DEFAULT 0,
+    currency        TEXT    NOT NULL DEFAULT 'USD',
+    status          TEXT    NOT NULL DEFAULT 'pending',
+    notes           TEXT    NOT NULL DEFAULT '',
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,

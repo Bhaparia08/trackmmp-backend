@@ -75,15 +75,64 @@ const ENTITIES = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function nextInvoiceNumber(entity) {
-  const prefix = ENTITIES[entity]?.prefix || 'APG-SG';
-  const year   = new Date().getFullYear();
-  const pattern = `${prefix}-${year}-%`;
-  const last = db.prepare(
-    "SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1"
-  ).get(pattern);
-  const seq = last ? (parseInt(last.invoice_number.split('-').pop()) + 1) : 1;
-  return `${prefix}-${year}-${String(seq).padStart(4, '0')}`;
+
+// Invoice numbers use the AM/YYYY/NNN format (continuing from historical records).
+// Finds the global max across BOTH tables so numbers never clash.
+function nextInvoiceNumber() {
+  const year    = new Date().getFullYear();
+  const pattern = `AM/${year}/%`;
+
+  const lastInv  = db.prepare("SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1").get(pattern);
+  const lastHist = db.prepare("SELECT invoice_number FROM historical_invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1").get(pattern);
+
+  function seqOf(numStr) {
+    if (!numStr) return 0;
+    const parts = numStr.split('/');
+    return parseInt(parts[parts.length - 1]) || 0;
+  }
+
+  const seq = Math.max(seqOf(lastInv?.invoice_number), seqOf(lastHist?.invoice_number)) + 1;
+  return `AM/${year}/${String(seq).padStart(3, '0')}`;
+}
+
+// Status mapping: invoice status → historical status
+function toHistStatus(invStatus) {
+  if (invStatus === 'paid')    return 'received';
+  if (invStatus === 'overdue') return 'pending';
+  return 'pending';
+}
+
+// Upsert a matching row in historical_invoices whenever an invoice is created/updated
+function syncToHistorical(inv, advertiserName) {
+  const existing = db.prepare('SELECT id FROM historical_invoices WHERE invoice_number = ?').get(inv.invoice_number);
+  const histStatus = toHistStatus(inv.status);
+  const payDate    = inv.status === 'paid' && inv.paid_at
+    ? new Date(inv.paid_at * 1000).toISOString().slice(0, 10)
+    : null;
+
+  if (existing) {
+    db.prepare(`
+      UPDATE historical_invoices
+      SET status = ?, payment_date = COALESCE(?, payment_date)
+      WHERE invoice_number = ?
+    `).run(histStatus, payDate, inv.invoice_number);
+  } else {
+    db.prepare(`
+      INSERT INTO historical_invoices
+        (invoice_number, client_name, entity, issue_date, payment_date, amount, currency, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      inv.invoice_number,
+      advertiserName || '—',
+      inv.entity || 'sg',
+      inv.issue_date || null,
+      payDate,
+      Number(inv.total) || 0,
+      inv.currency || 'USD',
+      histStatus,
+      inv.notes || ''
+    );
+  }
 }
 
 function pickBank(entity, advertiserCountry) {
@@ -94,6 +143,38 @@ function pickBank(entity, advertiserCountry) {
                (advertiserCountry || '').toLowerCase() === 'usa';
   return (isUS && e.banks.us) ? e.banks.us : (e.banks.default || null);
 }
+
+// ── GET /api/invoices/historical — admin-only historical records list ─────────
+router.get('/historical', requireRole('admin'), (req, res) => {
+  const { status, currency, from, to, search } = req.query;
+  const conditions = [];
+  const values = [];
+
+  if (status)   { conditions.push('status = ?');       values.push(status); }
+  if (currency) { conditions.push('currency = ?');     values.push(currency); }
+  if (from)     { conditions.push('issue_date >= ?');  values.push(from); }
+  if (to)       { conditions.push('issue_date <= ?');  values.push(to); }
+  if (search)   {
+    conditions.push('(client_name LIKE ? OR invoice_number LIKE ?)');
+    values.push(`%${search}%`, `%${search}%`);
+  }
+
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+  const rows = db.prepare(
+    `SELECT * FROM historical_invoices ${where} ORDER BY invoice_number ASC`
+  ).all(...values);
+  res.json(rows);
+});
+
+// ── PUT /api/invoices/historical/:id — update status/notes ───────────────────
+router.put('/historical/:id', requireRole('admin'), (req, res) => {
+  const { status, notes } = req.body;
+  const row = db.prepare('SELECT * FROM historical_invoices WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  db.prepare('UPDATE historical_invoices SET status = COALESCE(?,status), notes = COALESCE(?,notes) WHERE id = ?')
+    .run(status || null, notes != null ? notes : null, row.id);
+  res.json(db.prepare('SELECT * FROM historical_invoices WHERE id = ?').get(row.id));
+});
 
 // ── GET /api/invoices — list ──────────────────────────────────────────────────
 router.get('/', (req, res) => {
@@ -167,14 +248,14 @@ router.post('/', requireRole('admin', 'account_manager'), (req, res, next) => {
     if (!Array.isArray(line_items) || line_items.length === 0)
       return res.status(400).json({ error: 'At least one line item required' });
 
-    const adv = db.prepare('SELECT id FROM users WHERE id = ?').get(advertiser_id);
+    const adv = db.prepare('SELECT id, name, legal_name FROM users WHERE id = ?').get(advertiser_id);
     if (!adv) return res.status(404).json({ error: 'Advertiser not found' });
 
     const subtotal   = line_items.reduce((s, l) => s + (Number(l.amount) || 0), 0);
     const tax_amount = +(subtotal * (Number(tax_rate) / 100)).toFixed(2);
     const total      = +(subtotal + tax_amount).toFixed(2);
 
-    const invoice_number = nextInvoiceNumber(entity);
+    const invoice_number = nextInvoiceNumber();
 
     const result = db.prepare(`
       INSERT INTO invoices
@@ -189,6 +270,8 @@ router.post('/', requireRole('admin', 'account_manager'), (req, res, next) => {
     );
 
     const created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(result.lastInsertRowid);
+    // Sync to historical_invoices
+    try { syncToHistorical(created, adv.legal_name || adv.name); } catch {}
     res.status(201).json({ ...created, line_items: JSON.parse(created.line_items) });
   } catch (err) { next(err); }
 });
@@ -232,6 +315,11 @@ router.put('/:id', requireRole('admin', 'account_manager'), (req, res, next) => 
     );
 
     const updated = db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
+    // Sync status/amount changes to historical_invoices
+    try {
+      const adv = db.prepare('SELECT name, legal_name FROM users WHERE id = ?').get(updated.advertiser_id);
+      syncToHistorical(updated, adv?.legal_name || adv?.name);
+    } catch {}
     res.json({ ...updated, line_items: JSON.parse(updated.line_items) });
   } catch (err) { next(err); }
 });
