@@ -856,12 +856,12 @@ router.post('/import', (req, res, next) => {
       }
       const pubPayoutType = publisher_payout_type || offer.payout_type || 'cpi';
 
-      // Check if a campaign with same name already exists (active OR archived)
+      // Check if a campaign with same name already exists (active, paused, or archived)
       const exists = db.prepare('SELECT id, status FROM campaigns WHERE name = ?').get(offer.name);
 
       if (exists) {
-        if (exists.status === 'archived') {
-          // Re-activate the archived campaign and refresh its details
+        if (exists.status === 'archived' || exists.status === 'paused') {
+          // Re-activate the archived/paused campaign and refresh its details
           updateCampaign.run(
             advName,
             advPayout != null ? advPayout : null,
@@ -881,7 +881,7 @@ router.post('/import', (req, res, next) => {
           applyApprovedPublishers(exists.id);
           imported.push({ id: exists.id, name: offer.name, campaign_token: campaign.campaign_token, campaign, reactivated: true });
         } else {
-          // Active/paused campaign — skip to avoid duplicates
+          // Already active — skip to avoid duplicates
           skipped.push({ name: offer.name, reason: 'already exists and is active' });
         }
         continue;

@@ -232,6 +232,67 @@ router.put('/:id', (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/campaigns/:id/clone — create a manual copy of a campaign
+router.post('/:id/clone', (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'account_manager') {
+      return res.status(403).json({ error: 'Admin or Account Manager only' });
+    }
+    const c = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    if (req.user.role === 'account_manager') {
+      const advIds = getAMAdvertiserIds(req.user.id);
+      if (!advIds.includes(c.advertiser_id)) {
+        return res.status(403).json({ error: 'Campaign not assigned to your advertisers' });
+      }
+    }
+
+    const cloneId = db.transaction(() => {
+      const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM campaigns').get().n;
+      // Determine a unique name
+      let cloneName = c.name + ' (Copy)';
+      let suffix = 2;
+      while (db.prepare('SELECT id FROM campaigns WHERE name = ?').get(cloneName)) {
+        cloneName = c.name + ` (Copy ${suffix++})`;
+      }
+      const result = db.prepare(`
+        INSERT INTO campaigns (
+          user_id, advertiser_id, app_id, name, advertiser_name, campaign_token,
+          security_token, payout, payout_type, publisher_payout, publisher_payout_type,
+          destination_url, preview_url, postback_url, cap_daily, cap_total,
+          allowed_countries, click_lookback_days, is_retargeting, visibility, tags,
+          geo_fallback_url, start_date, end_date, description, channel, allowed_devices,
+          cap_monthly, cap_redirect_url, conversion_hold_days, featured,
+          status, seq_num,
+          source_credential_id, external_offer_id
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          'active', ?,
+          NULL, NULL
+        )
+      `).run(
+        req.user.id, c.advertiser_id, c.app_id, cloneName, c.advertiser_name, nanoid12(),
+        nanoid20hex(), c.payout, c.payout_type, c.publisher_payout, c.publisher_payout_type,
+        c.destination_url, c.preview_url, c.postback_url, c.cap_daily, c.cap_total,
+        c.allowed_countries, c.click_lookback_days, c.is_retargeting, c.visibility, c.tags || '',
+        c.geo_fallback_url || '', c.start_date, c.end_date, c.description || '',
+        c.channel || 'all', c.allowed_devices || 'all',
+        c.cap_monthly || 0, c.cap_redirect_url || '', c.conversion_hold_days || 0, c.featured || 0,
+        nextSeq,
+      );
+      return result.lastInsertRowid;
+    })();
+
+    const cloned = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(cloneId);
+    res.status(201).json(cloned);
+  } catch (err) { next(err); }
+});
+
 router.delete('/:id', (req, res, next) => {
   try {
     if (req.user.role !== 'admin' && req.user.role !== 'account_manager') {
