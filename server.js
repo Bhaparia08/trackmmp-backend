@@ -80,7 +80,9 @@ app.use('/api/clicks', require('./routes/clicks'));
 app.use('/api/s2s', require('./routes/s2s'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/fraud', require('./routes/fraud'));
-app.use('/api/campaigns/:campaign_id/goals', require('./routes/goals'));
+app.use('/api/campaigns/:campaign_id/goals',          require('./routes/goals'));
+app.use('/api/campaigns/:campaign_id/publisher-caps', require('./routes/publisherCaps'));
+app.use('/api/campaigns/:campaign_id/landing-pages',  require('./routes/landingPages'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/publisher', require('./routes/publisher'));
 app.use('/api/am', require('./routes/am'));
@@ -92,7 +94,8 @@ app.use('/api/smart-links',    require('./routes/smartLinks'));
 app.use('/api/automation',     require('./routes/automation'));
 app.use('/api/preview',        require('./routes/preview'));
 app.use('/api/impact',         require('./routes/impact'));
-app.use('/api/invoices',       require('./routes/invoices'));
+app.use('/api/invoices',          require('./routes/invoices'));
+app.use('/api/insertion-orders',  require('./routes/insertionOrders'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

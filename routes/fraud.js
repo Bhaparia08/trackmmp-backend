@@ -4,6 +4,60 @@ const { requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+// ── Fraud Rules CRUD ─────────────────────────────────────────────────────────
+
+// GET /api/fraud/rules
+router.get('/rules', requireAdmin, (req, res) => {
+  const rows = db.prepare('SELECT * FROM fraud_rules WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
+  res.json(rows);
+});
+
+// POST /api/fraud/rules
+router.post('/rules', requireAdmin, (req, res, next) => {
+  try {
+    const { name, rule_type, config = {}, action = 'block' } = req.body;
+    if (!name)      return res.status(400).json({ error: 'name is required' });
+    if (!rule_type) return res.status(400).json({ error: 'rule_type is required' });
+
+    const result = db.prepare(`
+      INSERT INTO fraud_rules (user_id, name, rule_type, config, action)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(req.user.id, name, rule_type, JSON.stringify(config), action);
+
+    res.status(201).json(db.prepare('SELECT * FROM fraud_rules WHERE id = ?').get(result.lastInsertRowid));
+  } catch (err) { next(err); }
+});
+
+// PUT /api/fraud/rules/:id
+router.put('/rules/:id', requireAdmin, (req, res, next) => {
+  try {
+    const rule = db.prepare('SELECT id FROM fraud_rules WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    if (!rule) return res.status(404).json({ error: 'Rule not found' });
+    const { name, rule_type, config, action, status } = req.body;
+    db.prepare(`
+      UPDATE fraud_rules SET
+        name      = COALESCE(?, name),
+        rule_type = COALESCE(?, rule_type),
+        config    = COALESCE(?, config),
+        action    = COALESCE(?, action),
+        status    = COALESCE(?, status),
+        updated_at = unixepoch()
+      WHERE id = ?
+    `).run(name || null, rule_type || null,
+           config != null ? JSON.stringify(config) : null,
+           action || null, status || null, rule.id);
+    res.json(db.prepare('SELECT * FROM fraud_rules WHERE id = ?').get(rule.id));
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/fraud/rules/:id
+router.delete('/rules/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM fraud_rules WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+  res.json({ success: true });
+});
+
+// ── Fraud Logs ───────────────────────────────────────────────────────────────
+
 // admin sees all fraud logs (no user_id filter)
 router.get('/', requireAdmin, (req, res) => {
   const { from, to, campaign_id, fraud_type, page = 1, limit = 50 } = req.query;

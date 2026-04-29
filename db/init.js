@@ -238,6 +238,89 @@ const migrations = [
     created_at      INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
 
+  // ── Insertion Orders ──────────────────────────────────────────────────────
+  // Signed contracts between Appreach and advertisers.
+  // Legal entity info is captured at signing time and used to auto-fill invoices.
+  `CREATE TABLE IF NOT EXISTS insertion_orders (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id             INTEGER NOT NULL REFERENCES users(id),            -- admin who created
+    advertiser_id       INTEGER NOT NULL REFERENCES users(id),            -- the advertiser
+    io_number           TEXT    NOT NULL UNIQUE,                          -- e.g. AM/IO/2026/001
+    campaign_name       TEXT    NOT NULL DEFAULT '',
+    io_value            REAL    NOT NULL DEFAULT 0,
+    currency            TEXT    NOT NULL DEFAULT 'USD',
+    start_date          TEXT,
+    end_date            TEXT,
+    payment_terms       TEXT    NOT NULL DEFAULT 'NET30',
+    billing_cycle       TEXT    NOT NULL DEFAULT 'monthly',
+    -- Advertiser legal entity snapshot (from signed IO)
+    legal_name          TEXT    NOT NULL DEFAULT '',
+    legal_address       TEXT    NOT NULL DEFAULT '',
+    legal_country       TEXT    NOT NULL DEFAULT '',
+    tax_id              TEXT    NOT NULL DEFAULT '',
+    company_reg_no      TEXT    NOT NULL DEFAULT '',
+    contact_name        TEXT    NOT NULL DEFAULT '',
+    contact_email       TEXT    NOT NULL DEFAULT '',
+    contact_phone       TEXT    NOT NULL DEFAULT '',
+    -- IO state
+    status              TEXT    NOT NULL DEFAULT 'draft',
+    notes               TEXT    NOT NULL DEFAULT '',
+    signed_at           INTEGER,
+    created_at          INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at          INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+
+  // ── Per-Publisher Caps ─────────────────────────────────────────────────────
+  // Overrides global campaign caps for individual publishers
+  `CREATE TABLE IF NOT EXISTS publisher_caps (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    publisher_id INTEGER NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    cap_daily    INTEGER NOT NULL DEFAULT 0,
+    cap_monthly  INTEGER NOT NULL DEFAULT 0,
+    cap_total    INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(campaign_id, publisher_id)
+  )`,
+
+  // ── Landing Pages (A/B test per campaign) ──────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS landing_pages (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    name         TEXT    NOT NULL,
+    url          TEXT    NOT NULL,
+    weight       INTEGER NOT NULL DEFAULT 100,
+    clicks       INTEGER NOT NULL DEFAULT 0,
+    conversions  INTEGER NOT NULL DEFAULT 0,
+    status       TEXT    NOT NULL DEFAULT 'active',
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at   INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  // Track which landing page each click hit
+  `ALTER TABLE clicks ADD COLUMN landing_page_id INTEGER REFERENCES landing_pages(id)`,
+
+  // ── Cap Types: payout-based and revenue-based caps ─────────────────────────
+  `ALTER TABLE campaigns ADD COLUMN cap_type TEXT NOT NULL DEFAULT 'clicks'`,
+  `ALTER TABLE campaigns ADD COLUMN cap_daily_payout REAL NOT NULL DEFAULT 0`,
+  `ALTER TABLE campaigns ADD COLUMN cap_monthly_payout REAL NOT NULL DEFAULT 0`,
+
+  // ── Fraud Rules ────────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS fraud_rules (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    name        TEXT    NOT NULL,
+    rule_type   TEXT    NOT NULL,
+    config      TEXT    NOT NULL DEFAULT '{}',
+    action      TEXT    NOT NULL DEFAULT 'block',
+    status      TEXT    NOT NULL DEFAULT 'active',
+    hit_count   INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at  INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+
   // ── Automation Rules ───────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS automation_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -104,32 +104,175 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       }
     }
 
+    // ── Fraud rule check ──────────────────────────────────────────────────────
+    // Evaluate active fraud rules before recording the click.
+    {
+      const fraudRules = db.prepare(
+        "SELECT * FROM fraud_rules WHERE status = 'active'"
+      ).all();
+
+      for (const rule of fraudRules) {
+        let cfg = {};
+        try { cfg = JSON.parse(rule.config || '{}'); } catch {}
+
+        let triggered = false;
+        if (rule.rule_type === 'empty_advertising_id') {
+          // Block clicks with no advertising ID (often bots / invalid traffic)
+          if (!advertising_id) triggered = true;
+        } else if (rule.rule_type === 'duplicate_ip_day') {
+          // Block same IP converting more than N times per day on same campaign
+          const maxHits = cfg.max_hits || 3;
+          const ipCount = db.prepare(
+            "SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND ip = ? AND date(created_at,'unixepoch')=date('now','utc')"
+          ).get(campaign.id, ip)?.n || 0;
+          if (ipCount >= maxHits) triggered = true;
+        } else if (rule.rule_type === 'blocked_country') {
+          const blocked = (cfg.countries || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+          if (blocked.length > 0 && country && blocked.includes(country.toUpperCase())) triggered = true;
+        } else if (rule.rule_type === 'datacenter_ip') {
+          // Basic ASN/range check — block if IP looks like known cloud provider ranges
+          // Simplified: check for common cloud provider IP ranges prefix
+          const dcPrefixes = cfg.prefixes || ['3.', '34.', '35.', '52.', '54.', '13.', '18.', '23.', '100.'];
+          if (dcPrefixes.some(p => ip.startsWith(p))) triggered = true;
+        } else if (rule.rule_type === 'suspicious_cvr') {
+          // Block publisher if their conversion rate today is suspiciously high
+          if (publisher_id) {
+            const minClicks = cfg.min_clicks || 20;
+            const maxCvr   = cfg.max_cvr_pct || 80;
+            const pubClicks = db.prepare(
+              "SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND date(created_at,'unixepoch')=date('now','utc')"
+            ).get(campaign.id, publisher_id)?.n || 0;
+            const pubConvs  = db.prepare(
+              "SELECT COUNT(*) as n FROM postbacks WHERE campaign_id=? AND status='attributed' AND date(created_at,'unixepoch')=date('now','utc') AND click_id IN (SELECT click_id FROM clicks WHERE publisher_id=?)"
+            ).get(campaign.id, publisher_id)?.n || 0;
+            if (pubClicks >= minClicks && pubConvs / pubClicks * 100 >= maxCvr) triggered = true;
+          }
+        }
+
+        if (triggered) {
+          // Increment hit counter
+          db.prepare('UPDATE fraud_rules SET hit_count = hit_count + 1, updated_at = unixepoch() WHERE id = ?').run(rule.id);
+          // Log the fraud event
+          db.prepare(
+            "INSERT INTO fraud_log (click_id, campaign_id, user_id, fraud_type, details, action) VALUES (?,?,?,?,?,?)"
+          ).run(null, campaign.id, campaign.user_id, rule.rule_type, JSON.stringify({ ip, country, advertising_id, rule_name: rule.name }), rule.action);
+
+          if (rule.action === 'block') {
+            const capRedirect = campaign.cap_redirect_url;
+            if (capRedirect && /^https?:\/\//i.test(capRedirect)) return res.redirect(302, capRedirect);
+            return res.status(200).send('FRAUD_BLOCKED');
+          }
+          // action === 'flag' → still allow click but mark it
+        }
+      }
+    }
+
     // ── Cap enforcement ───────────────────────────────────────────────────────
     // Check daily / monthly / total click caps before recording the click.
-    // If a cap is hit, redirect to cap_redirect_url (if set) or return a soft block.
-    if (campaign.cap_daily > 0 || campaign.cap_monthly > 0 || campaign.cap_total > 0) {
-      const todayClicks = campaign.cap_daily > 0
-        ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND date(created_at,'unixepoch') = date('now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
-        : 0;
-      const monthClicks = campaign.cap_monthly > 0
-        ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND strftime('%Y-%m', created_at,'unixepoch') = strftime('%Y-%m','now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
-        : 0;
-      const totalClicks = campaign.cap_total > 0
-        ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
-        : 0;
+    // Supports three cap_type modes: 'clicks' (default), 'payout', 'revenue'
+    // Per-publisher caps are checked after global caps.
+    {
+      const capType = campaign.cap_type || 'clicks';
+      let capHit = false;
 
-      const capHit = (campaign.cap_daily   > 0 && todayClicks  >= campaign.cap_daily)
-                  || (campaign.cap_monthly  > 0 && monthClicks  >= campaign.cap_monthly)
-                  || (campaign.cap_total    > 0 && totalClicks  >= campaign.cap_total);
+      if (capType === 'clicks') {
+        // Original click-count-based caps
+        if (campaign.cap_daily > 0 || campaign.cap_monthly > 0 || campaign.cap_total > 0) {
+          const todayClicks = campaign.cap_daily > 0
+            ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND date(created_at,'unixepoch') = date('now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
+            : 0;
+          const monthClicks = campaign.cap_monthly > 0
+            ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND strftime('%Y-%m', created_at,'unixepoch') = strftime('%Y-%m','now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
+            : 0;
+          const totalClicks = campaign.cap_total > 0
+            ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
+            : 0;
+
+          capHit = (campaign.cap_daily   > 0 && todayClicks  >= campaign.cap_daily)
+                || (campaign.cap_monthly  > 0 && monthClicks  >= campaign.cap_monthly)
+                || (campaign.cap_total    > 0 && totalClicks  >= campaign.cap_total);
+        }
+      } else if (capType === 'payout') {
+        // Payout-based caps: check sum of payout sent today / this month
+        if (campaign.cap_daily_payout > 0 || campaign.cap_monthly_payout > 0) {
+          const todayPayout = campaign.cap_daily_payout > 0
+            ? (db.prepare("SELECT COALESCE(SUM(payout),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND date(created_at,'unixepoch')=date('now','utc')").get(campaign.id)?.s || 0)
+            : 0;
+          const monthPayout = campaign.cap_monthly_payout > 0
+            ? (db.prepare("SELECT COALESCE(SUM(payout),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id)?.s || 0)
+            : 0;
+          capHit = (campaign.cap_daily_payout   > 0 && todayPayout  >= campaign.cap_daily_payout)
+                || (campaign.cap_monthly_payout  > 0 && monthPayout  >= campaign.cap_monthly_payout);
+        }
+      } else if (capType === 'revenue') {
+        // Revenue-based caps: check sum of revenue received
+        if (campaign.cap_daily_payout > 0 || campaign.cap_monthly_payout > 0) {
+          const todayRev = campaign.cap_daily_payout > 0
+            ? (db.prepare("SELECT COALESCE(SUM(revenue),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND date(created_at,'unixepoch')=date('now','utc')").get(campaign.id)?.s || 0)
+            : 0;
+          const monthRev = campaign.cap_monthly_payout > 0
+            ? (db.prepare("SELECT COALESCE(SUM(revenue),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id)?.s || 0)
+            : 0;
+          capHit = (campaign.cap_daily_payout   > 0 && todayRev  >= campaign.cap_daily_payout)
+                || (campaign.cap_monthly_payout  > 0 && monthRev  >= campaign.cap_monthly_payout);
+        }
+      }
 
       if (capHit) {
         const capRedirect = campaign.cap_redirect_url;
         if (capRedirect && /^https?:\/\//i.test(capRedirect)) return res.redirect(302, capRedirect);
         return res.status(200).send('CAP_REACHED');
       }
+
+      // ── Per-publisher cap check ──────────────────────────────────────────────
+      if (publisher_id) {
+        const pubCap = db.prepare('SELECT * FROM publisher_caps WHERE campaign_id = ? AND publisher_id = ?').get(campaign.id, publisher_id);
+        if (pubCap) {
+          const pubCapHit =
+            (pubCap.cap_daily > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND date(created_at,'unixepoch')=date('now','utc')").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_daily) ||
+            (pubCap.cap_monthly > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_monthly) ||
+            (pubCap.cap_total > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=?").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_total);
+
+          if (pubCapHit) {
+            // Publisher's cap hit — redirect to cap URL if available, else soft block
+            const capRedirect = campaign.cap_redirect_url;
+            if (capRedirect && /^https?:\/\//i.test(capRedirect)) return res.redirect(302, capRedirect);
+            return res.status(200).send('PUBLISHER_CAP_REACHED');
+          }
+        }
+      }
     }
 
     const click_id = nanoid16();
+
+    // ── Landing page selection (weighted random A/B) ──────────────────────────
+    // If the campaign has active landing pages, pick one by weight and use its
+    // URL as the destination. The selected landing_page_id is stored on the click.
+    let landing_page_id = null;
+    {
+      const lps = db.prepare(
+        "SELECT id, url, weight FROM landing_pages WHERE campaign_id = ? AND status = 'active'"
+      ).all(campaign.id);
+
+      if (lps.length > 0) {
+        const totalWeight = lps.reduce((s, lp) => s + (lp.weight || 1), 0);
+        let rand = Math.random() * totalWeight;
+        for (const lp of lps) {
+          rand -= (lp.weight || 1);
+          if (rand <= 0) {
+            landing_page_id = lp.id;
+            // Override the destination URL with the landing page URL
+            // but preserve existing query params / macros from original destination
+            // We still macro-replace the LP URL below
+            break;
+          }
+        }
+        // Increment click counter for selected LP
+        if (landing_page_id) {
+          db.prepare('UPDATE landing_pages SET clicks = clicks + 1 WHERE id = ?').run(landing_page_id);
+        }
+      }
+    }
 
     db.prepare(`INSERT INTO clicks
       (click_id, campaign_id, publisher_id, user_id,
@@ -138,8 +281,8 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
        sub6, sub7, sub8, sub9, sub10,
        publisher_click_id, ip, user_agent, country, language,
        device_type, os, browser, advertising_id, platform, referrer,
-       creative_id, ad_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+       creative_id, ad_id, landing_page_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(click_id, campaign.id, publisher_id, campaign.user_id,
            q.pid||null, q.af_c_id||null, q.af_siteid||null,
            q.af_sub1||q.sub1||null, q.af_sub2||q.sub2||null,
@@ -148,7 +291,8 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
            publisher_click_id, ip, ua, country, language,
            device_type, os, browser, advertising_id, platform,
            req.headers.referer||null,
-           q.creative_id||q.creative||null, q.ad_id||null);
+           q.creative_id||q.creative||null, q.ad_id||null,
+           landing_page_id);
 
     // Daily stats upsert
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
@@ -161,12 +305,19 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
 
     // ── Macro substitution in advertiser's destination/tracking URL ──────────
     // The destination_url may contain the advertiser's own macro placeholders.
-    // We replace all known macros with the real values captured at click time.
-    // Fallback chain: destination_url → preview_url → error response
-    if (!campaign.destination_url && !campaign.preview_url) {
+    // Fallback chain: landing_page URL → destination_url → preview_url → error
+    if (!campaign.destination_url && !campaign.preview_url && !landing_page_id) {
       return res.status(404).send('Campaign has no destination URL configured. Contact your account manager.');
     }
-    let dest = campaign.destination_url || campaign.preview_url;
+
+    // If a landing page was selected, use its URL as destination
+    let dest;
+    if (landing_page_id) {
+      const lp = db.prepare('SELECT url FROM landing_pages WHERE id = ?').get(landing_page_id);
+      dest = lp?.url || campaign.destination_url || campaign.preview_url;
+    } else {
+      dest = campaign.destination_url || campaign.preview_url;
+    }
 
     const macroMap = {
       // Our click IDs
