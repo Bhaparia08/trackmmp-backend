@@ -161,7 +161,7 @@ router.get('/historical', requireRole('admin'), (req, res) => {
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const rows = db.prepare(
-    `SELECT * FROM historical_invoices ${where} ORDER BY invoice_number ASC`
+    `SELECT * FROM historical_invoices ${where} ORDER BY id DESC`
   ).all(...values);
   res.json(rows);
 });
