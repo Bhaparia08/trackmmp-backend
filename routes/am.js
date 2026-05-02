@@ -232,6 +232,7 @@ router.get('/users/:id/integration', requireAM, (req, res) => {
       event: `${base}/acquisition?click_id={click_id}&security_token=${user.postback_token}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
     },
     publisher: publisher ? {
+      publisher_id: publisher.id,
       pub_token: publisher.pub_token,
       global_postback_url: publisher.global_postback_url || '',
       tracking_link_example: `${base}/track/click/{campaign_token}?pid=${publisher.pub_token}&clickid={your_click_id}`,
