@@ -185,7 +185,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
             ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND date(created_at,'unixepoch') = date('now') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
             : 0;
           const monthClicks = campaign.cap_monthly > 0
-            ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND strftime('%Y-%m', created_at,'unixepoch') = strftime('%Y-%m','now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
+            ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND strftime('%Y-%m', created_at,'unixepoch') = strftime('%Y-%m','now') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
             : 0;
           const totalClicks = campaign.cap_total > 0
             ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
@@ -202,7 +202,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
             ? (db.prepare("SELECT COALESCE(SUM(payout),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND date(created_at,'unixepoch')=date('now')").get(campaign.id)?.s || 0)
             : 0;
           const monthPayout = campaign.cap_monthly_payout > 0
-            ? (db.prepare("SELECT COALESCE(SUM(payout),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id)?.s || 0)
+            ? (db.prepare("SELECT COALESCE(SUM(payout),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now')").get(campaign.id)?.s || 0)
             : 0;
           capHit = (campaign.cap_daily_payout   > 0 && todayPayout  >= campaign.cap_daily_payout)
                 || (campaign.cap_monthly_payout  > 0 && monthPayout  >= campaign.cap_monthly_payout);
@@ -214,7 +214,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
             ? (db.prepare("SELECT COALESCE(SUM(revenue),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND date(created_at,'unixepoch')=date('now')").get(campaign.id)?.s || 0)
             : 0;
           const monthRev = campaign.cap_monthly_payout > 0
-            ? (db.prepare("SELECT COALESCE(SUM(revenue),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id)?.s || 0)
+            ? (db.prepare("SELECT COALESCE(SUM(revenue),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now')").get(campaign.id)?.s || 0)
             : 0;
           capHit = (campaign.cap_daily_payout   > 0 && todayRev  >= campaign.cap_daily_payout)
                 || (campaign.cap_monthly_payout  > 0 && monthRev  >= campaign.cap_monthly_payout);
@@ -233,7 +233,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
         if (pubCap) {
           const pubCapHit =
             (pubCap.cap_daily > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND date(created_at,'unixepoch')=date('now')").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_daily) ||
-            (pubCap.cap_monthly > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_monthly) ||
+            (pubCap.cap_monthly > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now')").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_monthly) ||
             (pubCap.cap_total > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=?").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_total);
 
           if (pubCapHit) {
