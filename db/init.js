@@ -373,6 +373,137 @@ const migrations = [
     trigger_data TEXT    NOT NULL DEFAULT '{}',
     action_taken TEXT    NOT NULL DEFAULT ''
   )`,
+
+  // ── Webhook Retry Queue ────────────────────────────────────────────────────
+  // Outbound postback URLs that failed are retried with exponential backoff
+  `CREATE TABLE IF NOT EXISTS webhook_retry_queue (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    url           TEXT    NOT NULL,
+    context_type  TEXT    NOT NULL DEFAULT 'postback',
+    context_id    INTEGER,
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    max_attempts  INTEGER NOT NULL DEFAULT 5,
+    next_retry_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    last_error    TEXT,
+    status        TEXT    NOT NULL DEFAULT 'pending',
+    created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_webhook_retry_pending ON webhook_retry_queue(status, next_retry_at)`,
+
+  // ── Alert Rules & Notifications ────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS alert_rules (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name           TEXT    NOT NULL,
+    alert_type     TEXT    NOT NULL,
+    campaign_id    INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+    publisher_id   INTEGER REFERENCES publishers(id) ON DELETE CASCADE,
+    threshold      REAL    NOT NULL DEFAULT 0,
+    window_minutes INTEGER NOT NULL DEFAULT 60,
+    channel        TEXT    NOT NULL DEFAULT 'in_app',
+    webhook_url    TEXT    NOT NULL DEFAULT '',
+    status         TEXT    NOT NULL DEFAULT 'active',
+    last_fired_at  INTEGER,
+    created_at     INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at     INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE TABLE IF NOT EXISTS alert_notifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rule_id     INTEGER REFERENCES alert_rules(id) ON DELETE SET NULL,
+    alert_type  TEXT    NOT NULL,
+    title       TEXT    NOT NULL,
+    message     TEXT    NOT NULL,
+    data        TEXT    NOT NULL DEFAULT '{}',
+    read        INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_alert_notif_user ON alert_notifications(user_id, read, created_at)`,
+
+  // ── Multi-touch Attribution Touch Points ───────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS touch_points (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id    TEXT    NOT NULL,
+    campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    publisher_id INTEGER REFERENCES publishers(id) ON DELETE SET NULL,
+    click_id     TEXT    NOT NULL,
+    touch_type   TEXT    NOT NULL DEFAULT 'click',
+    touch_order  INTEGER NOT NULL DEFAULT 1,
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_touch_points_device ON touch_points(device_id, campaign_id)`,
+  `ALTER TABLE campaigns ADD COLUMN attribution_model TEXT NOT NULL DEFAULT 'last_click'`,
+
+  // ── Campaign Cost Tracking ─────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS campaign_costs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    date        TEXT    NOT NULL,
+    amount      REAL    NOT NULL DEFAULT 0,
+    cost_type   TEXT    NOT NULL DEFAULT 'media_buy',
+    notes       TEXT    NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_campaign_costs_campaign ON campaign_costs(campaign_id, date)`,
+
+  // ── SKAdNetwork (SKAN) Postbacks ───────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS skan_postbacks (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id          INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
+    app_id               TEXT    NOT NULL,
+    transaction_id       TEXT    NOT NULL UNIQUE,
+    version              TEXT    NOT NULL DEFAULT '3',
+    source_app_id        TEXT,
+    source_identifier    TEXT,
+    conversion_value     INTEGER,
+    fine_value           INTEGER,
+    coarse_value         TEXT,
+    redownload           INTEGER NOT NULL DEFAULT 0,
+    did_win              INTEGER NOT NULL DEFAULT 1,
+    source_domain        TEXT,
+    attribution_signature TEXT,
+    postback_sequence_index INTEGER NOT NULL DEFAULT 0,
+    ip                   TEXT,
+    raw_payload          TEXT    NOT NULL DEFAULT '{}',
+    status               TEXT    NOT NULL DEFAULT 'received',
+    created_at           INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_skan_campaign ON skan_postbacks(campaign_id, created_at)`,
+  `ALTER TABLE campaigns ADD COLUMN skan_enabled INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE campaigns ADD COLUMN skan_conversion_schema TEXT NOT NULL DEFAULT '{}' `,
+
+  // ── Deep Link Configuration per Campaign ──────────────────────────────────
+  `ALTER TABLE campaigns ADD COLUMN deep_link_url TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN ios_store_url TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN android_store_url TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN deferred_deep_link INTEGER NOT NULL DEFAULT 0`,
+
+  // ── Fraud: Device Fingerprint Registry ────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS fraud_device_fingerprints (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    fingerprint TEXT    NOT NULL UNIQUE,
+    ip          TEXT,
+    user_agent  TEXT,
+    campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+    hit_count   INTEGER NOT NULL DEFAULT 1,
+    first_seen  INTEGER NOT NULL DEFAULT (unixepoch()),
+    last_seen   INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_fraud_fp ON fraud_device_fingerprints(fingerprint)`,
+
+  // ── Campaign Permissions (granular view/edit per user) ─────────────────────
+  `CREATE TABLE IF NOT EXISTS campaign_permissions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    can_view    INTEGER NOT NULL DEFAULT 1,
+    can_edit    INTEGER NOT NULL DEFAULT 0,
+    can_manage  INTEGER NOT NULL DEFAULT 0,
+    granted_by  INTEGER REFERENCES users(id),
+    created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(campaign_id, user_id)
+  )`,
 ];
 
 const IGNORABLE = [

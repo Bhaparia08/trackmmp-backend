@@ -93,7 +93,10 @@ router.post('/', (req, res, next) => {
             start_date = null, end_date = null, description = '',
             channel = 'all', allowed_devices = 'all',
             cap_monthly = 0, cap_redirect_url = '', conversion_hold_days = 0, featured = 0,
-            url_masking = 0, referrer_cloaking = 0 } = req.body;
+            url_masking = 0, referrer_cloaking = 0,
+            attribution_model = 'last_click', deep_link_url = '', ios_store_url = '',
+            android_store_url = '', deferred_deep_link = 0, skan_enabled = 0,
+            skan_conversion_schema = '{}' } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     // FIX #11 + #13: transaction for atomic seq_num; validate URL scheme
@@ -112,8 +115,10 @@ router.post('/', (req, res, next) => {
         destination_url, preview_url, postback_url, cap_daily, cap_total,
         allowed_countries, click_lookback_days, is_retargeting, visibility, tags, geo_fallback_url,
         start_date, end_date, description, channel, allowed_devices,
-        cap_monthly, cap_redirect_url, conversion_hold_days, featured, url_masking, referrer_cloaking, seq_num)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        cap_monthly, cap_redirect_url, conversion_hold_days, featured, url_masking, referrer_cloaking,
+        attribution_model, deep_link_url, ios_store_url, android_store_url, deferred_deep_link,
+        skan_enabled, skan_conversion_schema, seq_num)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
@@ -124,6 +129,9 @@ router.post('/', (req, res, next) => {
            channel||'all', allowed_devices||'all',
            cap_monthly||0, cap_redirect_url||'', conversion_hold_days||0, featured ? 1 : 0,
            url_masking ? 1 : 0, referrer_cloaking ? 1 : 0,
+           attribution_model||'last_click', deep_link_url||'', ios_store_url||'',
+           android_store_url||'', deferred_deep_link ? 1 : 0,
+           skan_enabled ? 1 : 0, skan_conversion_schema||'{}',
            nextSeq);
 
       return result.lastInsertRowid;
@@ -193,6 +201,11 @@ router.put('/:id', (req, res, next) => {
             cap_monthly, cap_redirect_url, conversion_hold_days, featured,
             url_masking, referrer_cloaking } = req.body;
 
+    const {
+      attribution_model, deep_link_url, ios_store_url, android_store_url,
+      deferred_deep_link, skan_enabled, skan_conversion_schema
+    } = req.body;
+
     db.prepare(`UPDATE campaigns SET
       name=COALESCE(?,name), advertiser_name=COALESCE(?,advertiser_name),
       advertiser_id=COALESCE(?,advertiser_id),
@@ -209,6 +222,11 @@ router.put('/:id', (req, res, next) => {
       cap_monthly=COALESCE(?,cap_monthly), cap_redirect_url=COALESCE(?,cap_redirect_url),
       conversion_hold_days=COALESCE(?,conversion_hold_days), featured=COALESCE(?,featured),
       url_masking=COALESCE(?,url_masking), referrer_cloaking=COALESCE(?,referrer_cloaking),
+      attribution_model=COALESCE(?,attribution_model),
+      deep_link_url=COALESCE(?,deep_link_url), ios_store_url=COALESCE(?,ios_store_url),
+      android_store_url=COALESCE(?,android_store_url),
+      deferred_deep_link=COALESCE(?,deferred_deep_link),
+      skan_enabled=COALESCE(?,skan_enabled), skan_conversion_schema=COALESCE(?,skan_conversion_schema),
       updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
@@ -223,6 +241,11 @@ router.put('/:id', (req, res, next) => {
            cap_monthly??null, cap_redirect_url!=null?cap_redirect_url:null,
            conversion_hold_days??null, featured!=null?+featured:null,
            url_masking!=null?+url_masking:null, referrer_cloaking!=null?+referrer_cloaking:null,
+           attribution_model||null,
+           deep_link_url!=null?deep_link_url:null, ios_store_url!=null?ios_store_url:null,
+           android_store_url!=null?android_store_url:null,
+           deferred_deep_link!=null?+deferred_deep_link:null,
+           skan_enabled!=null?+skan_enabled:null, skan_conversion_schema||null,
            c.id);
 
     if (Array.isArray(approved_publishers)) {
@@ -268,6 +291,8 @@ router.post('/:id/clone', (req, res, next) => {
           allowed_countries, click_lookback_days, is_retargeting, visibility, tags,
           geo_fallback_url, start_date, end_date, description, channel, allowed_devices,
           cap_monthly, cap_redirect_url, conversion_hold_days, featured,
+          attribution_model, deep_link_url, ios_store_url, android_store_url,
+          deferred_deep_link, skan_enabled, skan_conversion_schema,
           status, seq_num,
           source_credential_id, external_offer_id
         ) VALUES (
@@ -277,6 +302,7 @@ router.post('/:id/clone', (req, res, next) => {
           ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
           'active', ?,
           NULL, NULL
         )
@@ -288,6 +314,9 @@ router.post('/:id/clone', (req, res, next) => {
         c.geo_fallback_url || '', c.start_date, c.end_date, c.description || '',
         c.channel || 'all', c.allowed_devices || 'all',
         c.cap_monthly || 0, c.cap_redirect_url || '', c.conversion_hold_days || 0, c.featured || 0,
+        c.attribution_model || 'last_click', c.deep_link_url || '', c.ios_store_url || '',
+        c.android_store_url || '', c.deferred_deep_link || 0, c.skan_enabled || 0,
+        c.skan_conversion_schema || '{}',
         nextSeq,
       );
       return result.lastInsertRowid;
@@ -313,6 +342,53 @@ router.delete('/:id', (req, res, next) => {
     }
     db.prepare("UPDATE campaigns SET status='archived', updated_at=unixepoch() WHERE id=?").run(c.id);
     res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/campaigns/:id/costs — add a cost entry
+router.post('/:id/costs', (req, res, next) => {
+  try {
+    const c = db.prepare('SELECT id, user_id FROM campaigns WHERE id = ?').get(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Campaign not found' });
+    if (req.user.role !== 'admin' && req.user.role !== 'account_manager') {
+      return res.status(403).json({ error: 'Admin or AM only' });
+    }
+    const { date, amount, cost_type = 'media_buy', notes = '' } = req.body;
+    if (!date || amount == null) return res.status(400).json({ error: 'date and amount required' });
+
+    const result = db.prepare(`
+      INSERT INTO campaign_costs (campaign_id, user_id, date, amount, cost_type, notes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(c.id, req.user.id, date, +amount, cost_type, notes);
+    res.status(201).json({ id: result.lastInsertRowid, ok: true });
+  } catch (err) { next(err); }
+});
+
+// GET /api/campaigns/:id/costs
+router.get('/:id/costs', (req, res) => {
+  const c = db.prepare('SELECT id FROM campaigns WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Campaign not found' });
+  const rows = db.prepare(`
+    SELECT cc.*, u.name AS added_by
+    FROM campaign_costs cc LEFT JOIN users u ON u.id = cc.user_id
+    WHERE cc.campaign_id = ? ORDER BY cc.date DESC
+  `).all(c.id);
+
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const revenue = db.prepare(
+    "SELECT COALESCE(SUM(revenue),0) AS r FROM postbacks WHERE campaign_id = ? AND status = 'attributed'"
+  ).get(c.id).r;
+  res.json({ costs: rows, total_cost: +total.toFixed(2), total_revenue: +revenue.toFixed(2), roi_pct: total > 0 ? +(((revenue - total) / total) * 100).toFixed(1) : null });
+});
+
+// DELETE /api/campaigns/:id/costs/:cost_id
+router.delete('/:id/costs/:cost_id', (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'account_manager') {
+      return res.status(403).json({ error: 'Admin or AM only' });
+    }
+    db.prepare('DELETE FROM campaign_costs WHERE id = ? AND campaign_id = ?').run(req.params.cost_id, req.params.id);
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

@@ -97,6 +97,9 @@ app.use('/api/preview',        require('./routes/preview'));
 app.use('/api/impact',         require('./routes/impact'));
 app.use('/api/invoices',          require('./routes/invoices'));
 app.use('/api/insertion-orders',  require('./routes/insertionOrders'));
+app.use('/api/alerts',            require('./routes/alerts'));
+app.use('/skan',                  require('./routes/skan'));
+app.use('/api/permissions',       require('./routes/permissions'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
@@ -106,6 +109,22 @@ const { runAutomationRules } = require('./utils/automationEngine');
 setInterval(() => {
   try { runAutomationRules(); } catch (e) { console.error('[AutomationEngine]', e.message); }
 }, 60 * 1000);
+
+// ── Webhook Retry Worker — runs every 30 seconds ───────────────────────────
+const { processWebhookQueue, cleanupOldEntries } = require('./utils/webhookRetry');
+setInterval(async () => {
+  try { await processWebhookQueue(); } catch (e) { console.error('[WebhookRetry]', e.message); }
+}, 30 * 1000);
+// Daily cleanup of old delivered/failed entries
+setInterval(() => {
+  try { cleanupOldEntries(); } catch (e) { console.error('[WebhookCleanup]', e.message); }
+}, 24 * 60 * 60 * 1000);
+
+// ── Alert Engine — runs every 2 minutes ───────────────────────────────────
+const { runAlertChecks } = require('./utils/alertEngine');
+setInterval(() => {
+  try { runAlertChecks(io); } catch (e) { console.error('[AlertEngine]', e.message); }
+}, 2 * 60 * 1000);
 
 // ── In production, serve the built React frontend from Express ────────────────
 // Checks multiple candidate paths in priority order:

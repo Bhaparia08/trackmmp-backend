@@ -401,7 +401,66 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     const urlMasking      = !!campaign.url_masking;
     const referrerCloaking = !!campaign.referrer_cloaking;
 
-    // ── Plain redirect (no masking, no referrer stripping) ──────────────────
+    // ── Universal Deep Link Handling ─────────────────────────────────────────
+    // If the campaign has deep link URLs configured, attempt deep link first
+    // with a JS fallback to the app store after a short delay.
+    // Platform detection: use the already-parsed platform/os from device parser.
+    const hasDeepLink = campaign.deep_link_url && campaign.deep_link_url.trim().length > 0;
+
+    if (hasDeepLink) {
+      // Pick the right store fallback based on platform
+      const isIOS     = platform === 'ios' || /iphone|ipad|ipod/i.test(ua);
+      const isAndroid = platform === 'android' || /android/i.test(ua);
+
+      let deepLink = campaign.deep_link_url;
+      // Append click_id to deep link if not already there
+      if (!deepLink.includes(click_id)) {
+        const sep = deepLink.includes('?') ? '&' : '?';
+        deepLink = deepLink + sep + 'click_id=' + click_id;
+      }
+
+      // Store fallback: prefer platform-specific, then generic destination
+      let storeFallback = dest;
+      if (isIOS && campaign.ios_store_url) {
+        storeFallback = campaign.ios_store_url;
+      } else if (isAndroid && campaign.android_store_url) {
+        storeFallback = campaign.android_store_url;
+      }
+
+      // Build a deep link page that:
+      // 1. Tries to open the app via custom scheme / universal link
+      // 2. After 1.5s, redirects to store if app didn't open
+      const safeDeep  = JSON.stringify(deepLink);
+      const safeStore = JSON.stringify(storeFallback);
+      return res.send(`<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<title>Opening App...</title>
+<style>body{margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#94a3b8;font-size:14px;}</style>
+</head><body>
+<div>Opening app...</div>
+<script>
+(function(){
+  var deepLink=${safeDeep};
+  var storeFallback=${safeStore};
+  var timer;
+  // Hide fallback start — open deep link
+  window.location.href=deepLink;
+  // If app not installed, redirect to store after 1500ms
+  timer=setTimeout(function(){
+    window.location.replace(storeFallback);
+  },1500);
+  // If page regains focus quickly the app opened — cancel the timer
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden){clearTimeout(timer);}
+  });
+  window.addEventListener('pagehide',function(){clearTimeout(timer);});
+})();
+</script>
+</body></html>`);
+    }
+
+    // ── Plain redirect (no masking, no referrer stripping, no deep link) ──────
     if (!urlMasking && !referrerCloaking) {
       return res.redirect(302, dest);
     }

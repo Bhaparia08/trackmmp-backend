@@ -2,6 +2,7 @@ const db = require('../db/init');
 const fetch = require('node-fetch');
 const { macroReplace } = require('./macroReplace');
 const { nanoid16 } = require('./clickId');
+const { enqueueWebhook } = require('./webhookRetry');
 
 function logFraud(click, type, details, action = 'flagged') {
   try {
@@ -204,6 +205,91 @@ function handlePostback(params, ip, io) {
   `).get(ip, click.campaign_id, Math.floor(Date.now()/1000) - 600).n;
   if (recentClicks > 10) logFraud(click, 'click_flooding', { ip, count: recentClicks });
 
+  // ── Enhanced ML-style Fraud Checks ────────────────────────────────────────
+
+  // 1. Publisher install rate anomaly: if publisher CVR is far above campaign average
+  //    (>3x average) flag for review. This catches incentivized/junk traffic.
+  if (click.publisher_id && eventType === 'install') {
+    try {
+      const window24h = Math.floor(Date.now() / 1000) - 86400;
+      const pubStats = db.prepare(`
+        SELECT COUNT(DISTINCT CASE WHEN cl.status IN ('installed','converted') THEN cl.id END) AS installs,
+               COUNT(DISTINCT cl.id) AS clicks
+        FROM clicks cl
+        WHERE cl.publisher_id = ? AND cl.campaign_id = ? AND cl.created_at > ?
+      `).get(click.publisher_id, click.campaign_id, window24h);
+
+      const campStats = db.prepare(`
+        SELECT COUNT(DISTINCT CASE WHEN cl.status IN ('installed','converted') THEN cl.id END) AS installs,
+               COUNT(DISTINCT cl.id) AS clicks
+        FROM clicks cl
+        WHERE cl.campaign_id = ? AND cl.created_at > ?
+      `).get(click.campaign_id, window24h);
+
+      const pubCVR  = pubStats.clicks  > 10 ? pubStats.installs  / pubStats.clicks  : null;
+      const campCVR = campStats.clicks > 20 ? campStats.installs / campStats.clicks : null;
+
+      if (pubCVR !== null && campCVR !== null && campCVR > 0 && pubCVR > campCVR * 3) {
+        logFraud(click, 'install_rate_anomaly', {
+          publisher_id: click.publisher_id,
+          pub_cvr: +(pubCVR * 100).toFixed(2),
+          camp_cvr: +(campCVR * 100).toFixed(2),
+          ratio: +(pubCVR / campCVR).toFixed(2)
+        });
+      }
+    } catch {}
+  }
+
+  // 2. Device fingerprint registry — detect same device converting across many IPs
+  //    (indicates emulator farm / spoofed device IDs)
+  if (deviceId && eventType === 'install') {
+    try {
+      const existing = db.prepare('SELECT * FROM fraud_device_fingerprints WHERE fingerprint = ?').get(deviceId);
+      if (existing) {
+        const newHit = existing.hit_count + 1;
+        db.prepare(`UPDATE fraud_device_fingerprints SET hit_count=?, last_seen=unixepoch(), ip=? WHERE id=?`)
+          .run(newHit, ip, existing.id);
+        // If the same advertising_id has been seen 3+ times across different campaigns/IPs, flag it
+        if (newHit >= 3) {
+          logFraud(click, 'device_farm', {
+            advertising_id: deviceId, hit_count: newHit, previous_ip: existing.ip, current_ip: ip
+          });
+        }
+      } else {
+        db.prepare(`INSERT INTO fraud_device_fingerprints (fingerprint, ip, user_agent, campaign_id) VALUES (?,?,?,?)`)
+          .run(deviceId, ip, params.user_agent || null, click.campaign_id);
+      }
+    } catch {}
+  }
+
+  // 3. High-frequency installs from same sub-publisher (af_sub1) in 1 hour
+  if (click.af_sub1 && eventType === 'install') {
+    try {
+      const subInstalls = db.prepare(`
+        SELECT COUNT(*) AS n FROM clicks cl
+        JOIN postbacks pb ON pb.click_id = cl.click_id
+        WHERE cl.af_sub1 = ? AND cl.campaign_id = ? AND cl.created_at > ? AND pb.status = 'attributed'
+      `).get(click.af_sub1, click.campaign_id, Math.floor(Date.now()/1000) - 3600).n;
+      if (subInstalls > 50) {
+        logFraud(click, 'sub_publisher_spike', { af_sub1: click.af_sub1, installs_per_hour: subInstalls });
+      }
+    } catch {}
+  }
+
+  // 4. Zero-day install spike: more than 200 installs from same campaign in last 5 minutes
+  //    (indicates a bot burst — legitimate traffic doesn't do this)
+  if (eventType === 'install') {
+    try {
+      const recentInstalls = db.prepare(`
+        SELECT COUNT(*) AS n FROM postbacks
+        WHERE campaign_id = ? AND event_type = 'install' AND status = 'attributed' AND created_at > ?
+      `).get(click.campaign_id, Math.floor(Date.now()/1000) - 300).n;
+      if (recentInstalls > 200) {
+        logFraud(click, 'install_burst', { campaign_id: click.campaign_id, installs_5min: recentInstalls });
+      }
+    } catch {}
+  }
+
   // ── Goal Matching ──────────────────────────────────────────────────────────
   const goalEventName = event_name || eventType;
   let matchedGoal = db.prepare(
@@ -236,6 +322,35 @@ function handlePostback(params, ip, io) {
   const newStatus = eventType === 'install' ? 'installed' : 'converted';
   db.prepare("UPDATE clicks SET status = ? WHERE click_id = ?").run(newStatus, click.click_id);
 
+  // ── Multi-touch: record this click as a touch point ───────────────────────
+  if (deviceId && eventType === 'install') {
+    try {
+      // Count prior touch points for this device+campaign to determine order
+      const priorCount = db.prepare(
+        'SELECT COUNT(*) AS n FROM touch_points WHERE device_id = ? AND campaign_id = ?'
+      ).get(deviceId, click.campaign_id).n;
+      db.prepare(`INSERT INTO touch_points (device_id, campaign_id, publisher_id, click_id, touch_type, touch_order)
+        VALUES (?,?,?,?,?,?)`)
+        .run(deviceId, click.campaign_id, click.publisher_id||null, click.click_id, 'click', priorCount + 1);
+
+      // For linear attribution model: distribute credit equally among all touchpoints
+      if (campaign?.attribution_model === 'linear') {
+        const allTouches = db.prepare(
+          'SELECT publisher_id FROM touch_points WHERE device_id = ? AND campaign_id = ?'
+        ).all(deviceId, click.campaign_id);
+        if (allTouches.length > 1) {
+          const share = +(finalRevenue / allTouches.length).toFixed(4);
+          // Log linear distribution in fraud_log for auditability (non-blocking)
+          try {
+            db.prepare('INSERT INTO fraud_log (click_id, campaign_id, user_id, fraud_type, details, action) VALUES (?,?,?,?,?,?)')
+              .run(click.click_id, click.campaign_id, click.user_id, 'linear_attribution',
+                JSON.stringify({ touches: allTouches.length, share_per_touch: share, total: finalRevenue }), 'info');
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+
   // Upsert daily stats
   const statsCol = eventType === 'install' ? 'installs' : eventType === 'lead' ? 'leads' : 'conversions';
   db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, ${statsCol}, revenue)
@@ -266,15 +381,19 @@ function handlePostback(params, ip, io) {
     ip,
   };
 
-  // ── Fire outbound postbacks ───────────────────────────────────────────────
-  if (matchedGoal?.postback_url) fetch(macroReplace(matchedGoal.postback_url, macroData)).catch(() => {});
-  if (campaign?.postback_url)    fetch(macroReplace(campaign.postback_url, macroData)).catch(() => {});
+  // ── Fire outbound postbacks (via reliable retry queue) ───────────────────
+  if (matchedGoal?.postback_url) {
+    enqueueWebhook(macroReplace(matchedGoal.postback_url, macroData), 'goal', pbResult.lastInsertRowid);
+  }
+  if (campaign?.postback_url) {
+    enqueueWebhook(macroReplace(campaign.postback_url, macroData), 'postback', pbResult.lastInsertRowid);
+  }
 
   // ── Fire publisher global postback (if configured) ────────────────────────
   if (click.publisher_id) {
     const pub = db.prepare('SELECT global_postback_url FROM publishers WHERE id = ?').get(click.publisher_id);
     if (pub?.global_postback_url) {
-      fetch(macroReplace(pub.global_postback_url, macroData)).catch(() => {});
+      enqueueWebhook(macroReplace(pub.global_postback_url, macroData), 'publisher', pbResult.lastInsertRowid);
     }
   }
 

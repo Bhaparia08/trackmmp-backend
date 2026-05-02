@@ -340,4 +340,159 @@ router.get('/fraud-summary', (req, res) => {
   res.json(rows);
 });
 
+// GET /api/reports/cohort
+// Returns D0/D1/D3/D7/D14/D30 retention by install cohort week.
+// cohort_date = the date the user installed (grouped by week for volume)
+// d0..d30 = number of users who fired any in-app event on day N after install
+router.get('/cohort', (req, res) => {
+  const { from, to, campaign_id } = req.query;
+  const scope = userScope(req.user);
+
+  const conditions = [];
+  const values = [];
+  if (from) { conditions.push("date(datetime(cl.created_at,'unixepoch')) >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(datetime(cl.created_at,'unixepoch')) <= ?"); values.push(to); }
+  conditions.push(scope.clause === '1=1' ? '1=1' : 'cl.user_id IN (' + scope.params.map(() => '?').join(',') + ')');
+  values.push(...scope.params);
+  if (campaign_id) { conditions.push('cl.campaign_id = ?'); values.push(campaign_id); }
+
+  const where = conditions.join(' AND ');
+
+  // Get install cohorts grouped by week
+  const cohorts = db.prepare(`
+    SELECT
+      strftime('%Y-%W', datetime(cl.created_at,'unixepoch')) AS cohort_week,
+      date(datetime(cl.created_at,'unixepoch')) AS cohort_date,
+      COUNT(DISTINCT cl.advertising_id) AS installs
+    FROM clicks cl
+    WHERE cl.status IN ('installed','converted')
+      AND cl.advertising_id IS NOT NULL
+      AND ${where}
+    GROUP BY cohort_week
+    ORDER BY cohort_week ASC
+    LIMIT 20
+  `).all(...values);
+
+  // For each cohort, compute how many distinct devices had a postback on day N
+  const result = cohorts.map(cohort => {
+    const baseDate = cohort.cohort_date;
+    const days = [0, 1, 3, 7, 14, 30];
+    const retention = {};
+
+    for (const d of days) {
+      const key = `d${d}`;
+      const dayDate = new Date(baseDate);
+      dayDate.setDate(dayDate.getDate() + d);
+      const dayStr = dayDate.toISOString().slice(0, 10);
+
+      const row = db.prepare(`
+        SELECT COUNT(DISTINCT pb.advertising_id) AS retained
+        FROM postbacks pb
+        JOIN clicks cl ON cl.click_id = pb.click_id
+        WHERE pb.advertising_id IS NOT NULL
+          AND pb.status = 'attributed'
+          AND date(datetime(cl.created_at,'unixepoch')) = ?
+          AND date(datetime(pb.created_at,'unixepoch')) = ?
+          ${campaign_id ? 'AND pb.campaign_id = ?' : ''}
+      `).get(baseDate, dayStr, ...(campaign_id ? [campaign_id] : []));
+
+      retention[key] = row.retained || 0;
+    }
+
+    return {
+      cohort_week: cohort.cohort_week,
+      cohort_date: baseDate,
+      installs: cohort.installs,
+      ...retention,
+      // Retention rates as percentages
+      d0_pct:  cohort.installs > 0 ? +((retention.d0  / cohort.installs) * 100).toFixed(1) : 0,
+      d1_pct:  cohort.installs > 0 ? +((retention.d1  / cohort.installs) * 100).toFixed(1) : 0,
+      d3_pct:  cohort.installs > 0 ? +((retention.d3  / cohort.installs) * 100).toFixed(1) : 0,
+      d7_pct:  cohort.installs > 0 ? +((retention.d7  / cohort.installs) * 100).toFixed(1) : 0,
+      d14_pct: cohort.installs > 0 ? +((retention.d14 / cohort.installs) * 100).toFixed(1) : 0,
+      d30_pct: cohort.installs > 0 ? +((retention.d30 / cohort.installs) * 100).toFixed(1) : 0,
+    };
+  });
+
+  res.json(result);
+});
+
+// GET /api/reports/attribution-model
+// Returns touchpoint attribution breakdown for multi-touch campaigns
+router.get('/attribution-model', (req, res) => {
+  const { from, to, campaign_id } = req.query;
+  const scope = userScope(req.user);
+
+  const conditions = [];
+  const values = [];
+  if (from) { conditions.push("date(datetime(tp.created_at,'unixepoch')) >= ?"); values.push(from); }
+  if (to)   { conditions.push("date(datetime(tp.created_at,'unixepoch')) <= ?"); values.push(to); }
+  conditions.push(scope.clause === '1=1' ? '1=1' : 'c.user_id IN (' + scope.params.map(() => '?').join(',') + ')');
+  values.push(...scope.params);
+  if (campaign_id) { conditions.push('tp.campaign_id = ?'); values.push(campaign_id); }
+
+  const where = conditions.join(' AND ');
+
+  const rows = db.prepare(`
+    SELECT
+      p.name AS publisher, p.id AS publisher_id,
+      COUNT(DISTINCT tp.device_id) AS total_touches,
+      COUNT(DISTINCT CASE WHEN tp.touch_order = 1 THEN tp.device_id END) AS first_touch,
+      COUNT(DISTINCT CASE WHEN
+        tp.touch_order = (SELECT MAX(tp2.touch_order) FROM touch_points tp2 WHERE tp2.device_id = tp.device_id AND tp2.campaign_id = tp.campaign_id)
+        THEN tp.device_id END) AS last_touch
+    FROM touch_points tp
+    LEFT JOIN publishers p ON p.id = tp.publisher_id
+    JOIN campaigns c ON c.id = tp.campaign_id
+    WHERE ${where}
+    GROUP BY tp.publisher_id
+    ORDER BY total_touches DESC
+  `).all(...values);
+
+  res.json(rows);
+});
+
+// GET /api/reports/cost-roi
+// Returns cost vs revenue and ROI per campaign
+router.get('/cost-roi', (req, res) => {
+  const { from, to } = req.query;
+  const scope = userScope(req.user);
+
+  const costDateFilter = [];
+  const revDateFilter  = [];
+  const costVals = [...scope.params];
+  const revVals  = [...scope.params];
+
+  const scopeClause = scope.clause === '1=1' ? '' : ' AND cc.user_id IN (' + scope.params.map(() => '?').join(',') + ')';
+  if (from) { costDateFilter.push('cc.date >= ?'); costVals.push(from); }
+  if (to)   { costDateFilter.push('cc.date <= ?'); costVals.push(to); }
+
+  const costWhere = costDateFilter.length > 0 ? costDateFilter.join(' AND ') + scopeClause : ('1=1' + scopeClause);
+
+  const rows = db.prepare(`
+    SELECT c.id AS campaign_id, c.name AS campaign,
+      COALESCE(SUM(cc.amount),0) AS total_cost,
+      COALESCE((
+        SELECT SUM(pb.revenue) FROM postbacks pb
+        WHERE pb.campaign_id = c.id AND pb.status = 'attributed'
+        ${from ? "AND date(datetime(pb.created_at,'unixepoch')) >= '" + from + "'" : ''}
+        ${to   ? "AND date(datetime(pb.created_at,'unixepoch')) <= '" + to + "'" : ''}
+      ),0) AS total_revenue
+    FROM campaigns c
+    LEFT JOIN campaign_costs cc ON cc.campaign_id = c.id
+    WHERE ${scope.clause === '1=1' ? '1=1' : 'c.user_id IN (' + scope.params.map(() => '?').join(',') + ')'}
+    GROUP BY c.id
+    HAVING total_cost > 0 OR total_revenue > 0
+    ORDER BY total_revenue DESC
+  `).all(...scope.params);
+
+  const enriched = rows.map(r => ({
+    ...r,
+    profit: +(r.total_revenue - r.total_cost).toFixed(2),
+    roi_pct: r.total_cost > 0 ? +(((r.total_revenue - r.total_cost) / r.total_cost) * 100).toFixed(1) : null,
+  }));
+
+  res.json(enriched);
+});
+
 module.exports = router;
