@@ -183,4 +183,42 @@ router.put('/:id/reject', requireRole('admin', 'account_manager'), (req, res, ne
   } catch (err) { next(err); }
 });
 
+// Admin: bulk approve / reject / grant / revoke
+// Body: { action: 'approve'|'reject'|'grant'|'revoke', campaign_id, publisher_ids: [num,...] }
+router.post('/bulk', requireRole('admin', 'account_manager'), (req, res, next) => {
+  try {
+    const ownerId = getOwnerId(req);
+    const { action, campaign_id, publisher_ids } = req.body;
+    if (!action || !campaign_id || !Array.isArray(publisher_ids) || publisher_ids.length === 0) {
+      return res.status(400).json({ error: 'action, campaign_id and publisher_ids[] required' });
+    }
+    if (!['approve', 'reject', 'grant', 'revoke'].includes(action)) {
+      return res.status(400).json({ error: 'action must be approve|reject|grant|revoke' });
+    }
+
+    const campaign = db.prepare('SELECT id, user_id FROM campaigns WHERE id = ?').get(campaign_id);
+    if (!campaign || campaign.user_id !== ownerId) return res.status(404).json({ error: 'Campaign not found' });
+
+    const newStatus = (action === 'approve' || action === 'grant') ? 'approved' : 'rejected';
+    let affected = 0;
+
+    const upsert = db.prepare(`
+      INSERT INTO campaign_access_requests (campaign_id, publisher_id, user_id, status, reviewed_by, reviewed_at)
+      VALUES (?, ?, ?, ?, ?, unixepoch())
+      ON CONFLICT(campaign_id, publisher_id) DO UPDATE SET
+        status = excluded.status, reviewed_by = excluded.reviewed_by, reviewed_at = unixepoch()
+    `);
+
+    const bulkOp = db.transaction(() => {
+      for (const pubId of publisher_ids) {
+        upsert.run(campaign.id, pubId, ownerId, newStatus, req.user.id);
+        affected++;
+      }
+    });
+    bulkOp();
+
+    res.json({ ok: true, affected, action, new_status: newStatus });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

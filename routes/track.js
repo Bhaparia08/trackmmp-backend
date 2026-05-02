@@ -57,15 +57,18 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       }
     }
 
-    // Support all major click ID param names across all platforms:
-    //   clickid      — standard / AppsFlyer / Adjust
-    //   click_id     — generic
-    //   irclickid    — Impact Radius
-    //   aff_click_id — HasOffers / TUNE / Affiliate
-    //   u1           — Rakuten LinkShare
-    // Note: aff_sub is intentionally excluded — it is a sub-parameter in HasOffers/Everflow,
-    // not a click ID, and storing it here would break attribution.
-    const publisher_click_id = q.clickid || q.click_id || q.irclickid || q.aff_click_id || q.u1 || null;
+    // Support all major click ID param names across all platforms.
+    // Order matters: more specific / unambiguous names first, generic fallbacks last.
+    //   clickid        — standard / AppsFlyer / Adjust (most common)
+    //   click_id       — generic
+    //   transaction_id — TUNE / HasOffers / Trackier / Everflow
+    //   irclickid      — Impact Radius
+    //   pub_click_id   — Swaarm
+    //   aff_click_id   — HasOffers / TUNE alternative
+    //   aff_sub        — HasOffers sub passthrough (used as click ID by some advertisers)
+    //   subid          — Admitad
+    //   u1             — Rakuten LinkShare
+    const publisher_click_id = q.clickid || q.click_id || q.transaction_id || q.irclickid || q.pub_click_id || q.aff_click_id || q.aff_sub || q.subid || q.u1 || null;
 
     // Support Adjust's gps_adid, idfa, adid
     const advertising_id = q.advertising_id || q.gps_adid || q.idfa || q.adid || null;
@@ -323,6 +326,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       // Our click IDs
       '{click_id}':           click_id,
       '{our_click_id}':       click_id,
+      '{transaction_id}':     click_id,   // alias — TUNE/HasOffers use transaction_id as the param name
       // Publisher's own click ID (sent in clickid= param, returned in postbacks)
       '{publisher_click_id}': publisher_click_id || '',
       '{clickid}':            publisher_click_id || '',
@@ -394,7 +398,56 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       return res.status(400).send('Invalid destination URL. Contact your account manager.');
     }
 
-    return res.redirect(302, dest);
+    const urlMasking      = !!campaign.url_masking;
+    const referrerCloaking = !!campaign.referrer_cloaking;
+
+    // ── Plain redirect (no masking, no referrer stripping) ──────────────────
+    if (!urlMasking && !referrerCloaking) {
+      return res.redirect(302, dest);
+    }
+
+    // ── Referrer cloaking only (strip Referer, no URL masking) ──────────────
+    // JS redirect with no-referrer meta: destination never sees our domain as referrer.
+    // URL will change in the address bar after JS fires (standard for app store links).
+    if (referrerCloaking && !urlMasking) {
+      const safeDest = dest.replace(/'/g, '%27');
+      return res.send(`<!DOCTYPE html><html><head>
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="refresh" content="0;url='${safeDest}'">
+<style>body{margin:0;background:#fff}</style>
+</head><body>
+<script>try{window.location.replace(${JSON.stringify(dest)})}catch(e){window.location.href=${JSON.stringify(dest)}}</script>
+</body></html>`);
+    }
+
+    // ── URL masking (+ optional referrer cloaking) ────────────────────────
+    // Detect if destination is an app store link — iframes don't work for these.
+    // App store links get JS redirect (URL changes but referrer is stripped).
+    // Web destinations get iframe (our domain stays in address bar the whole time).
+    const isAppStore = /apps\.apple\.com|play\.google\.com|market:\/\/|itms-apps:\/\//i.test(dest);
+
+    if (isAppStore) {
+      // App store: can't iframe — fall back to JS redirect with referrer stripped
+      const safeDest = dest.replace(/'/g, '%27');
+      return res.send(`<!DOCTYPE html><html><head>
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="refresh" content="0;url='${safeDest}'">
+<style>body{margin:0;background:#fff}</style>
+</head><body>
+<script>try{window.location.replace(${JSON.stringify(dest)})}catch(e){window.location.href=${JSON.stringify(dest)}}</script>
+</body></html>`);
+    }
+
+    // Web destination: iframe keeps our domain in address bar.
+    // referrer_cloaking meta tag prevents the iframe from leaking our origin.
+    const referrerMeta = referrerCloaking ? '<meta name="referrer" content="no-referrer">' : '';
+    return res.send(`<!DOCTYPE html><html><head>
+${referrerMeta}
+<style>*{margin:0;padding:0;border:0}html,body{width:100%;height:100%;overflow:hidden}
+iframe{position:fixed;top:0;left:0;width:100%;height:100%;border:none}</style>
+</head><body>
+<iframe src=${JSON.stringify(dest)} sandbox="allow-scripts allow-forms allow-same-origin allow-top-navigation allow-popups" allowfullscreen></iframe>
+</body></html>`);
   } catch (err) { next(err); }
 });
 

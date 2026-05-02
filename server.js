@@ -86,6 +86,7 @@ app.use('/api/campaigns/:campaign_id/landing-pages',  require('./routes/landingP
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/publisher', require('./routes/publisher'));
 app.use('/api/am', require('./routes/am'));
+app.use('/api/attendance', require('./routes/attendance'));
 app.use('/api/apikeys', require('./routes/apikeys'));
 app.use('/api/v1', require('./routes/v1'));
 app.use('/api/integrations', require('./routes/integrations'));

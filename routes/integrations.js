@@ -161,7 +161,7 @@ function toOurMacros(url, platform, options = {}) {
       tune:      'transaction_id={click_id}',
       cityads:   'click_id={click_id}',
       appsflyer: 'clickid={click_id}',
-      swaarm:    'sub1={click_id}',
+      swaarm:    'pub_click_id={click_id}',
       admitad:   'subid={click_id}',
     };
     const param = clickIdParams[platform];

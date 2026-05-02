@@ -185,6 +185,36 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN cap_redirect_url TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE campaigns ADD COLUMN conversion_hold_days INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE campaigns ADD COLUMN featured INTEGER NOT NULL DEFAULT 0`,
+  // URL masking: keep our domain in address bar (iframe for web, JS redirect for app stores)
+  `ALTER TABLE campaigns ADD COLUMN url_masking INTEGER NOT NULL DEFAULT 0`,
+  // Referrer cloaking: strip Referer header so destination can't see our tracking domain
+  `ALTER TABLE campaigns ADD COLUMN referrer_cloaking INTEGER NOT NULL DEFAULT 0`,
+
+  // ── Attendance system ─────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS attendance (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type            TEXT    NOT NULL CHECK(type IN ('check_in','check_out')),
+    lat             REAL,
+    lng             REAL,
+    address         TEXT,
+    ip              TEXT,
+    biometric_verified INTEGER NOT NULL DEFAULT 0,
+    note            TEXT,
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_attendance_user_date ON attendance(user_id, created_at)`,
+
+  // WebAuthn biometric credentials per AM user
+  `CREATE TABLE IF NOT EXISTS am_biometric_credentials (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    credential_id   TEXT    NOT NULL UNIQUE,
+    public_key      TEXT    NOT NULL,
+    counter         INTEGER NOT NULL DEFAULT 0,
+    device_name     TEXT,
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
 
   // ── Advertiser legal entity fields ───────────────────────────────────────
   `ALTER TABLE users ADD COLUMN legal_name TEXT`,
@@ -459,6 +489,9 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
         if (u.includes('.eflow.team') || u.includes('everflow'))              return 'transaction_id';
         if (u.includes('hasoffers.com') || u.includes('.go2cloud.org') ||
             u.includes('.go2jump.org')  || u.includes('tune.com'))            return 'transaction_id';
+        if (u.includes('trackier.com')  || u.includes('.trackier.'))         return 'transaction_id';
+        if (u.includes('affise.com')    || u.includes('.afftrack.com') ||
+            u.includes('affise'))                                              return 'clickid';
         if (u.includes('impact.com') || u.includes('impactradius') ||
             u.includes('.sjv.io')    || u.includes('.pxf.io') ||
             u.includes('.7eer.net'))                                           return 'irclickid';
@@ -510,6 +543,9 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
         if (u.includes('.eflow.team')    || u.includes('everflow'))           return 'transaction_id';
         if (u.includes('hasoffers.com') || u.includes('.go2cloud.org') ||
             u.includes('.go2jump.org')  || u.includes('tune.com'))            return 'transaction_id';
+        if (u.includes('trackier.com')  || u.includes('.trackier.'))         return 'transaction_id';
+        if (u.includes('affise.com')    || u.includes('.afftrack.com') ||
+            u.includes('affise'))                                              return 'clickid';
         if (u.includes('impact.com')    || u.includes('impactradius') ||
             u.includes('.sjv.io')       || u.includes('.pxf.io') ||
             u.includes('.7eer.net'))                                           return 'irclickid';

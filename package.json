@@ -8,6 +8,7 @@
     "build": "npm rebuild better-sqlite3"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^13.3.0",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^9.4.3",
     "cors": "^2.8.5",

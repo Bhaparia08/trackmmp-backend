@@ -136,7 +136,12 @@ router.get('/users', requireAdmin, (req, res) => {
     LEFT JOIN publishers p ON p.publisher_user_id = u.id
     WHERE u.role NOT IN ('admin','account_manager')`;
   const params = [];
-  if (role) { query += ' AND u.role = ?'; params.push(role); }
+  if (role === 'admin' && req.user.email === 'integration@apogeemobi.com') {
+    // Super-admin requesting admin list — override the exclusion filter
+    query = query.replace("WHERE u.role NOT IN ('admin','account_manager')", "WHERE u.role = 'admin'");
+  } else if (role) {
+    query += ' AND u.role = ?'; params.push(role);
+  }
   query += ' ORDER BY u.created_at DESC';
   const rows = db.prepare(query).all(...params);
 

@@ -35,6 +35,9 @@ function handlePostback(params, ip, io) {
     click_id: rawClickId,
     clickid: rawPublisherCid,
     irclickid, aff_click_id, transaction_id,
+    // Platform-specific echo params: the advertiser's platform sends our click_id
+    // back under their own param name (e.g. Admitad→subid, HasOffers alt→aff_sub, Rakuten→u1)
+    subid, aff_sub, u1,
     payout = 0,
     event = 'install',
     event_name,
@@ -47,18 +50,27 @@ function handlePostback(params, ip, io) {
   const eventType = event || 'install';
   const deviceId  = advertising_id || gps_adid || gaid || idfa || null;
 
-  // transaction_id is our primary click ID (advertiser passes it back after receiving
-  // it via {click_id} macro in the destination URL). Treat it the same as click_id.
-  const primaryClickId = rawClickId || transaction_id || null;
+  // primaryClickId: our platform click ID echoed back by the advertiser platform.
+  // Checked in order of specificity — most unambiguous param names first.
+  // transaction_id = TUNE/HasOffers/Trackier standard
+  // subid          = Admitad standard
+  // aff_sub        = HasOffers sub1 used as click ID by some advertisers
+  // u1             = Rakuten LinkShare
+  const primaryClickId = rawClickId || transaction_id || subid || aff_sub || u1 || null;
   const pubClickId     = rawPublisherCid || irclickid || aff_click_id || null;
 
   // ── Attribution ────────────────────────────────────────────────────────────
-  // 1. Try our platform click_id (or transaction_id which is the same thing)
-  // 2. Fall back to publisher's own click_id (secondary key)
+  // 1. Primary: click_id / transaction_id / subid / aff_sub / u1
+  // 2. clickid-as-primary: Affise fires postback with clickid=OUR_CLICK_ID —
+  //    try it as a click_id lookup before falling back to publisher_click_id
+  // 3. Secondary: publisher's own click_id (publisher_click_id column)
   let click = null;
   let isViewThrough = false;
 
   if (primaryClickId) click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(primaryClickId);
+  // Affise (and some Adjust integrations) echo our click_id back in the 'clickid' param.
+  // Try it as a primary click_id lookup before using it as publisher secondary.
+  if (!click && rawPublisherCid) click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(rawPublisherCid);
   if (!click && pubClickId) click = db.prepare('SELECT * FROM clicks WHERE publisher_click_id = ?').get(pubClickId);
 
   // Validate security_token against users.postback_token (account-level token)

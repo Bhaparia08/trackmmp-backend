@@ -7,6 +7,7 @@ function macroReplace(url, data) {
   const map = {
     // ── Core / Universal ─────────────────────────────────────────────────────
     '{click_id}':           data.publisher_click_id || data.click_id || '',
+    '{clickid}':            data.publisher_click_id || data.click_id || '',  // Affise publisher postback alias
     '{transaction_id}':     data.click_id || data.publisher_click_id || '',
     '{our_click_id}':       data.click_id || '',
     '{payout}':             String(data.payout || '0'),

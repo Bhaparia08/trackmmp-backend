@@ -201,7 +201,14 @@ router.delete('/adv-credentials/:id', (req, res, next) => {
       const advIds = getAMAdvertiserIds(req.user.id);
       if (row.advertiser_id && !advIds.includes(row.advertiser_id)) return res.status(403).json({ error: 'Advertiser not assigned to you' });
     }
-    db.prepare('DELETE FROM advertiser_api_credentials WHERE id = ?').run(row.id);
+    // NULL out FK references first, then delete — both in one transaction
+    // defer_foreign_keys must be set BEFORE the transaction starts in better-sqlite3
+    db.pragma('defer_foreign_keys = ON');
+    const deleteWithCascade = db.transaction((credId) => {
+      db.prepare('UPDATE campaigns SET source_credential_id = NULL WHERE source_credential_id = ?').run(credId);
+      db.prepare('DELETE FROM advertiser_api_credentials WHERE id = ?').run(credId);
+    });
+    deleteWithCascade(row.id);
     res.json({ success: true });
   } catch (err) { next(err); }
 });

@@ -32,15 +32,32 @@ function normalise(raw) {
     // Device IDs
     advertising_id: raw.advertising_id || raw.gaid || raw.gps_adid || null,
     // Goal / event
+    // goal_value is Trackier's event name param (e.g. 'install', 'purchase', 'lead', 'registration')
+    // If goal_value matches a known event type, use it directly so stats columns and
+    // duplicate checks work correctly. Unknown goal values become event_type='custom'.
     event_name: raw.goal_value || raw.event_name || null,
-    event: raw.goal_value ? (raw.event || 'custom') : (raw.event || 'install'),
+    event: raw.event || (() => {
+      if (!raw.goal_value) return 'install';
+      const gv = raw.goal_value.toLowerCase();
+      if (gv === 'install' || gv === 'install_approved') return 'install';
+      if (gv === 'lead')                                 return 'lead';
+      if (gv === 'purchase' || gv === 'sale')            return 'purchase';
+      if (gv === 're_engagement' || gv === 'reattribution') return 're_engagement';
+      return 'custom';
+    })(),
     // Primary click ID — our platform's click_id returned by any MMP:
     //   click_id       — generic / standard
     //   transaction_id — Trackier / HasOffers / generic
+    //   clickid        — standard alias (AppsFlyer / Adjust / generic) — must be in primary chain
+    //                    so dest-URL flow (transaction_id={click_id} → clickid=OUR_ID postback)
+    //                    attributes by click_id lookup, not publisher_click_id lookup
     //   irclickid      — Impact Radius (we inject our click_id into irclickid in the dest URL)
     //   subid          — Admitad (we inject our click_id into subid in the dest URL)
+    //   pub_click_id   — Swaarm (we inject our click_id into pub_click_id in the dest URL)
     //   aff_click_id   — HasOffers/TUNE alternative
-    click_id: raw.click_id || raw.transaction_id || raw.irclickid || raw.subid || raw.aff_click_id || null,
+    //   aff_sub        — some HasOffers advertisers use aff_sub as click ID passthrough
+    //                    (dest URL: aff_sub={click_id} → postback: aff_sub=OUR_ID)
+    click_id: raw.click_id || raw.transaction_id || raw.clickid || raw.irclickid || raw.subid || raw.pub_click_id || raw.aff_click_id || raw.aff_sub || null,
     transaction_id: raw.transaction_id || raw.click_id || null,
     // Publisher's own click ID for secondary attribution:
     //   clickid       — standard / AppsFlyer / Adjust

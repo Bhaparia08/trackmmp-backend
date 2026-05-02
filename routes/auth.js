@@ -307,6 +307,31 @@ router.post('/reset-password', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/create-admin  — create additional admin accounts (super-admin only)
+// Only integration@apogeemobi.com can call this. New admin starts with a fresh user_id (isolated data).
+router.post('/create-admin', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.email !== ADMIN_EMAIL) {
+      return res.status(403).json({ error: 'Only the super-admin can create admin accounts' });
+    }
+    const { email, password, name, company_name } = req.body;
+    if (!email || !password || !name) return res.status(400).json({ error: 'email, password and name are required' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existing) return res.status(409).json({ error: 'Email already registered' });
+
+    const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    const nextSeq = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n);
+    const result = db.prepare(
+      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified, created_by, seq_num) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'admin', newPostbackToken(), req.user.id, nextSeq);
+
+    const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(user);
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/me
 router.get('/me', requireAuth, (req, res) => {
   const user = db.prepare(`

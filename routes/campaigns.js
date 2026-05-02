@@ -92,7 +92,8 @@ router.post('/', (req, res, next) => {
             geo_fallback_url = '',
             start_date = null, end_date = null, description = '',
             channel = 'all', allowed_devices = 'all',
-            cap_monthly = 0, cap_redirect_url = '', conversion_hold_days = 0, featured = 0 } = req.body;
+            cap_monthly = 0, cap_redirect_url = '', conversion_hold_days = 0, featured = 0,
+            url_masking = 0, referrer_cloaking = 0 } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     // FIX #11 + #13: transaction for atomic seq_num; validate URL scheme
@@ -111,8 +112,8 @@ router.post('/', (req, res, next) => {
         destination_url, preview_url, postback_url, cap_daily, cap_total,
         allowed_countries, click_lookback_days, is_retargeting, visibility, tags, geo_fallback_url,
         start_date, end_date, description, channel, allowed_devices,
-        cap_monthly, cap_redirect_url, conversion_hold_days, featured, seq_num)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        cap_monthly, cap_redirect_url, conversion_hold_days, featured, url_masking, referrer_cloaking, seq_num)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
@@ -122,6 +123,7 @@ router.post('/', (req, res, next) => {
            start_date||null, end_date||null, description||'',
            channel||'all', allowed_devices||'all',
            cap_monthly||0, cap_redirect_url||'', conversion_hold_days||0, featured ? 1 : 0,
+           url_masking ? 1 : 0, referrer_cloaking ? 1 : 0,
            nextSeq);
 
       return result.lastInsertRowid;
@@ -188,7 +190,8 @@ router.put('/:id', (req, res, next) => {
             status, cap_daily, cap_total, allowed_countries, click_lookback_days,
             is_retargeting, visibility, approved_publishers, tags, geo_fallback_url,
             start_date, end_date, description, channel, allowed_devices,
-            cap_monthly, cap_redirect_url, conversion_hold_days, featured } = req.body;
+            cap_monthly, cap_redirect_url, conversion_hold_days, featured,
+            url_masking, referrer_cloaking } = req.body;
 
     db.prepare(`UPDATE campaigns SET
       name=COALESCE(?,name), advertiser_name=COALESCE(?,advertiser_name),
@@ -205,6 +208,7 @@ router.put('/:id', (req, res, next) => {
       allowed_devices=COALESCE(?,allowed_devices),
       cap_monthly=COALESCE(?,cap_monthly), cap_redirect_url=COALESCE(?,cap_redirect_url),
       conversion_hold_days=COALESCE(?,conversion_hold_days), featured=COALESCE(?,featured),
+      url_masking=COALESCE(?,url_masking), referrer_cloaking=COALESCE(?,referrer_cloaking),
       updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
@@ -218,6 +222,7 @@ router.put('/:id', (req, res, next) => {
            description!=null?description:null, channel||null, allowed_devices||null,
            cap_monthly??null, cap_redirect_url!=null?cap_redirect_url:null,
            conversion_hold_days??null, featured!=null?+featured:null,
+           url_masking!=null?+url_masking:null, referrer_cloaking!=null?+referrer_cloaking:null,
            c.id);
 
     if (Array.isArray(approved_publishers)) {
