@@ -126,7 +126,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
           // Block same IP converting more than N times per day on same campaign
           const maxHits = cfg.max_hits || 3;
           const ipCount = db.prepare(
-            "SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND ip = ? AND date(created_at,'unixepoch')=date('now','utc')"
+            "SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND ip = ? AND date(created_at,'unixepoch')=date('now')"
           ).get(campaign.id, ip)?.n || 0;
           if (ipCount >= maxHits) triggered = true;
         } else if (rule.rule_type === 'blocked_country') {
@@ -143,10 +143,10 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
             const minClicks = cfg.min_clicks || 20;
             const maxCvr   = cfg.max_cvr_pct || 80;
             const pubClicks = db.prepare(
-              "SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND date(created_at,'unixepoch')=date('now','utc')"
+              "SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND date(created_at,'unixepoch')=date('now')"
             ).get(campaign.id, publisher_id)?.n || 0;
             const pubConvs  = db.prepare(
-              "SELECT COUNT(*) as n FROM postbacks WHERE campaign_id=? AND status='attributed' AND date(created_at,'unixepoch')=date('now','utc') AND click_id IN (SELECT click_id FROM clicks WHERE publisher_id=?)"
+              "SELECT COUNT(*) as n FROM postbacks WHERE campaign_id=? AND status='attributed' AND date(created_at,'unixepoch')=date('now') AND click_id IN (SELECT click_id FROM clicks WHERE publisher_id=?)"
             ).get(campaign.id, publisher_id)?.n || 0;
             if (pubClicks >= minClicks && pubConvs / pubClicks * 100 >= maxCvr) triggered = true;
           }
@@ -182,7 +182,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
         // Original click-count-based caps
         if (campaign.cap_daily > 0 || campaign.cap_monthly > 0 || campaign.cap_total > 0) {
           const todayClicks = campaign.cap_daily > 0
-            ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND date(created_at,'unixepoch') = date('now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
+            ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND date(created_at,'unixepoch') = date('now') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
             : 0;
           const monthClicks = campaign.cap_monthly > 0
             ? (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id = ? AND strftime('%Y-%m', created_at,'unixepoch') = strftime('%Y-%m','now','utc') AND status != 'geo_blocked'").get(campaign.id)?.n || 0)
@@ -199,7 +199,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
         // Payout-based caps: check sum of payout sent today / this month
         if (campaign.cap_daily_payout > 0 || campaign.cap_monthly_payout > 0) {
           const todayPayout = campaign.cap_daily_payout > 0
-            ? (db.prepare("SELECT COALESCE(SUM(payout),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND date(created_at,'unixepoch')=date('now','utc')").get(campaign.id)?.s || 0)
+            ? (db.prepare("SELECT COALESCE(SUM(payout),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND date(created_at,'unixepoch')=date('now')").get(campaign.id)?.s || 0)
             : 0;
           const monthPayout = campaign.cap_monthly_payout > 0
             ? (db.prepare("SELECT COALESCE(SUM(payout),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id)?.s || 0)
@@ -211,7 +211,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
         // Revenue-based caps: check sum of revenue received
         if (campaign.cap_daily_payout > 0 || campaign.cap_monthly_payout > 0) {
           const todayRev = campaign.cap_daily_payout > 0
-            ? (db.prepare("SELECT COALESCE(SUM(revenue),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND date(created_at,'unixepoch')=date('now','utc')").get(campaign.id)?.s || 0)
+            ? (db.prepare("SELECT COALESCE(SUM(revenue),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND date(created_at,'unixepoch')=date('now')").get(campaign.id)?.s || 0)
             : 0;
           const monthRev = campaign.cap_monthly_payout > 0
             ? (db.prepare("SELECT COALESCE(SUM(revenue),0) as s FROM postbacks WHERE campaign_id = ? AND status='attributed' AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id)?.s || 0)
@@ -232,7 +232,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
         const pubCap = db.prepare('SELECT * FROM publisher_caps WHERE campaign_id = ? AND publisher_id = ?').get(campaign.id, publisher_id);
         if (pubCap) {
           const pubCapHit =
-            (pubCap.cap_daily > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND date(created_at,'unixepoch')=date('now','utc')").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_daily) ||
+            (pubCap.cap_daily > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND date(created_at,'unixepoch')=date('now')").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_daily) ||
             (pubCap.cap_monthly > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=? AND strftime('%Y-%m',created_at,'unixepoch')=strftime('%Y-%m','now','utc')").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_monthly) ||
             (pubCap.cap_total > 0 && (db.prepare("SELECT COUNT(*) as n FROM clicks WHERE campaign_id=? AND publisher_id=?").get(campaign.id, publisher_id)?.n || 0) >= pubCap.cap_total);
 
@@ -299,7 +299,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
 
     // Daily stats upsert
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
-      VALUES (?,?,?,?,date('now','utc'),1)
+      VALUES (?,?,?,?,date('now'),1)
       ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
       DO UPDATE SET clicks = clicks + 1`)
       .run(campaign.user_id, campaign.app_id||0, campaign.id, publisher_id||0);
@@ -534,7 +534,7 @@ router.get('/smart/:token', clickLimiter, async (req, res, next) => {
            sl.id);
 
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
-      VALUES (?,?,?,?,date('now','utc'),1)
+      VALUES (?,?,?,?,date('now'),1)
       ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
       DO UPDATE SET clicks = clicks + 1`)
       .run(selected.user_id, selected.app_id||0, selected.campaign_id, publisher_id||0);
@@ -595,7 +595,7 @@ router.get('/imp/:campaign_token', impLimiter, async (req, res, next) => {
 
       // Upsert impression count into daily_stats
       db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, impressions)
-        VALUES (?,?,?,?,date('now','utc'),1)
+        VALUES (?,?,?,?,date('now'),1)
         ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
         DO UPDATE SET impressions = impressions + 1`)
         .run(campaign.user_id, campaign.app_id||0, campaign.id, publisher_id||0);

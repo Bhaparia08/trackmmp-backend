@@ -71,7 +71,7 @@ router.get('/', (req, res) => {
 
   // Impressions last 24h
   const impressions24h = db.prepare(`SELECT COALESCE(SUM(impressions),0) AS impressions
-    FROM daily_stats WHERE date = date('now','utc')${dsFilter}`).get(...dsParam);
+    FROM daily_stats WHERE date = date('now')${dsFilter}`).get(...dsParam);
 
   // 7-day trend
   const trend = db.prepare(`SELECT date, SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
@@ -126,7 +126,7 @@ router.get('/', (req, res) => {
     SELECT c.id, c.name, c.cap_daily,
       COALESCE(SUM(ds.installs),0) AS used_today
     FROM campaigns c
-    LEFT JOIN daily_stats ds ON ds.campaign_id=c.id AND ds.date=date('now','utc')
+    LEFT JOIN daily_stats ds ON ds.campaign_id=c.id AND ds.date=date('now')
     WHERE c.cap_daily > 0 AND c.status='active'
     GROUP BY c.id
     HAVING used_today >= c.cap_daily*0.8

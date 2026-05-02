@@ -35,7 +35,7 @@ function evalCapThreshold(rule, cfg) {
     ).get(cfg.campaign_id)?.cnt || 0;
   } else {
     used = db.prepare(
-      "SELECT COUNT(*) AS cnt FROM clicks WHERE campaign_id = ? AND status = 'installed' AND date(created_at, 'unixepoch') = date('now','utc')"
+      "SELECT COUNT(*) AS cnt FROM clicks WHERE campaign_id = ? AND status = 'installed' AND date(created_at, 'unixepoch') = date('now')"
     ).get(cfg.campaign_id)?.cnt || 0;
   }
 

@@ -47,7 +47,7 @@ router.get('/', (req, res) => {
       COALESCE((SELECT SUM(revenue) FROM postbacks WHERE campaign_id = c.id AND status = 'attributed'), 0) AS total_revenue,
       COALESCE(u.name, NULLIF(c.advertiser_name,'')) AS advertiser_display,
       u.email AS advertiser_email,
-      COALESCE((SELECT SUM(installs) FROM daily_stats WHERE campaign_id=c.id AND date=date('now','utc')),0) AS cap_used_today
+      COALESCE((SELECT SUM(installs) FROM daily_stats WHERE campaign_id=c.id AND date=date('now')),0) AS cap_used_today
     FROM campaigns c
     LEFT JOIN users u ON u.id = c.advertiser_id
     WHERE ${clause}${archivedClause}${advClause} ORDER BY c.created_at DESC
