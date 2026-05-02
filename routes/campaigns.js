@@ -277,11 +277,12 @@ router.post('/:id/clone', (req, res, next) => {
 
     const cloneId = db.transaction(() => {
       const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM campaigns').get().n;
-      // Determine a unique name
-      let cloneName = c.name + ' (Copy)';
+      // Determine a unique name — strip existing " (Copy)" / " (Copy N)" suffix first
+      const baseName = c.name.replace(/ \(Copy(?: \d+)?\)$/, '').trim();
+      let cloneName = baseName + ' (Copy)';
       let suffix = 2;
       while (db.prepare('SELECT id FROM campaigns WHERE name = ?').get(cloneName)) {
-        cloneName = c.name + ` (Copy ${suffix++})`;
+        cloneName = baseName + ` (Copy ${suffix++})`;
       }
       const result = db.prepare(`
         INSERT INTO campaigns (
