@@ -15,7 +15,8 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const router = express.Router();
 
 // ── Inbound SKAN postbacks (public — Apple posts directly) ─────────────────
-router.post('/postback', (req, res) => {
+// Accepts both /skan/postback and Apple's spec path /skan/v1/conversion-values
+router.post(['/postback', '/v1/conversion-values'], (req, res) => {
   try {
     const body = req.body || {};
     const ip   = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();

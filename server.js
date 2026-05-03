@@ -98,6 +98,10 @@ app.use('/api/impact',         require('./routes/impact'));
 app.use('/api/invoices',          require('./routes/invoices'));
 app.use('/api/insertion-orders',  require('./routes/insertionOrders'));
 app.use('/api/alerts',            require('./routes/alerts'));
+app.use('/api/postbacks', (req, res, next) => {  // alias: GET /api/postbacks → /api/reports/postbacks
+  req.url = '/postbacks' + (req.url === '/' ? '' : req.url);
+  require('./routes/reports')(req, res, next);
+});
 app.use('/skan',                  require('./routes/skan'));
 app.use('/api/permissions',       require('./routes/permissions'));
 

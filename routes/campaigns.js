@@ -355,7 +355,7 @@ router.post('/:id/costs', (req, res, next) => {
       return res.status(403).json({ error: 'Admin or AM only' });
     }
     const { date, amount, cost_type = 'media_buy', notes = '' } = req.body;
-    if (!date || amount == null) return res.status(400).json({ error: 'date and amount required' });
+    if (!date || amount == null) return res.status(400).json({ error: 'date and amount are required' });
 
     const result = db.prepare(`
       INSERT INTO campaign_costs (campaign_id, user_id, date, amount, cost_type, notes)
