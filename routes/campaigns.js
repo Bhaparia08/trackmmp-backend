@@ -96,7 +96,8 @@ router.post('/', (req, res, next) => {
             url_masking = 0, referrer_cloaking = 0,
             attribution_model = 'last_click', deep_link_url = '', ios_store_url = '',
             android_store_url = '', deferred_deep_link = 0, skan_enabled = 0,
-            skan_conversion_schema = '{}' } = req.body;
+            skan_conversion_schema = '{}',
+            re_engagement_window_days = 30, re_engagement_postback_url = '' } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
 
     // FIX #11 + #13: transaction for atomic seq_num; validate URL scheme
@@ -117,8 +118,9 @@ router.post('/', (req, res, next) => {
         start_date, end_date, description, channel, allowed_devices,
         cap_monthly, cap_redirect_url, conversion_hold_days, featured, url_masking, referrer_cloaking,
         attribution_model, deep_link_url, ios_store_url, android_store_url, deferred_deep_link,
-        skan_enabled, skan_conversion_schema, seq_num)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        skan_enabled, skan_conversion_schema, re_engagement_window_days, re_engagement_postback_url,
+        seq_num)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
@@ -132,6 +134,7 @@ router.post('/', (req, res, next) => {
            attribution_model||'last_click', deep_link_url||'', ios_store_url||'',
            android_store_url||'', deferred_deep_link ? 1 : 0,
            skan_enabled ? 1 : 0, skan_conversion_schema||'{}',
+           re_engagement_window_days||30, re_engagement_postback_url||'',
            nextSeq);
 
       return result.lastInsertRowid;
@@ -165,11 +168,12 @@ router.get('/:id', (req, res) => {
       COUNT(DISTINCT cl.id) AS total_clicks,
       COUNT(DISTINCT CASE WHEN cl.status='installed' THEN cl.id END) AS total_installs,
       COUNT(DISTINCT CASE WHEN cl.status='converted' THEN cl.id END) AS total_leads,
-      COALESCE(SUM(pb.revenue),0) AS total_revenue
+      COALESCE(SUM(pb.revenue),0) AS total_revenue,
+      COALESCE((SELECT COUNT(*) FROM postbacks WHERE campaign_id = ? AND event_type = 're_engagement' AND status = 'attributed'),0) AS re_engagements
     FROM clicks cl
     LEFT JOIN postbacks pb ON pb.click_id = cl.click_id AND pb.status = 'attributed'
     WHERE cl.campaign_id = ?
-  `).get(req.params.id);
+  `).get(req.params.id, req.params.id);
 
   const approvedPubs = db.prepare(
     "SELECT publisher_id FROM campaign_access_requests WHERE campaign_id = ? AND status = 'approved'"
@@ -203,7 +207,8 @@ router.put('/:id', (req, res, next) => {
 
     const {
       attribution_model, deep_link_url, ios_store_url, android_store_url,
-      deferred_deep_link, skan_enabled, skan_conversion_schema
+      deferred_deep_link, skan_enabled, skan_conversion_schema,
+      re_engagement_window_days, re_engagement_postback_url
     } = req.body;
 
     db.prepare(`UPDATE campaigns SET
@@ -227,6 +232,8 @@ router.put('/:id', (req, res, next) => {
       android_store_url=COALESCE(?,android_store_url),
       deferred_deep_link=COALESCE(?,deferred_deep_link),
       skan_enabled=COALESCE(?,skan_enabled), skan_conversion_schema=COALESCE(?,skan_conversion_schema),
+      re_engagement_window_days=COALESCE(?,re_engagement_window_days),
+      re_engagement_postback_url=COALESCE(?,re_engagement_postback_url),
       updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
@@ -246,6 +253,7 @@ router.put('/:id', (req, res, next) => {
            android_store_url!=null?android_store_url:null,
            deferred_deep_link!=null?+deferred_deep_link:null,
            skan_enabled!=null?+skan_enabled:null, skan_conversion_schema||null,
+           re_engagement_window_days??null, re_engagement_postback_url!=null?re_engagement_postback_url:null,
            c.id);
 
     if (Array.isArray(approved_publishers)) {
@@ -294,6 +302,7 @@ router.post('/:id/clone', (req, res, next) => {
           cap_monthly, cap_redirect_url, conversion_hold_days, featured,
           attribution_model, deep_link_url, ios_store_url, android_store_url,
           deferred_deep_link, skan_enabled, skan_conversion_schema,
+          re_engagement_window_days, re_engagement_postback_url,
           status, seq_num,
           source_credential_id, external_offer_id
         ) VALUES (
@@ -304,6 +313,7 @@ router.post('/:id/clone', (req, res, next) => {
           ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?,
+          ?, ?,
           'active', ?,
           NULL, NULL
         )
@@ -318,6 +328,7 @@ router.post('/:id/clone', (req, res, next) => {
         c.attribution_model || 'last_click', c.deep_link_url || '', c.ios_store_url || '',
         c.android_store_url || '', c.deferred_deep_link || 0, c.skan_enabled || 0,
         c.skan_conversion_schema || '{}',
+        c.re_engagement_window_days || 30, c.re_engagement_postback_url || '',
         nextSeq,
       );
       return result.lastInsertRowid;

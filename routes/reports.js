@@ -65,7 +65,7 @@ router.get('/summary', (req, res) => {
   const where = conditions.join(' AND ');
   const row = db.prepare(`SELECT
     SUM(impressions) AS impressions, SUM(clicks) AS clicks, SUM(installs) AS installs,
-    SUM(leads) AS leads, SUM(conversions) AS conversions,
+    SUM(leads) AS leads, SUM(conversions) AS conversions, SUM(re_engagements) AS re_engagements,
     ROUND(SUM(revenue),2) AS revenue
     FROM daily_stats WHERE ${where}`).get(...values);
 
@@ -80,6 +80,7 @@ router.get('/summary', (req, res) => {
     installs: total_installs,
     leads: row.leads || 0,
     conversions: row.conversions || 0,
+    re_engagements: row.re_engagements || 0,
     revenue: row.revenue || 0,
     conversion_rate: cr + '%',
     ctr: ctr + '%'
@@ -102,6 +103,7 @@ router.get('/by-day', (req, res) => {
       COALESCE(adv.name, adv.email, '—') AS advertiser,
       SUM(ds.impressions) AS impressions, SUM(ds.clicks) AS clicks,
       SUM(ds.installs) AS installs, SUM(ds.leads) AS leads,
+      SUM(ds.re_engagements) AS re_engagements,
       ROUND(SUM(ds.revenue),2) AS revenue
     FROM daily_stats ds
     LEFT JOIN campaigns c ON c.id = ds.campaign_id
@@ -125,7 +127,8 @@ router.get('/by-campaign', (req, res) => {
     SELECT c.name AS campaign, c.id AS campaign_id,
       COALESCE(adv.name, adv.email, '—') AS advertiser,
       SUM(ds.clicks) AS clicks, SUM(ds.installs) AS installs,
-      SUM(ds.leads) AS leads, ROUND(SUM(ds.revenue),2) AS revenue
+      SUM(ds.leads) AS leads, SUM(ds.re_engagements) AS re_engagements,
+      ROUND(SUM(ds.revenue),2) AS revenue
     FROM daily_stats ds
     LEFT JOIN campaigns c ON c.id = ds.campaign_id
     LEFT JOIN users adv ON adv.id = c.advertiser_id

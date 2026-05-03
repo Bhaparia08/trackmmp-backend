@@ -185,6 +185,22 @@ function handlePostback(params, ip, io) {
     return;
   }
 
+  // ── Re-engagement check (retargeting campaigns only) ──────────────────────
+  let isReEngagement = false;
+  if (campaign?.is_retargeting && deviceId && eventType === 'install') {
+    const windowSecs = (campaign.re_engagement_window_days || 30) * 86400;
+    const priorInstall = db.prepare(`
+      SELECT pb.id FROM postbacks pb
+      JOIN clicks cl ON cl.click_id = pb.click_id
+      WHERE pb.advertising_id = ? AND cl.campaign_id = ?
+        AND pb.event_type = 'install' AND pb.status = 'attributed'
+        AND pb.created_at > (unixepoch() - ?)
+      LIMIT 1
+    `).get(deviceId, click.campaign_id, windowSecs);
+    if (priorInstall) isReEngagement = true;
+  }
+  const finalEventType = isReEngagement ? 're_engagement' : eventType;
+
   // ── Fraud Detection ────────────────────────────────────────────────────────
   const timeDiff = Math.floor(Date.now() / 1000) - click.created_at;
   // Skip time-to-install check for VTA: synthetic clicks are created at attribution
@@ -311,7 +327,7 @@ function handlePostback(params, ip, io) {
      install_unix_ts, status, blocked_reason, raw_params, ip, goal_id, goal_name, is_view_through)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(click.click_id, click.publisher_click_id, click.campaign_id, click.user_id,
-         eventType, event_name||null, event_value||null,
+         finalEventType, event_name||null, event_value||null,
          finalPayout, finalRevenue, currency,
          deviceId||null, idfa||null, idfv||null, android_id||null,
          Math.floor(Date.now()/1000), 'attributed', blocked_reason||null,
@@ -319,7 +335,7 @@ function handlePostback(params, ip, io) {
          matchedGoal?.id||null, matchedGoal?.name||null, isViewThrough ? 1 : 0);
 
   // Update click status
-  const newStatus = eventType === 'install' ? 'installed' : 'converted';
+  const newStatus = finalEventType === 'install' ? 'installed' : 'converted';
   db.prepare("UPDATE clicks SET status = ? WHERE click_id = ?").run(newStatus, click.click_id);
 
   // ── Multi-touch: record this click as a touch point ───────────────────────
@@ -352,7 +368,9 @@ function handlePostback(params, ip, io) {
   }
 
   // Upsert daily stats
-  const statsCol = eventType === 'install' ? 'installs' : eventType === 'lead' ? 'leads' : 'conversions';
+  const statsCol = finalEventType === 'install' ? 'installs'
+                 : finalEventType === 're_engagement' ? 're_engagements'
+                 : finalEventType === 'lead' ? 'leads' : 'conversions';
   db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, ${statsCol}, revenue)
     VALUES (?,?,?,?,date('now'),1,?)
     ON CONFLICT(user_id, app_id, campaign_id, publisher_id, date)
@@ -387,6 +405,9 @@ function handlePostback(params, ip, io) {
   }
   if (campaign?.postback_url) {
     enqueueWebhook(macroReplace(campaign.postback_url, macroData), 'postback', pbResult.lastInsertRowid);
+  }
+  if (isReEngagement && campaign?.re_engagement_postback_url) {
+    enqueueWebhook(macroReplace(campaign.re_engagement_postback_url, macroData), 're_engagement', pbResult.lastInsertRowid);
   }
 
   // ── Fire publisher global postback (if configured) ────────────────────────

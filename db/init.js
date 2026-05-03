@@ -504,6 +504,11 @@ const migrations = [
     created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
     UNIQUE(campaign_id, user_id)
   )`,
+
+  // ── Retargeting / Re-engagement ───────────────────────────────────────────
+  `ALTER TABLE campaigns ADD COLUMN re_engagement_window_days INTEGER DEFAULT 30`,
+  `ALTER TABLE campaigns ADD COLUMN re_engagement_postback_url TEXT DEFAULT ''`,
+  `ALTER TABLE daily_stats ADD COLUMN re_engagements INTEGER NOT NULL DEFAULT 0`,
 ];
 
 const IGNORABLE = [
