@@ -509,6 +509,13 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN re_engagement_window_days INTEGER DEFAULT 30`,
   `ALTER TABLE campaigns ADD COLUMN re_engagement_postback_url TEXT DEFAULT ''`,
   `ALTER TABLE daily_stats ADD COLUMN re_engagements INTEGER NOT NULL DEFAULT 0`,
+
+  // ── Fix: link orphaned account_manager users to their admin ──────────────
+  // AMs who self-registered (created_by IS NULL) get linked to the oldest admin
+  // so they can see publishers/campaigns owned by that admin via getOwnerId().
+  `UPDATE users
+   SET created_by = (SELECT id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1)
+   WHERE role = 'account_manager' AND created_by IS NULL`,
 ];
 
 const IGNORABLE = [
