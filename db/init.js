@@ -795,6 +795,35 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
+// ── Migration: create leelam.s@apogeemobi.com as admin ───────────────────────
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'create_leelam_admin_v1'").get();
+  if (!done) {
+    try {
+      const bcrypt = require('bcrypt');
+      const existing = db.prepare("SELECT id FROM users WHERE email = 'leelam.s@apogeemobi.com'").get();
+      if (!existing) {
+        const hash  = bcrypt.hashSync('Leelam@Apogeemobi2024', 12);
+        const token = nanoid20hex();
+        const maxSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
+        db.prepare(
+          `INSERT INTO users (email, password, name, role, status, email_verified, postback_token, seq_num)
+           VALUES (?, ?, 'Leelam S', 'admin', 'active', 1, ?, ?)`
+        ).run('leelam.s@apogeemobi.com', hash, token, maxSeq);
+        console.log('[migration] create_leelam_admin_v1: leelam.s@apogeemobi.com created as admin');
+      } else {
+        // Account exists — ensure it has admin role
+        db.prepare("UPDATE users SET role = 'admin', status = 'active' WHERE email = 'leelam.s@apogeemobi.com'").run();
+        console.log('[migration] create_leelam_admin_v1: leelam.s@apogeemobi.com role set to admin');
+      }
+      db.prepare("INSERT INTO migrations (name) VALUES ('create_leelam_admin_v1')").run();
+    } catch (e) {
+      console.error('[migration] create_leelam_admin_v1 failed:', e.message);
+    }
+  }
+}
+
 // ── Auto-seed admin account ───────────────────────────────────────────────────
 // If SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set AND no admin
 // exists yet, create the admin account automatically on first start.
