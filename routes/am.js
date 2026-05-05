@@ -59,6 +59,7 @@ router.get('/advertisers', requireAM, (req, res) => {
   const advertisers = db.prepare(`
     SELECT u.id, u.email, u.name, u.company_name, u.status, u.plan, u.created_at, u.account_manager_id,
            u.legal_name, u.legal_address, u.legal_country, u.tax_id, u.company_reg_no,
+           u.postback_token,
            (SELECT COUNT(*) FROM campaigns c WHERE c.advertiser_id = u.id) as campaign_count,
            (SELECT COUNT(*) FROM clicks cl WHERE cl.user_id = u.id) as click_count
     FROM users u
