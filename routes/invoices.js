@@ -7,7 +7,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const jwt    = require('jsonwebtoken');
 const router = express.Router();
 
-const LOGO_PATH = path.join(__dirname, '../public/assets/apogeemobi-logo.png');
+const LOGO_PATH = path.join(__dirname, '../public/logo.png');
 
 // PDF download — registered BEFORE requireAuth so ?token= query param works in browser <a> links
 router.get('/:id/pdf', (req, res, next) => {
@@ -446,11 +446,11 @@ function _generatePDF(req, res, next) {
     y += 14;
 
     // ── Logo ──────────────────────────────────────────────────────────────────
-    const logoW = 160;
+    const logoW = 200;
     try {
       doc.image(LOGO_PATH, (PW - logoW) / 2, y, { width: logoW });
     } catch (e) { /* logo not found — skip silently */ }
-    y += 45;
+    y += 38;
 
     // ── Company header (centered) ─────────────────────────────────────────────
     const isSG = inv.entity !== 'in';
