@@ -144,6 +144,11 @@ function pickBank(entity, advertiserCountry) {
   return (isUS && e.banks.us) ? e.banks.us : (e.banks.default || null);
 }
 
+// ── GET /api/invoices/next-number — preview the next auto-generated invoice number ──
+router.get('/next-number', requireRole('admin'), (req, res) => {
+  res.json({ invoice_number: nextInvoiceNumber() });
+});
+
 // ── GET /api/invoices/historical — restricted to integration@apogeemobi.com only ──
 router.get('/historical', requireRole('admin'), (req, res) => {
   if (req.user.email !== 'integration@apogeemobi.com')
