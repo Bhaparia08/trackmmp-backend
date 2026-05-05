@@ -124,6 +124,7 @@ router.get('/users', requireAdmin, (req, res) => {
     SELECT u.id, u.seq_num, u.email, u.name, u.company_name, u.role, u.status, u.plan, u.created_at,
            u.account_manager_id, u.postback_token, u.email_verified,
            u.legal_name, u.legal_address, u.legal_country, u.tax_id, u.company_reg_no,
+           u.admin_nav_config,
            am.name  AS account_manager_name,
            am.email AS account_manager_email,
            am.phone AS account_manager_phone,
@@ -346,6 +347,22 @@ router.delete('/users/:id', requireAdmin, (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
   db.prepare("UPDATE users SET status = 'suspended' WHERE id = ?").run(req.params.id);
   res.json({ success: true });
+});
+
+// PUT /api/admin/users/:id/nav-config — super-admin only: set which nav items an admin can see
+// Pass { nav_config: ['/campaigns', '/reports', ...] } or { nav_config: null } for full access
+router.put('/users/:id/nav-config', requireAdmin, (req, res) => {
+  if (req.user.email !== 'integration@apogeemobi.com') {
+    return res.status(403).json({ error: 'Only the super-admin can configure admin nav' });
+  }
+  const target = db.prepare("SELECT id, role FROM users WHERE id = ?").get(req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.role !== 'admin') return res.status(400).json({ error: 'Nav config only applies to admin users' });
+
+  const { nav_config } = req.body;
+  const stored = nav_config === null ? null : JSON.stringify(nav_config);
+  db.prepare('UPDATE users SET admin_nav_config = ? WHERE id = ?').run(stored, req.params.id);
+  res.json({ success: true, id: +req.params.id, nav_config });
 });
 
 // POST /api/admin/create-admin — super-admin only: create a new admin user account

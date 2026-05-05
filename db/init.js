@@ -510,6 +510,9 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN re_engagement_postback_url TEXT DEFAULT ''`,
   `ALTER TABLE daily_stats ADD COLUMN re_engagements INTEGER NOT NULL DEFAULT 0`,
 
+  // ── Per-admin nav visibility config (JSON array of enabled route paths, NULL = all) ──
+  `ALTER TABLE users ADD COLUMN admin_nav_config TEXT`,
+
   // ── Fix: link AM users to the primary admin (admin with most publishers) ──
   // AMs who self-registered have created_by IS NULL, so getOwnerId() falls back
   // to their own user_id and they see nothing. Link them to the admin who owns

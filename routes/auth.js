@@ -336,7 +336,7 @@ router.post('/create-admin', requireAuth, async (req, res, next) => {
 router.get('/me', requireAuth, (req, res) => {
   const user = db.prepare(`
     SELECT u.id, u.email, u.name, u.company_name, u.role, u.plan, u.status,
-           u.postback_token, u.created_at,
+           u.postback_token, u.created_at, u.admin_nav_config,
            am.name  AS account_manager_name,
            am.email AS account_manager_email,
            am.phone AS account_manager_phone
