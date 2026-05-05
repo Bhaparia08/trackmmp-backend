@@ -636,7 +636,7 @@ function _generatePDF(req, res, next) {
        .text('QUESTIONS?', ML, y, { width: CW, align: 'center' });
     y += 15;
     doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
-       .text('Please contact Mr. Lalji at finance@apogeemobi.com', ML, y, { width: CW, align: 'center' });
+       .text('Please contact us at finance@apogeemobi.com', ML, y, { width: CW, align: 'center' });
     y += 18;
 
     doubleRule(y);
