@@ -348,6 +348,35 @@ router.delete('/users/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/admin/create-admin — super-admin only: create a new admin user account
+// Restricted to integration@apogeemobi.com
+router.post('/create-admin', requireAdmin, async (req, res, next) => {
+  try {
+    if (req.user.email !== 'integration@apogeemobi.com') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    const { email, password, name } = req.body;
+    if (!email || !password || !name) {
+      return res.status(400).json({ error: 'email, password and name are required' });
+    }
+    const existing = db.prepare('SELECT id, role FROM users WHERE email = ?').get(email);
+    if (existing) {
+      // Upgrade existing user to admin
+      const hash = await bcrypt.hash(password, SALT_ROUNDS);
+      db.prepare("UPDATE users SET role = 'admin', status = 'active', password = ?, email_verified = 1 WHERE id = ?")
+        .run(hash, existing.id);
+      return res.json({ success: true, action: 'updated', id: existing.id, email });
+    }
+    const hash = await bcrypt.hash(password, SALT_ROUNDS);
+    const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
+    const result = db.prepare(
+      `INSERT INTO users (email, password, name, role, status, email_verified, postback_token, seq_num)
+       VALUES (?, ?, ?, 'admin', 'active', 1, ?, ?)`
+    ).run(email, hash, name, nanoid20hex(), nextSeq);
+    res.status(201).json({ success: true, action: 'created', id: result.lastInsertRowid, email });
+  } catch (err) { next(err); }
+});
+
 // GET /api/admin/stats  — platform-wide overview
 router.get('/stats', requireAdmin, (req, res) => {
   const advertisers = db.prepare("SELECT COUNT(*) as n FROM users WHERE role = 'advertiser'").get().n;
