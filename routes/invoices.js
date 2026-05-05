@@ -1,10 +1,13 @@
 const express  = require('express');
 const PDFDoc   = require('pdfkit');
+const path     = require('path');
 const db       = require('../db/init');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const jwt    = require('jsonwebtoken');
 const router = express.Router();
+
+const LOGO_PATH = path.join(__dirname, '../public/assets/apogeemobi-logo.png');
 
 // PDF download — registered BEFORE requireAuth so ?token= query param works in browser <a> links
 router.get('/:id/pdf', (req, res, next) => {
@@ -356,11 +359,42 @@ router.post('/:id/cancel', requireRole('admin'), (req, res) => {
 });
 
 // ── PDF generator (called by the pre-auth route above) ───────────────────────
+
+// Format a date string "YYYY-MM-DD" as "3rd Feb, 2026"
+function fmtOrdinalDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDate();
+  const suffix = day === 1 || day === 21 || day === 31 ? 'st'
+               : day === 2 || day === 22 ? 'nd'
+               : day === 3 || day === 23 ? 'rd' : 'th';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${day}${suffix} ${months[d.getMonth()]}, ${d.getFullYear()}`;
+}
+
+// Format a due date as "3rd Mar 2026" (no comma after month)
+function fmtOrdinalDue(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = d.getDate();
+  const suffix = day === 1 || day === 21 || day === 31 ? 'st'
+               : day === 2 || day === 22 ? 'nd'
+               : day === 3 || day === 23 ? 'rd' : 'th';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${day}${suffix} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// Format amount with commas e.g. $6,391.80
+function fmtAmt(n) {
+  return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function _generatePDF(req, res, next) {
   try {
     const inv = db.prepare(`
       SELECT i.*, u.name AS advertiser_name, u.email AS advertiser_email,
-             u.legal_name, u.legal_address, u.legal_country, u.tax_id, u.company_reg_no
+             u.legal_name, u.legal_address, u.legal_country, u.tax_id, u.company_reg_no,
+             u.company_name AS advertiser_company
       FROM invoices i
       LEFT JOIN users u ON u.id = i.advertiser_id
       WHERE i.id = ?
@@ -372,226 +406,240 @@ function _generatePDF(req, res, next) {
     if (!isAdmin && inv.advertiser_id !== req.user.id)
       return res.status(403).json({ error: 'Forbidden' });
 
-    const entity   = ENTITIES[inv.entity] || ENTITIES.sg;
-    const bank     = pickBank(inv.entity, inv.legal_country);
-    const items    = JSON.parse(inv.line_items || '[]');
-    const isUS     = (inv.legal_country || '').toLowerCase().includes('us') ||
-                     (inv.legal_country || '').toLowerCase() === 'united states' ||
-                     (inv.legal_country || '').toLowerCase() === 'usa';
+    const entity = ENTITIES[inv.entity] || ENTITIES.sg;
+    const bank   = pickBank(inv.entity, inv.legal_country);
+    const items  = JSON.parse(inv.line_items || '[]');
+
+    // Advertiser display info
+    const billName   = (inv.legal_name || inv.advertiser_name || '—').toUpperCase();
+    const billAddr   = inv.legal_address || '';
+    const custId     = inv.advertiser_company || inv.advertiser_name || '—';
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${inv.invoice_number}.pdf"`);
 
-    const doc = new PDFDoc({ size: 'A4', margin: 50 });
+    const doc = new PDFDoc({ size: 'A4', margins: { top: 40, bottom: 40, left: 50, right: 50 } });
     doc.pipe(res);
 
-    const W    = 595 - 100; // usable width
-    const ACCENT  = '#1a1a2e';
-    const MUTED   = '#666666';
-    const BORDER  = '#e2e8f0';
-    const GREEN   = '#10b981';
+    const PW   = 595;          // page width
+    const ML   = 50;           // margin left
+    const MR   = 50;           // margin right
+    const CW   = PW - ML - MR; // content width = 495
+    const BLACK = '#000000';
+    const GREY  = '#555555';
+    const fs    = 9;           // base font size
 
-    // ── Header bar ────────────────────────────────────────────────────────────
-    doc.rect(0, 0, 595, 80).fill(ACCENT);
-    doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold')
-       .text(entity.name, 50, 24, { width: 350 });
-    doc.fontSize(9).font('Helvetica').fillColor('#a0aec0')
-       .text('TAX INVOICE', 50, 48);
+    let y = 40;
 
-    // Invoice number top right
-    doc.fillColor('#ffffff').fontSize(11).font('Helvetica-Bold')
-       .text(inv.invoice_number, 395, 28, { width: 150, align: 'right' });
-    doc.fontSize(8).font('Helvetica').fillColor('#a0aec0')
-       .text(`Issued: ${inv.issue_date}   Due: ${inv.due_date}`, 395, 46, { width: 150, align: 'right' });
+    // ── Helper: draw a double horizontal rule (═══) ──────────────────────────
+    function doubleRule(yPos) {
+      doc.moveTo(ML, yPos).lineTo(PW - MR, yPos).lineWidth(0.8).strokeColor(BLACK).stroke();
+      doc.moveTo(ML, yPos + 3).lineTo(PW - MR, yPos + 3).lineWidth(0.8).strokeColor(BLACK).stroke();
+    }
+    // ── Helper: draw a single horizontal rule (───) ──────────────────────────
+    function singleRule(yPos) {
+      doc.moveTo(ML, yPos).lineTo(PW - MR, yPos).lineWidth(0.5).strokeColor(BLACK).stroke();
+    }
 
-    doc.fillColor('#000000');
-    let y = 105;
-
-    // ── FROM / TO columns ─────────────────────────────────────────────────────
-    // FROM
-    doc.fontSize(8).font('Helvetica-Bold').fillColor(MUTED)
-       .text('FROM', 50, y, { width: 220 });
-    doc.fontSize(8).font('Helvetica-Bold').fillColor(MUTED)
-       .text('BILL TO', 310, y, { width: 235 });
+    // ══════════════════ TOP DOUBLE BORDER ═══════════════════════
+    doubleRule(y);
     y += 14;
 
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(ACCENT)
-       .text(entity.name, 50, y, { width: 220 });
-    const billTo = inv.legal_name || inv.advertiser_name || '—';
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(ACCENT)
-       .text(billTo, 310, y, { width: 235 });
-    y += 15;
+    // ── Logo ──────────────────────────────────────────────────────────────────
+    const logoW = 160;
+    try {
+      doc.image(LOGO_PATH, (PW - logoW) / 2, y, { width: logoW });
+    } catch (e) { /* logo not found — skip silently */ }
+    y += 45;
 
-    doc.fontSize(8.5).font('Helvetica').fillColor('#333333')
-       .text(entity.address, 50, y, { width: 220 });
-    const billAddr = inv.legal_address || inv.advertiser_email || '';
-    doc.fontSize(8.5).font('Helvetica').fillColor('#333333')
-       .text(billAddr, 310, y, { width: 235 });
+    // ── Company header (centered) ─────────────────────────────────────────────
+    const isSG = inv.entity !== 'in';
+    doc.fontSize(12).font('Helvetica-Bold').fillColor(BLACK)
+       .text(entity.name.toUpperCase(), ML, y, { width: CW, align: 'center' });
+    y += 17;
 
-    const fromLines = entity.address.split('\n').length;
-    y += fromLines * 13 + 5;
-
-    doc.fontSize(8).font('Helvetica').fillColor(MUTED)
-       .text(entity.uen, 50, y, { width: 220 });
-    if (inv.legal_country) {
-      doc.fontSize(8).font('Helvetica').fillColor(MUTED)
-         .text(`Country: ${inv.legal_country}`, 310, y, { width: 235 });
+    if (isSG) {
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text('68 CIRCULAR ROAD #02-01 SINGAPORE (049422)', ML, y, { width: CW, align: 'center' });
+      y += 13;
+      doc.text(`VAT: 201805548E`, ML, y, { width: CW, align: 'center' });
+    } else {
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text('177/17, Amritpuri B, East of Kailash, New Delhi – 110065', ML, y, { width: CW, align: 'center' });
+      y += 13;
+      doc.text(`${entity.uen}`, ML, y, { width: CW, align: 'center' });
     }
     y += 13;
+    doc.text('Email: Finance@apogeemobi.com', ML, y, { width: CW, align: 'center' });
+    y += 13;
+    doc.text('Website: www.apogeemobi.com', ML, y, { width: CW, align: 'center' });
+    y += 14;
 
-    if (entity.pan) {
-      doc.fontSize(8).font('Helvetica').fillColor(MUTED)
-         .text(entity.pan, 50, y, { width: 220 });
-      y += 13;
-    }
-
-    if (entity.gst) {
-      doc.fontSize(8).font('Helvetica').fillColor(MUTED)
-         .text(entity.gst, 50, y, { width: 220 });
-      y += 13;
-    }
-
-    if (inv.tax_id) {
-      doc.fontSize(8).font('Helvetica').fillColor(MUTED)
-         .text(`Tax ID: ${inv.tax_id}`, 310, y - 13, { width: 235 });
-    }
-    if (inv.company_reg_no) {
-      doc.fontSize(8).font('Helvetica').fillColor(MUTED)
-         .text(`Reg No: ${inv.company_reg_no}`, 310, y, { width: 235 });
-      y += 13;
-    }
-
+    // ══════════════════ BOTTOM OF HEADER DOUBLE BORDER ═══════════════════════
+    doubleRule(y);
     y += 20;
 
-    // ── Divider ───────────────────────────────────────────────────────────────
-    doc.moveTo(50, y).lineTo(545, y).lineWidth(1).strokeColor(BORDER).stroke();
-    y += 18;
-
-    // ── Line items table ──────────────────────────────────────────────────────
-    // Header
-    doc.rect(50, y, W, 22).fill('#f8fafc');
-    doc.fontSize(8).font('Helvetica-Bold').fillColor(MUTED);
-    doc.text('#',           55,  y + 7, { width: 20 });
-    doc.text('DESCRIPTION', 80,  y + 7, { width: 250 });
-    doc.text('QTY',         340, y + 7, { width: 50,  align: 'right' });
-    doc.text('UNIT PRICE',  395, y + 7, { width: 75,  align: 'right' });
-    doc.text('AMOUNT',      475, y + 7, { width: 70,  align: 'right' });
+    // ── Date ─────────────────────────────────────────────────────────────────
+    doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+       .text(`Date: ${fmtOrdinalDate(inv.issue_date)}`, ML, y);
     y += 22;
 
+    // ── Bill To (left) / Invoice details (right) ─────────────────────────────
+    const leftW  = 270;
+    const rightX = ML + leftW + 10;
+    const rightW = CW - leftW - 10;
+
+    const startY = y;
+
+    // Left: Billed to
+    doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+       .text('Billed to:', ML, y);
+    y += 14;
+    doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+       .text(billName, ML, y, { width: leftW });
+    const nameLines = doc.heightOfString(billName, { width: leftW, fontSize: fs }) / 14;
+    y += Math.ceil(nameLines) * 14;
+
+    if (billAddr) {
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text(billAddr, ML, y, { width: leftW });
+      const addrLines = doc.heightOfString(billAddr, { width: leftW, fontSize: fs }) / 14;
+      y += Math.ceil(addrLines) * 14;
+    }
+
+    // Right: Cust ID / Invoice no / Due Date
+    const rightY = startY;
+    const labelW = 85;
+    const valX   = rightX + labelW;
+    const valW   = rightW - labelW;
+
+    function rightRow(label, value, rY) {
+      doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+         .text(label, rightX, rY, { width: labelW });
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text(value, valX, rY, { width: valW });
+    }
+    rightRow('Cust ID:',    custId,                         rightY);
+    rightRow('Invoice no:', inv.invoice_number,             rightY + 16);
+    rightRow('Due Date:',   fmtOrdinalDue(inv.due_date),    rightY + 32);
+
+    y = Math.max(y, rightY + 50) + 16;
+
+    // ── Items table ───────────────────────────────────────────────────────────
+    singleRule(y); y += 8;
+
+    // Table header
+    doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+       .text('Description', ML, y, { width: CW - 90 });
+    doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+       .text('Amount', ML + CW - 90, y, { width: 90, align: 'right' });
+    y += 14;
+
+    singleRule(y); y += 8;
+
     // Rows
-    items.forEach((item, i) => {
-      const rowH = 24;
-      if (i % 2 === 0) doc.rect(50, y, W, rowH).fill('#fafafa');
-      doc.fontSize(9).font('Helvetica').fillColor('#1a202c');
-      doc.text(String(i + 1),                 55,  y + 7, { width: 20 });
-      doc.text(item.description || '—',       80,  y + 7, { width: 250 });
-      doc.text(String(item.quantity || 1),    340, y + 7, { width: 50,  align: 'right' });
-      const up = item.unit_price != null ? item.unit_price : (item.amount / (item.quantity || 1));
-      doc.text(`$${Number(up).toFixed(2)}`,   395, y + 7, { width: 75,  align: 'right' });
-      doc.text(`$${Number(item.amount).toFixed(2)}`, 475, y + 7, { width: 70, align: 'right' });
-      y += rowH;
+    items.forEach(item => {
+      const desc = item.description || '—';
+      const amt  = fmtAmt(item.amount);
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text(`  ${desc}`, ML, y, { width: CW - 90 });
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text(amt, ML + CW - 90, y, { width: 90, align: 'right' });
+      const h = Math.max(doc.heightOfString(desc, { width: CW - 100, fontSize: fs }), 14);
+      y += h + 6;
     });
 
-    doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(BORDER).stroke();
-    y += 16;
+    singleRule(y); y += 8;
 
-    // ── Totals ────────────────────────────────────────────────────────────────
-    const totalsX = 370;
-    const totalsW = 175;
-
-    function totalRow(label, value, bold = false, color = '#1a202c') {
-      doc.fontSize(9).font(bold ? 'Helvetica-Bold' : 'Helvetica').fillColor(MUTED)
-         .text(label, totalsX, y, { width: 90 });
-      doc.fontSize(9).font(bold ? 'Helvetica-Bold' : 'Helvetica').fillColor(color)
-         .text(value, totalsX + 95, y, { width: 80, align: 'right' });
-      y += 16;
-    }
-
-    totalRow('Subtotal (USD)', `$${Number(inv.subtotal).toFixed(2)}`);
+    // Total row
     if (inv.tax_rate > 0) {
-      totalRow(`Tax (${inv.tax_rate}%)`, `$${Number(inv.tax_amount).toFixed(2)}`);
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text('Subtotal', ML, y, { width: CW - 90 });
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text(fmtAmt(inv.subtotal), ML + CW - 90, y, { width: 90, align: 'right' });
+      y += 14;
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text(`Tax (${inv.tax_rate}%)`, ML, y, { width: CW - 90 });
+      doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+         .text(fmtAmt(inv.tax_amount), ML + CW - 90, y, { width: 90, align: 'right' });
+      y += 14;
+      singleRule(y); y += 8;
     }
 
-    y += 4;
-    doc.rect(totalsX - 5, y - 6, totalsW + 10, 28).fill(ACCENT);
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#ffffff')
-       .text('TOTAL DUE', totalsX, y + 2, { width: 90 });
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#ffffff')
-       .text(`USD $${Number(inv.total).toFixed(2)}`, totalsX + 95, y + 2, { width: 80, align: 'right' });
-    y += 36;
+    doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+       .text('Total', ML + CW - 90 - 60, y, { width: 60, align: 'right' });
+    doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+       .text(fmtAmt(inv.total), ML + CW - 90, y, { width: 90, align: 'right' });
+    y += 14;
 
-    // Status badge
+    singleRule(y); y += 18;
+
+    // Paid stamp
     if (inv.status === 'paid') {
-      doc.rect(50, y - 30, 70, 22).fill('#d1fae5');
-      doc.fontSize(10).font('Helvetica-Bold').fillColor(GREEN)
-         .text('✓ PAID', 55, y - 24, { width: 60 });
+      doc.fontSize(10).font('Helvetica-Bold').fillColor('#10b981')
+         .text('[ PAID ]', ML, y, { width: CW, align: 'center' });
+      y += 18;
     }
 
-    y += 20;
+    // ── Thank you ──────────────────────────────────────────────────────────────
+    doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+       .text('Thank you for your business!', ML, y);
+    y += 22;
 
-    // ── Payment Details ────────────────────────────────────────────────────────
+    // ── Payment method ────────────────────────────────────────────────────────
     if (bank) {
-      doc.moveTo(50, y).lineTo(545, y).lineWidth(1).strokeColor(BORDER).stroke();
-      y += 16;
-
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(ACCENT)
-         .text('PAYMENT DETAILS', 50, y);
+      doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+         .text('Payment method:', ML, y);
       y += 14;
 
-      doc.fontSize(8).font('Helvetica').fillColor(MUTED)
-         .text(`Please remit payment via ${bank.label}:`, 50, y);
-      y += 14;
+      const pmLabel = 85;
+      const pmValX  = ML + pmLabel + 10;
+      const pmValW  = CW - pmLabel - 10;
 
-      const bankLines = [
-        ['Account Holder', bank.holder],
-        ...(bank.account ? [['Account Number',   bank.account]] : []),
-        ...(bank.iban    ? [['IBAN',             bank.iban]]    : []),
-        ...(bank.ifsc    ? [['IFSC Code',        bank.ifsc]]    : []),
-        ...(bank.swift   ? [['SWIFT/BIC',        bank.swift]]   : []),
-        ...(bank.routing ? [['ACH Routing No.',  bank.routing]] : []),
-        ['Bank',            bank.bank],
-        ['Bank Address',    bank.bankAddress],
-      ];
-
-      bankLines.forEach(([label, value]) => {
-        doc.fontSize(8).font('Helvetica-Bold').fillColor('#4a5568')
-           .text(`${label}:`, 50, y, { width: 130 });
-        doc.fontSize(8).font('Helvetica').fillColor('#1a202c')
-           .text(value, 185, y, { width: 360 });
+      function pmRow(label, value) {
+        doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK)
+           .text(label, ML + 4, y, { width: pmLabel });
+        doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+           .text(value, pmValX, y, { width: pmValW });
         y += 13;
-      });
-
-      if (isUS && inv.entity === 'sg') {
-        y += 5;
-        doc.fontSize(7.5).font('Helvetica').fillColor(MUTED)
-           .text('Funds are received by The Currency Cloud Inc. on behalf of Appreach Global PTE. LTD.', 50, y, { width: W });
-        y += 11;
       }
+
+      pmRow('Account name:',    bank.holder);
+      if (bank.account) pmRow('Account number/IBAN:', bank.account);
+      if (bank.iban)    pmRow('Account number/IBAN:', bank.iban);
+      pmRow('Bank name:',       bank.bank);
+      if (bank.routing) pmRow('ACH Routing No:',  bank.routing);
+      if (bank.ifsc)    pmRow('IFSC Code:',        bank.ifsc);
+      if (bank.swift)   pmRow('SWIFT/BIC:',        bank.swift);
+      pmRow('Branch address:',  bank.bankAddress);
+      pmRow('Bank country:',    isSG ? 'United States (US)' : 'India');
+      pmRow('Currency code:',   inv.currency || 'USD');
+      y += 8;
     }
 
-    // ── Notes ──────────────────────────────────────────────────────────────────
+    // ── Notes ─────────────────────────────────────────────────────────────────
     if (inv.notes) {
-      y += 10;
-      doc.moveTo(50, y).lineTo(545, y).lineWidth(0.5).strokeColor(BORDER).stroke();
-      y += 14;
-      doc.fontSize(8).font('Helvetica-Bold').fillColor(MUTED).text('NOTES', 50, y);
-      y += 12;
-      doc.fontSize(8.5).font('Helvetica').fillColor('#4a5568').text(inv.notes, 50, y, { width: W });
+      doc.fontSize(fs).font('Helvetica-Bold').fillColor(BLACK).text('Notes:', ML, y);
+      y += 13;
+      doc.fontSize(fs).font('Helvetica').fillColor(GREY)
+         .text(inv.notes, ML, y, { width: CW });
+      y += doc.heightOfString(inv.notes, { width: CW, fontSize: fs }) + 10;
     }
 
-    // ── Footer ─────────────────────────────────────────────────────────────────
-    const pageH = doc.page.height;
-    doc.moveTo(50, pageH - 60).lineTo(545, pageH - 60).lineWidth(0.5).strokeColor(BORDER).stroke();
-    if (inv.entity === 'in') {
-      doc.fontSize(7.5).font('Helvetica-Bold').fillColor(MUTED)
-         .text('This is an electronically generated invoice and does not require a physical signature.',
-           50, pageH - 50, { width: W, align: 'center' });
-    }
-    doc.fontSize(7.5).font('Helvetica').fillColor(MUTED)
-       .text(
-         `${entity.name}  •  ${entity.uen}${entity.gst ? '  •  ' + entity.gst : ''}  •  Invoice ${inv.invoice_number}`,
-         50, pageH - 38, { width: W, align: 'center' }
-       );
+    // ── Footer ────────────────────────────────────────────────────────────────
+    y += 6;
+    doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+       .text('This is an electronically generated invoice, no signature is required.', ML, y, { width: CW });
+    y += 22;
+
+    doc.fontSize(fs + 1).font('Helvetica-Bold').fillColor(BLACK)
+       .text('QUESTIONS?', ML, y, { width: CW, align: 'center' });
+    y += 15;
+    doc.fontSize(fs).font('Helvetica').fillColor(BLACK)
+       .text('Please contact Mr. Lalji at finance@apogeemobi.com', ML, y, { width: CW, align: 'center' });
+    y += 18;
+
+    doubleRule(y);
 
     doc.end();
   } catch (err) { next(err); }
