@@ -888,6 +888,28 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
+// ── Migration: reset integration + leelam admin passwords to known values ─────
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'reset_admin_passwords_v1'").get();
+  if (!done) {
+    try {
+      const bcrypt = require('bcrypt');
+      // Reset integration@apogeemobi.com
+      const hash1 = bcrypt.hashSync('Integration@Apogee2024', 12);
+      db.prepare("UPDATE users SET password = ?, role = 'admin', status = 'active', email_verified = 1 WHERE email = 'integration@apogeemobi.com'").run(hash1);
+      console.log('[migration] reset_admin_passwords_v1: integration@apogeemobi.com password reset');
+      // Reset leelam.s@apogeemobi.com
+      const hash2 = bcrypt.hashSync('Leelam@Apogee2024', 12);
+      db.prepare("UPDATE users SET password = ?, role = 'admin', status = 'active', email_verified = 1 WHERE email = 'leelam.s@apogeemobi.com'").run(hash2);
+      console.log('[migration] reset_admin_passwords_v1: leelam.s@apogeemobi.com password reset');
+      db.prepare("INSERT INTO migrations (name) VALUES ('reset_admin_passwords_v1')").run();
+    } catch (e) {
+      console.error('[migration] reset_admin_passwords_v1 failed:', e.message);
+    }
+  }
+}
+
 // ── Auto-seed admin account ───────────────────────────────────────────────────
 // If SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set AND no admin
 // exists yet, create the admin account automatically on first start.
