@@ -144,8 +144,10 @@ function pickBank(entity, advertiserCountry) {
   return (isUS && e.banks.us) ? e.banks.us : (e.banks.default || null);
 }
 
-// ── GET /api/invoices/historical — admin-only historical records list ─────────
+// ── GET /api/invoices/historical — restricted to integration@apogeemobi.com only ──
 router.get('/historical', requireRole('admin'), (req, res) => {
+  if (req.user.email !== 'integration@apogeemobi.com')
+    return res.status(403).json({ error: 'Access denied' });
   const { status, currency, from, to, search } = req.query;
   const conditions = [];
   const values = [];
@@ -166,8 +168,10 @@ router.get('/historical', requireRole('admin'), (req, res) => {
   res.json(rows);
 });
 
-// ── PUT /api/invoices/historical/:id — update status/notes ───────────────────
+// ── PUT /api/invoices/historical/:id — restricted to integration@apogeemobi.com only ──
 router.put('/historical/:id', requireRole('admin'), (req, res) => {
+  if (req.user.email !== 'integration@apogeemobi.com')
+    return res.status(403).json({ error: 'Access denied' });
   const { status, notes } = req.body;
   const row = db.prepare('SELECT * FROM historical_invoices WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
@@ -177,18 +181,13 @@ router.put('/historical/:id', requireRole('admin'), (req, res) => {
 });
 
 // ── GET /api/invoices — list ──────────────────────────────────────────────────
-router.get('/', (req, res) => {
-  const isAdmin = req.user.role === 'admin' || req.user.role === 'account_manager';
+router.get('/', requireRole('admin'), (req, res) => {
   const { status, advertiser_id, from, to } = req.query;
 
   const conditions = [];
   const values     = [];
 
-  if (!isAdmin) {
-    // Advertiser only sees their own invoices
-    conditions.push('i.advertiser_id = ?');
-    values.push(req.user.id);
-  } else if (advertiser_id) {
+  if (advertiser_id) {
     conditions.push('i.advertiser_id = ?');
     values.push(advertiser_id);
   }
@@ -214,7 +213,7 @@ router.get('/', (req, res) => {
 });
 
 // ── GET /api/invoices/:id — detail ───────────────────────────────────────────
-router.get('/:id', (req, res) => {
+router.get('/:id', requireRole('admin'), (req, res) => {
   const inv = db.prepare(`
     SELECT i.*, u.name AS advertiser_name, u.email AS advertiser_email,
            u.legal_name, u.legal_address, u.legal_country, u.tax_id, u.company_reg_no,
@@ -227,15 +226,11 @@ router.get('/:id', (req, res) => {
 
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
 
-  const isAdmin = req.user.role === 'admin' || req.user.role === 'account_manager';
-  if (!isAdmin && inv.advertiser_id !== req.user.id)
-    return res.status(403).json({ error: 'Forbidden' });
-
   res.json({ ...inv, line_items: JSON.parse(inv.line_items || '[]') });
 });
 
 // ── POST /api/invoices — create ───────────────────────────────────────────────
-router.post('/', requireRole('admin', 'account_manager'), (req, res, next) => {
+router.post('/', requireRole('admin'), (req, res, next) => {
   try {
     const {
       entity = 'sg', advertiser_id, issue_date, due_date,
@@ -277,7 +272,7 @@ router.post('/', requireRole('admin', 'account_manager'), (req, res, next) => {
 });
 
 // ── PUT /api/invoices/:id — update ────────────────────────────────────────────
-router.put('/:id', requireRole('admin', 'account_manager'), (req, res, next) => {
+router.put('/:id', requireRole('admin'), (req, res, next) => {
   try {
     const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
