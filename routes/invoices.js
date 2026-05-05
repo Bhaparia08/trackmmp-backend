@@ -97,8 +97,9 @@ function nextInvoiceNumber() {
 
 // Status mapping: invoice status → historical status
 function toHistStatus(invStatus) {
-  if (invStatus === 'paid')    return 'received';
-  if (invStatus === 'overdue') return 'pending';
+  if (invStatus === 'paid')      return 'received';
+  if (invStatus === 'cancelled') return 'cancelled';
+  if (invStatus === 'overdue')   return 'pending';
   return 'pending';
 }
 
@@ -281,6 +282,7 @@ router.put('/:id', requireRole('admin'), (req, res, next) => {
   try {
     const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+    if (inv.status === 'cancelled') return res.status(400).json({ error: 'Cancelled invoices cannot be edited' });
 
     const {
       entity, advertiser_id, issue_date, due_date,
@@ -331,6 +333,26 @@ router.delete('/:id', requireRole('admin'), (req, res) => {
   if (inv.status !== 'draft') return res.status(400).json({ error: 'Only draft invoices can be deleted' });
   db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);
   res.json({ success: true });
+});
+
+// ── POST /api/invoices/:id/cancel — cancel any non-paid invoice ───────────────
+// Cancelled invoices are frozen (no edits allowed) but kept in the system.
+// The invoice number is permanently retired — the sequence continues from it,
+// so the next new invoice gets the next sequential number (no gap reuse).
+router.post('/:id/cancel', requireRole('admin'), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv)                        return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status === 'paid')       return res.status(400).json({ error: 'Paid invoices cannot be cancelled' });
+  if (inv.status === 'cancelled')  return res.status(400).json({ error: 'Invoice is already cancelled' });
+
+  db.prepare(`UPDATE invoices SET status = 'cancelled', updated_at = unixepoch() WHERE id = ?`).run(inv.id);
+  const updated = db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
+  // Sync cancellation to historical_invoices
+  try {
+    const adv = db.prepare('SELECT name, legal_name FROM users WHERE id = ?').get(updated.advertiser_id);
+    syncToHistorical(updated, adv?.legal_name || adv?.name);
+  } catch {}
+  res.json({ ...updated, line_items: JSON.parse(updated.line_items || '[]') });
 });
 
 // ── PDF generator (called by the pre-auth route above) ───────────────────────
