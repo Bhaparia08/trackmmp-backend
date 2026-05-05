@@ -827,79 +827,64 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
-// ── Migration: seed_advertisers_leelam_v1 ────────────────────────────────────
-// Creates 4 advertiser accounts and links them to leelam as account manager.
-// Also creates an AM record for leelam if one doesn't exist.
+// ── Ensure: 4 advertiser accounts exist and are assigned to Leelam ─────────────
+// Runs on EVERY boot — idempotent (skips if email already exists).
+// Guarantees these accounts are always present regardless of migration history.
 {
-  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
-  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'seed_advertisers_leelam_v1'").get();
-  if (!done) {
-    try {
-      const bcrypt = require('bcrypt');
+  try {
+    const bcrypt = require('bcrypt');
 
-      // 1. Ensure leelam has an account_managers record (she's admin, not AM, but can still be assigned)
-      const leelamUser = db.prepare("SELECT id FROM users WHERE email = 'leelam.s@apogeemobi.com'").get();
-      let leelamAmId = null;
-      if (leelamUser) {
-        let amRow = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(leelamUser.id);
-        if (!amRow) {
-          amRow = db.prepare('SELECT id FROM account_managers WHERE email = ?').get('leelam.s@apogeemobi.com');
-        }
-        if (!amRow) {
-          const r = db.prepare("INSERT INTO account_managers (name, email, user_id) VALUES ('Leelam S', 'leelam.s@apogeemobi.com', ?)").run(leelamUser.id);
-          leelamAmId = r.lastInsertRowid;
-          console.log('[migration] seed_advertisers_leelam_v1: created AM record for leelam, id=' + leelamAmId);
-        } else {
-          leelamAmId = amRow.id;
-          console.log('[migration] seed_advertisers_leelam_v1: using existing AM record id=' + leelamAmId);
-        }
+    // 1. Ensure leelam has an account_managers record
+    const leelamUser = db.prepare("SELECT id FROM users WHERE email = 'leelam.s@apogeemobi.com'").get();
+    let leelamAmId = null;
+    if (leelamUser) {
+      let amRow = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(leelamUser.id);
+      if (!amRow) amRow = db.prepare("SELECT id FROM account_managers WHERE email = 'leelam.s@apogeemobi.com'").get();
+      if (!amRow) {
+        const r = db.prepare("INSERT INTO account_managers (name, email, user_id) VALUES ('Leelam S', 'leelam.s@apogeemobi.com', ?)").run(leelamUser.id);
+        leelamAmId = r.lastInsertRowid;
+        console.log('[ensure] Leelam AM record created, id=' + leelamAmId);
+      } else {
+        leelamAmId = amRow.id;
       }
+      // Ensure user_id is set on the AM record
+      if (leelamAmId) db.prepare('UPDATE account_managers SET user_id = ? WHERE id = ? AND user_id IS NULL').run(leelamUser.id, leelamAmId);
+    }
 
-      // 2. Get the integration admin id for created_by
-      const integAdmin = db.prepare("SELECT id FROM users WHERE email = 'integration@apogeemobi.com'").get();
-      const createdBy  = integAdmin?.id || leelamUser?.id || 1;
+    // 2. created_by = integration admin
+    const integAdmin = db.prepare("SELECT id FROM users WHERE email = 'integration@apogeemobi.com'").get();
+    const createdBy  = integAdmin?.id || leelamUser?.id || 1;
 
-      // 3. Advertiser definitions
-      const advertisers = [
-        { name: 'Adgrowth',  email: 'admin@adgrowth.com',   password: 'Adgrowth@2026',  company: 'Adgrowth' },
-        { name: 'Mobupps',   email: 'admin@mobupps.com',    password: 'Mobupps@2026',   company: 'Mobupps' },
-        { name: 'Admattic',  email: 'info@admattic.com',    password: 'Admattic@2026',  company: 'Admattic' },
-        { name: 'Ojo7',      email: 'contact@ojo7.com',     password: 'Ojo7App@2026',   company: 'Ojo7' },
-      ];
+    // 3. Ensure each advertiser exists
+    const advertisers = [
+      { name: 'Adgrowth', email: 'admin@adgrowth.com',  password: 'Adgrowth@2026', company: 'Adgrowth' },
+      { name: 'Mobupps',  email: 'admin@mobupps.com',   password: 'Mobupps@2026',  company: 'Mobupps'  },
+      { name: 'Admattic', email: 'info@admattic.com',   password: 'Admattic@2026', company: 'Admattic' },
+      { name: 'Ojo7',     email: 'contact@ojo7.com',    password: 'Ojo7App@2026',  company: 'Ojo7'     },
+    ];
 
-      for (const adv of advertisers) {
-        // Skip if email already registered
-        const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(adv.email);
-        if (existing) {
-          console.log('[migration] seed_advertisers_leelam_v1: ' + adv.email + ' already exists, skipping');
-          // Still assign AM if not set
-          if (leelamAmId) {
-            db.prepare('UPDATE users SET account_manager_id = ? WHERE id = ? AND account_manager_id IS NULL').run(leelamAmId, existing.id);
-            db.prepare('INSERT OR IGNORE INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)').run(existing.id, leelamAmId);
-          }
-          continue;
-        }
-        const hash   = bcrypt.hashSync(adv.password, 12);
-        const token  = nanoid20hex();
+    for (const adv of advertisers) {
+      let u = db.prepare('SELECT id, account_manager_id FROM users WHERE email = ?').get(adv.email);
+      if (!u) {
+        const hash    = bcrypt.hashSync(adv.password, 12);
+        const token   = nanoid20hex();
         const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
-        const result = db.prepare(
+        const res = db.prepare(
           `INSERT INTO users (email, password, name, company_name, role, status, email_verified,
                               created_by, account_manager_id, postback_token, seq_num)
            VALUES (?, ?, ?, ?, 'advertiser', 'active', 1, ?, ?, ?, ?)`
         ).run(adv.email, hash, adv.name, adv.company, createdBy, leelamAmId, token, nextSeq);
-        const userId = result.lastInsertRowid;
-        // Also insert into junction table
-        if (leelamAmId) {
-          db.prepare('INSERT OR IGNORE INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)').run(userId, leelamAmId);
-        }
-        console.log('[migration] seed_advertisers_leelam_v1: created advertiser ' + adv.name + ' (' + adv.email + ') id=' + userId);
+        u = { id: res.lastInsertRowid, account_manager_id: leelamAmId };
+        console.log('[ensure] Created advertiser: ' + adv.name + ' (' + adv.email + ') id=' + u.id);
       }
-
-      db.prepare("INSERT INTO migrations (name) VALUES ('seed_advertisers_leelam_v1')").run();
-      console.log('[migration] seed_advertisers_leelam_v1: complete');
-    } catch (e) {
-      console.error('[migration] seed_advertisers_leelam_v1 failed:', e.message);
+      // Always ensure AM assignment is set
+      if (leelamAmId) {
+        db.prepare('UPDATE users SET account_manager_id = ? WHERE id = ? AND account_manager_id IS NULL').run(leelamAmId, u.id);
+        db.prepare('INSERT OR IGNORE INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)').run(u.id, leelamAmId);
+      }
     }
+  } catch (e) {
+    console.error('[ensure] advertiser seed failed:', e.message);
   }
 }
 
