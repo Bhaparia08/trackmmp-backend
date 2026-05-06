@@ -377,6 +377,19 @@ router.delete('/:id', requireRole('admin'), (req, res) => {
   res.json({ success: true });
 });
 
+// ── DELETE /api/invoices/:id/purge — hard-delete any invoice (super-admin only) ─
+// Removes from both invoices and historical_invoices. Only callable by
+// integration@apogeemobi.com. Used to clean up test/erroneous records.
+router.delete('/:id/purge', requireRole('admin'), (req, res) => {
+  if (req.user.email !== 'integration@apogeemobi.com')
+    return res.status(403).json({ error: 'Access denied' });
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  db.prepare('DELETE FROM invoices WHERE id = ?').run(inv.id);
+  db.prepare('DELETE FROM historical_invoices WHERE invoice_number = ?').run(inv.invoice_number);
+  res.json({ success: true, purged: inv.invoice_number });
+});
+
 // ── POST /api/invoices/:id/cancel — cancel any non-paid invoice ───────────────
 // Cancelled invoices are frozen (no edits allowed) but kept in the system.
 // The invoice number is permanently retired — the sequence continues from it,
