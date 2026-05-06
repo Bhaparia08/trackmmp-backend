@@ -910,6 +910,21 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
+// ── Migration: add sent_at column to invoices ─────────────────────────────────
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'invoices_sent_at_v1'").get();
+  if (!done) {
+    try {
+      db.prepare('ALTER TABLE invoices ADD COLUMN sent_at INTEGER').run();
+      console.log('[migration] invoices_sent_at_v1: sent_at column added');
+      db.prepare("INSERT INTO migrations (name) VALUES ('invoices_sent_at_v1')").run();
+    } catch (e) {
+      console.error('[migration] invoices_sent_at_v1 failed:', e.message);
+    }
+  }
+}
+
 // ── Auto-seed admin account ───────────────────────────────────────────────────
 // If SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD env vars are set AND no admin
 // exists yet, create the admin account automatically on first start.

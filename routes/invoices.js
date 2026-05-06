@@ -191,22 +191,53 @@ router.put('/historical/:id', requireRole('admin'), (req, res) => {
 
 // ── GET /api/invoices — list ──────────────────────────────────────────────────
 router.get('/', requireRole('admin'), (req, res) => {
-  const { status, advertiser_id, from, to } = req.query;
+  const { status, advertiser_id, from, to, search } = req.query;
+  const page  = Math.max(1, parseInt(req.query.page)  || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 25));
+
+  // ── Auto-overdue: flip sent invoices whose due_date has passed ────────────
+  const overdueRows = db.prepare(`
+    SELECT id, advertiser_id, invoice_number FROM invoices
+    WHERE status = 'sent' AND due_date < date('now')
+  `).all();
+  if (overdueRows.length > 0) {
+    const placeholders = overdueRows.map(() => '?').join(',');
+    db.prepare(`UPDATE invoices SET status = 'overdue', updated_at = unixepoch()
+                WHERE id IN (${placeholders})`)
+      .run(...overdueRows.map(r => r.id));
+    // Sync each newly-overdue invoice to historical_invoices
+    for (const row of overdueRows) {
+      try {
+        const updated = db.prepare('SELECT * FROM invoices WHERE id = ?').get(row.id);
+        const adv = db.prepare('SELECT name, legal_name FROM users WHERE id = ?').get(updated.advertiser_id);
+        syncToHistorical(updated, adv?.legal_name || adv?.name);
+      } catch {}
+    }
+  }
 
   const conditions = [];
   const values     = [];
 
-  if (advertiser_id) {
-    conditions.push('i.advertiser_id = ?');
-    values.push(advertiser_id);
+  if (advertiser_id) { conditions.push('i.advertiser_id = ?'); values.push(advertiser_id); }
+  if (status)        { conditions.push('i.status = ?');        values.push(status); }
+  if (from)          { conditions.push('i.issue_date >= ?');   values.push(from); }
+  if (to)            { conditions.push('i.issue_date <= ?');   values.push(to); }
+  if (search) {
+    conditions.push('(i.invoice_number LIKE ? OR u.name LIKE ? OR u.legal_name LIKE ? OR u.email LIKE ?)');
+    const like = `%${search}%`;
+    values.push(like, like, like, like);
   }
-
-  if (status)  { conditions.push('i.status = ?'); values.push(status); }
-  if (from)    { conditions.push('i.issue_date >= ?'); values.push(from); }
-  if (to)      { conditions.push('i.issue_date <= ?'); values.push(to); }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
+  // Total count for pagination
+  const total = db.prepare(`
+    SELECT COUNT(*) AS n FROM invoices i
+    LEFT JOIN users u ON u.id = i.advertiser_id
+    ${where}
+  `).get(...values).n;
+
+  const offset = (page - 1) * limit;
   const rows = db.prepare(`
     SELECT i.*, u.name AS advertiser_name, u.email AS advertiser_email,
            u.legal_name, u.legal_country,
@@ -216,9 +247,15 @@ router.get('/', requireRole('admin'), (req, res) => {
     LEFT JOIN users cb ON cb.id = i.created_by
     ${where}
     ORDER BY i.created_at DESC
-  `).all(...values);
+    LIMIT ? OFFSET ?
+  `).all(...values, limit, offset);
 
-  res.json(rows.map(r => ({ ...r, line_items: JSON.parse(r.line_items || '[]') })));
+  res.json({
+    invoices: rows.map(r => ({ ...r, line_items: JSON.parse(r.line_items || '[]') })),
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+  });
 });
 
 // ── GET /api/invoices/:id — detail ───────────────────────────────────────────
@@ -298,7 +335,8 @@ router.put('/:id', requireRole('admin'), (req, res, next) => {
     const tax_amt  = +(subtotal * (rate / 100)).toFixed(2);
     const total    = +(subtotal + tax_amt).toFixed(2);
 
-    const paid_at  = status === 'paid' && inv.status !== 'paid' ? Math.floor(Date.now() / 1000) : inv.paid_at;
+    const paid_at   = status === 'paid' && inv.status !== 'paid'   ? Math.floor(Date.now() / 1000) : inv.paid_at;
+    const sent_at   = status === 'sent' && inv.status !== 'sent'   ? Math.floor(Date.now() / 1000) : inv.sent_at;
 
     db.prepare(`
       UPDATE invoices SET
@@ -310,13 +348,14 @@ router.put('/:id', requireRole('admin'), (req, res, next) => {
         notes = COALESCE(?, notes),
         status = COALESCE(?, status),
         paid_at = ?,
+        sent_at = ?,
         updated_at = unixepoch()
       WHERE id = ?
     `).run(
       entity || null, advertiser_id || null, issue_date || null, due_date || null,
       JSON.stringify(items), +subtotal.toFixed(2), rate, tax_amt, total,
       notes != null ? notes : null,
-      status || null, paid_at, inv.id
+      status || null, paid_at, sent_at, inv.id
     );
 
     const updated = db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
