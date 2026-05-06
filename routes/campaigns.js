@@ -447,17 +447,55 @@ router.get('/:id/tracking-url', (req, res) => {
     { macro: '{ip}',                 desc: 'User IP address' },
   ];
 
-  // Get the account owner's postback_token
-  const owner = db.prepare('SELECT postback_token FROM users WHERE id = ?').get(c.user_id);
-  const postbackToken = owner?.postback_token || '';
+  // Get the ADVERTISER's postback_token.
+  // Each advertiser has their own unique token — this is what they configure in their MMP
+  // (AppsFlyer / Adjust / Branch / etc.) so conversions are scoped to that advertiser only.
+  // Falls back to the account owner token if no advertiser is linked to this campaign.
+  const advUser   = c.advertiser_id
+    ? db.prepare('SELECT id, name, postback_token FROM users WHERE id = ?').get(c.advertiser_id)
+    : null;
+  const ownerUser = db.prepare('SELECT postback_token FROM users WHERE id = ?').get(c.user_id);
+  const postbackToken   = advUser?.postback_token || ownerUser?.postback_token || '';
+  const advertiserName  = advUser?.name || c.advertiser_name || 'Advertiser';
 
-  // Single acquisition postback URLs (account-level token, works for ALL campaigns)
+  // ── Universal postback URL ──────────────────────────────────────────────────
+  // ONE URL that works with ANY MMP — AppsFlyer, Adjust, Branch, Singular, or
+  // any custom S2S. It includes all MMP-specific click_id parameter names.
+  // Each MMP replaces only its own macro and leaves the others as literal {text}.
+  // The backend's resolved() filter picks whichever parameter holds the real value.
+  //
+  //   af_sub1={af_sub1}           ← AppsFlyer fills this
+  //   creative={creative}         ← Adjust fills this
+  //   branch_click_id={~click_id} ← Branch fills this (tilde mapped to branch_click_id)
+  //   sub1={sub1}                 ← Singular fills this
+  //   click_id={click_id}         ← generic / custom S2S fills this
+  //
+  const universalInstall = `${base}/acquisition?security_token=${postbackToken}&click_id={click_id}&af_sub1={af_sub1}&creative={creative}&branch_click_id={~click_id}&sub1={sub1}&event=install&payout={payout}&idfa={idfa}&gaid={advertising_id}`;
+  const universalEvent   = `${base}/acquisition?security_token=${postbackToken}&click_id={click_id}&af_sub1={af_sub1}&creative={creative}&branch_click_id={~click_id}&sub1={sub1}&event={event_name}&payout={payout}&idfa={idfa}&gaid={advertising_id}`;
+
   const acquisition = {
-    install: `${base}/acquisition?click_id={click_id}&security_token=${postbackToken}&idfa={idfa}&gaid={gaid}`,
-    event:   `${base}/acquisition?click_id={click_id}&security_token=${postbackToken}&idfa={idfa}&gaid={gaid}&goal_value={event_name}`,
+    // Universal (recommended — works with all MMPs)
+    install: universalInstall,
+    event:   universalEvent,
+
+    // MMP-specific (for reference / if advertiser prefers a shorter URL)
+    appsflyer_install: `${base}/acquisition?security_token=${postbackToken}&af_sub1={af_sub1}&event=install&payout={payout_amount}&idfa={idfa}&gaid={advertising_id}&country={country_code}`,
+    appsflyer_event:   `${base}/acquisition?security_token=${postbackToken}&af_sub1={af_sub1}&event={event_name}&payout={payout_amount}&idfa={idfa}&gaid={advertising_id}&country={country_code}`,
+    adjust_install:    `${base}/acquisition?security_token=${postbackToken}&creative={creative}&event=install&payout={payout}&advertising_id={gps_adid}&idfa={idfa}`,
+    adjust_event:      `${base}/acquisition?security_token=${postbackToken}&creative={creative}&event={activity_kind}&payout={payout}&advertising_id={gps_adid}`,
+    branch_install:    `${base}/acquisition?security_token=${postbackToken}&branch_click_id={~click_id}&event=install&advertising_id={advertising_id}`,
+    branch_event:      `${base}/acquisition?security_token=${postbackToken}&branch_click_id={~click_id}&event={event_name}&advertising_id={advertising_id}`,
+    singular_install:  `${base}/acquisition?security_token=${postbackToken}&sub1={sub1}&event=install&payout={payout}`,
   };
 
-  res.json({ urls, acquisition, postback_macros, campaign: { id: c.id, name: c.name, token: c.campaign_token }, postback_token: postbackToken });
+  res.json({
+    urls,
+    acquisition,
+    postback_macros,
+    campaign: { id: c.id, name: c.name, token: c.campaign_token },
+    postback_token: postbackToken,
+    advertiser_name: advertiserName,
+  });
 });
 
 module.exports = router;

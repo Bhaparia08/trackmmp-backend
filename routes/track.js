@@ -388,9 +388,67 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       dest = dest.split(macro).join(value);
     }
 
-    // If click_id was not embedded in the URL, append it so postbacks can reference it
+    // ── Smart MMP click_id injection ─────────────────────────────────────────
+    // If the advertiser didn't embed {click_id} as a macro in the destination URL,
+    // auto-inject the click_id using the correct parameter name for the detected MMP.
+    // This ensures the MMP echoes it back when firing the postback to this platform.
+    //
+    // Macro already used → macro substitution above already embedded click_id → skip
+    // No macro used      → detect MMP from hostname → inject into the right param slot
     if (!dest.includes(click_id)) {
-      dest += (dest.includes('?') ? '&' : '?') + 'click_id=' + click_id;
+      let injectParam = 'click_id'; // safe default for direct / non-MMP offer URLs
+
+      try {
+        const parsed = new URL(dest);
+        const host   = parsed.hostname.toLowerCase();
+        const params = parsed.searchParams;
+
+        if (host.includes('appsflyer.com') || host.includes('onelink.me')) {
+          // AppsFlyer: echoes af_sub1–af_sub5 in postback macros.
+          // Use the first unoccupied sub slot so we don't overwrite an existing value.
+          injectParam = !params.get('af_sub1') ? 'af_sub1'
+                      : !params.get('af_sub2') ? 'af_sub2'
+                      : !params.get('af_sub3') ? 'af_sub3'
+                      : !params.get('af_sub4') ? 'af_sub4'
+                      : 'af_sub5';
+
+        } else if (host.includes('adjust.com') || host.includes('adj.st') || host.includes('go.link')) {
+          // Adjust: echoes 'creative' (or 'label' as fallback) in callbacks.
+          injectParam = !params.get('creative') ? 'creative' : 'label';
+
+        } else if (host.includes('branch.io') || host.includes('app.link') || host.includes('bnc.lt')) {
+          // Branch: echoes ~click_id in webhooks.
+          injectParam = '~click_id';
+
+        } else if (host.includes('singular.net') || host.includes('sng.link')) {
+          // Singular: echoes sub1/sub2 in callbacks.
+          injectParam = !params.get('sub1') ? 'sub1' : 'sub2';
+
+        } else if (host.includes('kochava.com') || host.includes('kcha.va')) {
+          // Kochava: click_id param.
+          injectParam = 'click_id';
+
+        } else if (host.includes('tune.com') || host.includes('hasoffers.com')) {
+          // TUNE / HasOffers: transaction_id echoed in postbacks.
+          injectParam = 'transaction_id';
+
+        } else if (host.includes('trafficguard.ai') || host.includes('mytraffic.io')) {
+          injectParam = 'click_id';
+        }
+        // All other hosts (direct offer pages, custom MMP domains): use generic click_id.
+        // Advertiser should use the {click_id} macro in their URL to control the param name.
+      } catch { /* malformed URL — fall back to generic click_id */ }
+
+      // If the param already exists but is empty (e.g. af_sub1=), replace it in-place
+      // rather than appending a duplicate param. This handles URLs like:
+      //   https://app.appsflyer.com/com.app?pid=net&af_sub1=
+      // where the advertiser left an empty slot for the click_id to be injected.
+      const emptyParamRe = new RegExp('([?&])' + encodeURIComponent(injectParam).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=(?=&|$)', 'i');
+      if (emptyParamRe.test(dest)) {
+        dest = dest.replace(emptyParamRe, '$1' + encodeURIComponent(injectParam) + '=' + encodeURIComponent(click_id));
+      } else {
+        dest += (dest.includes('?') ? '&' : '?') + encodeURIComponent(injectParam) + '=' + encodeURIComponent(click_id);
+      }
     }
 
     // FIX #13: only redirect to safe http/https URLs
@@ -413,10 +471,22 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       const isAndroid = platform === 'android' || /android/i.test(ua);
 
       let deepLink = campaign.deep_link_url;
-      // Append click_id to deep link if not already there
+      // Append click_id to deep link using MMP-aware param name
       if (!deepLink.includes(click_id)) {
-        const sep = deepLink.includes('?') ? '&' : '?';
-        deepLink = deepLink + sep + 'click_id=' + click_id;
+        let dlParam = 'click_id';
+        try {
+          const dlParsed = new URL(deepLink);
+          const dlHost   = dlParsed.hostname.toLowerCase();
+          const dlParams = dlParsed.searchParams;
+          if (dlHost.includes('appsflyer.com') || dlHost.includes('onelink.me')) {
+            dlParam = !dlParams.get('af_sub1') ? 'af_sub1' : !dlParams.get('af_sub2') ? 'af_sub2' : 'af_sub5';
+          } else if (dlHost.includes('adjust.com') || dlHost.includes('adj.st') || dlHost.includes('go.link')) {
+            dlParam = !dlParams.get('creative') ? 'creative' : 'label';
+          } else if (dlHost.includes('branch.io') || dlHost.includes('app.link') || dlHost.includes('bnc.lt')) {
+            dlParam = '~click_id';
+          }
+        } catch {}
+        deepLink = deepLink + (deepLink.includes('?') ? '&' : '?') + encodeURIComponent(dlParam) + '=' + encodeURIComponent(click_id);
       }
 
       // Store fallback: prefer platform-specific, then generic destination
