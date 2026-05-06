@@ -32,32 +32,12 @@ function logFraud(click, type, details, action = 'flagged') {
  *   security_token  – account-level postback token (optional extra validation)
  */
 // ── Universal MMP click_id resolver ──────────────────────────────────────────
-// When a universal postback URL is used, it contains ALL MMP-specific click_id
-// parameter names (af_sub1, creative, sub1, etc.). Each MMP replaces only its
-// own macro and leaves the others as literal {macro} strings.
-// This helper filters out unresolved literals so we pick the real click_id value
-// regardless of which MMP fired the postback.
-function resolved(v) {
-  if (!v || typeof v !== 'string') return null;
-  const t = v.trim();
-  // Reject: empty, unresolved macro placeholders ({...}), or known null sentinels
-  if (!t || t === 'null' || t === 'undefined' || (t.startsWith('{') && t.endsWith('}'))) return null;
-  return t;
-}
-
 function handlePostback(params, ip, io) {
   const {
     click_id: rawClickId,
-    clickid: rawPublisherCid,
-    irclickid, aff_click_id, transaction_id,
-    // MMP-specific click_id echo params included in the universal postback URL
-    af_sub1,          // AppsFlyer  → echoed as {af_sub1}
-    creative,         // Adjust     → echoed as {creative}
-    label,            // Adjust alt → echoed as {label}
-    sub1,             // Singular   → echoed as {sub1}
-    branch_click_id,  // Branch     → echoed as {~click_id} mapped to branch_click_id= param
-    // Legacy aliases
-    subid, aff_sub, u1,
+    clickid:  rawClickid,
+    transaction_id,
+    irclickid, aff_click_id,
     payout = 0,
     event = 'install',
     event_name,
@@ -70,32 +50,23 @@ function handlePostback(params, ip, io) {
   const eventType = event || 'install';
   const deviceId  = advertising_id || gps_adid || gaid || idfa || null;
 
-  // ── Universal click_id resolution ─────────────────────────────────────────
-  // Tries every MMP parameter name in order, skipping unresolved {macro} literals.
-  // This allows ONE postback URL to work with AppsFlyer, Adjust, Branch, Singular,
-  // TUNE, and any custom S2S setup without changing the URL per MMP.
-  //
-  // Priority order (most unambiguous → most generic):
-  //   click_id / transaction_id    – explicit, least ambiguous
-  //   af_sub1                      – AppsFlyer standard sub passthrough
-  //   creative / label             – Adjust standard
-  //   branch_click_id              – Branch (mapped from {~click_id})
-  //   sub1                         – Singular
-  //   subid / aff_sub / u1         – Admitad / HasOffers / Rakuten
+  // ── Click ID resolution ───────────────────────────────────────────────────
+  // Simple approach: all MMPs send their click_id into the 'clickid' parameter.
+  // When setting up the postback in each MMP dashboard, the AM manually puts
+  // the correct MMP macro in the clickid= slot:
+  //   AppsFlyer  → clickid={af_sub1}
+  //   Adjust     → clickid={creative}
+  //   Branch     → clickid={~click_id}
+  //   Singular   → clickid={sub1}
+  //   Generic    → clickid={click_id} or clickid={transaction_id}
+  // Priority: clickid first (MMP macro), then click_id, then transaction_id.
   const primaryClickId =
-    resolved(rawClickId)      ||
-    resolved(transaction_id)  ||
-    resolved(af_sub1)         ||
-    resolved(creative)        ||
-    resolved(label)           ||
-    resolved(branch_click_id) ||
-    resolved(sub1)            ||
-    resolved(subid)           ||
-    resolved(aff_sub)         ||
-    resolved(u1)              ||
+    rawClickid      ||   // MMP fills their macro value here
+    rawClickId      ||   // direct click_id= param
+    transaction_id  ||   // TUNE / HasOffers alias
     null;
 
-  const pubClickId = resolved(rawPublisherCid) || resolved(irclickid) || resolved(aff_click_id) || null;
+  const pubClickId = irclickid || aff_click_id || null;
 
   // ── Attribution ────────────────────────────────────────────────────────────
   // 1. Primary: click_id / transaction_id / subid / aff_sub / u1
@@ -107,8 +78,9 @@ function handlePostback(params, ip, io) {
 
   if (primaryClickId) click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(primaryClickId);
   // Affise (and some Adjust integrations) echo our click_id back in the 'clickid' param.
-  // Try it as a primary click_id lookup before using it as publisher secondary.
-  if (!click && rawPublisherCid) click = db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(rawPublisherCid);
+  // If not found as click_id, try clickid= as publisher_click_id fallback.
+  // This handles cases where publisher passes their own click ID in clickid= param.
+  if (!click && rawClickid) click = db.prepare('SELECT * FROM clicks WHERE publisher_click_id = ?').get(rawClickid);
   if (!click && pubClickId) click = db.prepare('SELECT * FROM clicks WHERE publisher_click_id = ?').get(pubClickId);
 
   // Validate security_token against users.postback_token (account-level token)

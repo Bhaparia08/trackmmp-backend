@@ -458,34 +458,35 @@ router.get('/:id/tracking-url', (req, res) => {
   const postbackToken   = advUser?.postback_token || ownerUser?.postback_token || '';
   const advertiserName  = advUser?.name || c.advertiser_name || 'Advertiser';
 
-  // ── Universal postback URL ──────────────────────────────────────────────────
-  // ONE URL that works with ANY MMP — AppsFlyer, Adjust, Branch, Singular, or
-  // any custom S2S. It includes all MMP-specific click_id parameter names.
-  // Each MMP replaces only its own macro and leaves the others as literal {text}.
-  // The backend's resolved() filter picks whichever parameter holds the real value.
-  //
-  //   af_sub1={af_sub1}           ← AppsFlyer fills this
-  //   creative={creative}         ← Adjust fills this
-  //   branch_click_id={~click_id} ← Branch fills this (tilde mapped to branch_click_id)
-  //   sub1={sub1}                 ← Singular fills this
-  //   click_id={click_id}         ← generic / custom S2S fills this
-  //
-  const universalInstall = `${base}/acquisition?security_token=${postbackToken}&click_id={click_id}&af_sub1={af_sub1}&creative={creative}&branch_click_id={~click_id}&sub1={sub1}&event=install&payout={payout}&idfa={idfa}&gaid={advertising_id}`;
-  const universalEvent   = `${base}/acquisition?security_token=${postbackToken}&click_id={click_id}&af_sub1={af_sub1}&creative={creative}&branch_click_id={~click_id}&sub1={sub1}&event={event_name}&payout={payout}&idfa={idfa}&gaid={advertising_id}`;
+  // ── Postback URLs — simple clickid= approach ─────────────────────────────
+  // One base URL. The AM manually replaces CLICK_ID_MACRO with the correct
+  // macro when registering with each MMP dashboard:
+  //   AppsFlyer  → clickid={af_sub1}
+  //   Adjust     → clickid={creative}
+  //   Branch     → clickid={~click_id}
+  //   Singular   → clickid={sub1}
+  //   Generic    → clickid={transaction_id}
+  // Backend reads the 'clickid' param to attribute the conversion.
+
+  const base_install = `${base}/acquisition?clickid=CLICK_ID_MACRO&event=install&payout={payout}&gaid={advertising_id}&idfa={idfa}`;
+  const base_event   = `${base}/acquisition?clickid=CLICK_ID_MACRO&event={event_name}&payout={payout}&gaid={advertising_id}&idfa={idfa}`;
 
   const acquisition = {
-    // Universal (recommended — works with all MMPs)
-    install: universalInstall,
-    event:   universalEvent,
+    // Base template — copy and replace CLICK_ID_MACRO with MMP macro
+    install: base_install,
+    event:   base_event,
 
-    // MMP-specific (for reference / if advertiser prefers a shorter URL)
-    appsflyer_install: `${base}/acquisition?security_token=${postbackToken}&af_sub1={af_sub1}&event=install&payout={payout_amount}&idfa={idfa}&gaid={advertising_id}&country={country_code}`,
-    appsflyer_event:   `${base}/acquisition?security_token=${postbackToken}&af_sub1={af_sub1}&event={event_name}&payout={payout_amount}&idfa={idfa}&gaid={advertising_id}&country={country_code}`,
-    adjust_install:    `${base}/acquisition?security_token=${postbackToken}&creative={creative}&event=install&payout={payout}&advertising_id={gps_adid}&idfa={idfa}`,
-    adjust_event:      `${base}/acquisition?security_token=${postbackToken}&creative={creative}&event={activity_kind}&payout={payout}&advertising_id={gps_adid}`,
-    branch_install:    `${base}/acquisition?security_token=${postbackToken}&branch_click_id={~click_id}&event=install&advertising_id={advertising_id}`,
-    branch_event:      `${base}/acquisition?security_token=${postbackToken}&branch_click_id={~click_id}&event={event_name}&advertising_id={advertising_id}`,
-    singular_install:  `${base}/acquisition?security_token=${postbackToken}&sub1={sub1}&event=install&payout={payout}`,
+    // Ready-to-use per MMP (CLICK_ID_MACRO already substituted)
+    appsflyer_install: `${base}/acquisition?clickid={af_sub1}&event=install&payout={payout_amount}&gaid={advertising_id}&idfa={idfa}`,
+    appsflyer_event:   `${base}/acquisition?clickid={af_sub1}&event={event_name}&payout={payout_amount}&gaid={advertising_id}&idfa={idfa}`,
+    adjust_install:    `${base}/acquisition?clickid={creative}&event=install&payout={payout}&gaid={gps_adid}&idfa={idfa}`,
+    adjust_event:      `${base}/acquisition?clickid={creative}&event={activity_kind}&payout={payout}&gaid={gps_adid}&idfa={idfa}`,
+    branch_install:    `${base}/acquisition?clickid={~click_id}&event=install&gaid={advertising_id}&idfa={idfa}`,
+    branch_event:      `${base}/acquisition?clickid={~click_id}&event={event_name}&gaid={advertising_id}&idfa={idfa}`,
+    singular_install:  `${base}/acquisition?clickid={sub1}&event=install&payout={payout}&gaid={advertising_id}`,
+    singular_event:    `${base}/acquisition?clickid={sub1}&event={event_name}&payout={payout}&gaid={advertising_id}`,
+    generic_install:   `${base}/acquisition?clickid={transaction_id}&event=install&payout={payout}&gaid={advertising_id}&idfa={idfa}`,
+    generic_event:     `${base}/acquisition?clickid={transaction_id}&event={event_name}&payout={payout}&gaid={advertising_id}&idfa={idfa}`,
   };
 
   res.json({
