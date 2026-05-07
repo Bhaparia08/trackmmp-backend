@@ -257,27 +257,33 @@ router.post('/forgot-password', async (req, res, next) => {
     const mailer = getMailer();
     if (mailer) {
       const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-      await mailer.sendMail({
-        from: `"Apogeemobi" <${from}>`,
-        to: user.email,
-        subject: 'Reset your Apogeemobi password',
-        html: `
-          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-            <h2 style="color:#6366f1">Password Reset</h2>
-            <p>Hi ${user.name},</p>
-            <p>We received a request to reset your password. Click the button below — this link expires in <strong>1 hour</strong>.</p>
-            <p style="margin:24px 0">
-              <a href="${resetUrl}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
-                Reset Password
-              </a>
-            </p>
-            <p style="color:#94a3b8;font-size:13px">If you didn't request this, you can safely ignore this email.</p>
-            <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
-            <p style="color:#94a3b8;font-size:12px">Apogeemobi · track.apogeemobi.com</p>
-          </div>
-        `,
-      });
-      res.json({ sent: true });
+      try {
+        await mailer.sendMail({
+          from: `"Apogeemobi" <${from}>`,
+          to: user.email,
+          subject: 'Reset your Apogeemobi password',
+          html: `
+            <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+              <h2 style="color:#6366f1">Password Reset</h2>
+              <p>Hi ${user.name},</p>
+              <p>We received a request to reset your password. Click the button below — this link expires in <strong>1 hour</strong>.</p>
+              <p style="margin:24px 0">
+                <a href="${resetUrl}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
+                  Reset Password
+                </a>
+              </p>
+              <p style="color:#94a3b8;font-size:13px">If you didn't request this, you can safely ignore this email.</p>
+              <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
+              <p style="color:#94a3b8;font-size:12px">Apogeemobi · track.apogeemobi.com</p>
+            </div>
+          `,
+        });
+        res.json({ sent: true });
+      } catch (smtpErr) {
+        // SMTP failed (bad credentials, blocked, etc.) — fall back to returning the reset URL directly
+        console.error('[forgot-password] SMTP error:', smtpErr.message);
+        res.json({ sent: true, reset_url: resetUrl, note: 'Email delivery failed — use this link to reset your password' });
+      }
     } else {
       // No SMTP configured — return the reset URL directly (admin use / dev mode)
       console.log(`[forgot-password] reset URL for ${user.email}: ${resetUrl}`);
