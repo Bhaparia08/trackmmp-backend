@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Publisher Flow Preview — Apogeemobi Platform</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f1f5f9; font-size: 14px; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .sub { color: #94a3b8; font-size: 13px; margin-bottom: 40px; }
+  .section { margin-bottom: 48px; }
+  .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #6366f1; font-weight: 700; margin-bottom: 16px; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; margin-bottom: 12px; }
+  .card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: rgba(16,185,129,0.15); color: #10b981; }
+  .badge-yellow { background: rgba(251,191,36,0.15); color: #f59e0b; }
+  .badge-blue { background: rgba(99,102,241,0.15); color: #818cf8; }
+  .badge-red { background: rgba(239,68,68,0.15); color: #ef4444; }
+  .flow { display: flex; align-items: flex-start; gap: 0; margin-bottom: 40px; overflow-x: auto; padding-bottom: 8px; }
+  .flow-step { flex: 1; min-width: 160px; text-align: center; position: relative; }
+  .flow-step:not(:last-child)::after { content: '→'; position: absolute; right: -12px; top: 22px; font-size: 20px; color: #6366f1; }
+  .flow-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; margin: 0 auto 10px; }
+  .flow-label { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .flow-desc { font-size: 11px; color: #94a3b8; line-height: 1.5; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { padding: 10px 14px; text-align: left; color: #94a3b8; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; }
+  td { padding: 10px 14px; border-bottom: 1px solid #1e293b; }
+  tr:last-child td { border-bottom: none; }
+  .code { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 12px 16px; font-family: monospace; font-size: 12px; color: #a5b4fc; line-height: 1.7; margin: 10px 0; overflow-x: auto; white-space: pre; }
+  .highlight { color: #34d399; }
+  .dim { color: #64748b; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .stat-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 18px 20px; }
+  .stat-label { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
+  .stat-value { font-size: 26px; font-weight: 700; }
+  .tab-bar { display: flex; border-bottom: 1px solid #334155; margin-bottom: 20px; gap: 4px; }
+  .tab { padding: 8px 18px; font-size: 13px; cursor: pointer; border: none; background: none; color: #94a3b8; border-bottom: 2px solid transparent; }
+  .tab.active { color: #6366f1; border-bottom-color: #6366f1; font-weight: 600; }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; background: #6366f1; color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-row { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 20px; }
+  .step-content { flex: 1; padding-top: 4px; }
+  .step-content h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .step-content p { font-size: 13px; color: #94a3b8; line-height: 1.6; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px; font-size: 12px; border: 1px solid; margin: 3px; }
+  .arrow-down { text-align: center; color: #6366f1; font-size: 20px; margin: 8px 0; }
+  .screen { background: #0f172a; border: 1px solid #334155; border-radius: 10px; overflow: hidden; }
+  .screen-bar { background: #1e293b; padding: 8px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #334155; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .screen-body { padding: 20px; }
+  .sidebar-item { padding: 8px 14px; font-size: 12px; display: flex; align-items: center; gap: 8px; color: #94a3b8; border-radius: 6px; margin-bottom: 2px; cursor: pointer; }
+  .sidebar-item.active { background: rgba(99,102,241,0.1); color: #818cf8; border-left: 2px solid #6366f1; }
+  .copy-btn { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); color: #818cf8; padding: 3px 10px; border-radius: 5px; font-size: 11px; cursor: pointer; }
+  @media(max-width:700px) { .grid2,.grid3,.grid4 { grid-template-columns:1fr; } .flow { flex-direction:column; } .flow-step::after { display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <img src="/logo.jpg" style="height:44px; border-radius:6px; background:#0d1b35; padding:6px 10px; margin-bottom:24px; display:block;" />
+  <h1>Publisher Flow — How Your Websites Connect to Campaigns</h1>
+  <p class="sub">Visual preview of the complete flow · Not deployed · For review only</p>
+
+  <!-- ── OVERVIEW FLOW ── -->
+  <div class="section">
+    <div class="section-title">Complete Flow Overview</div>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-icon" style="background:rgba(99,102,241,0.15)">🌐</div>
+        <div class="flow-label">Your Website</div>
+        <div class="flow-desc">User visits betmgmbonuscode.us and clicks offer</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-icon" style="background:rgba(16,185,129,0.15)">⚡</div>
+        <div class="flow-label">Our Platform</div>
+        <div class="flow-desc">Records click in &lt;50ms, redirects to advertiser</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-icon" style="background:rgba(251,191,36,0.15)">🎯</div>
+        <div class="flow-label">Advertiser Offer</div>
+        <div class="flow-desc">User signs up / installs / deposits</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-icon" style="background:rgba(239,68,68,0.15)">📡</div>
+        <div class="flow-label">MMP Postback</div>
+        <div class="flow-desc">AppsFlyer / Adjust fires S2S postback to our platform</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-icon" style="background:rgba(139,92,246,0.15)">💰</div>
+        <div class="flow-label">Revenue Credited</div>
+        <div class="flow-desc">Payout attributed to your site in reports</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 1: ADMIN CREATES PUBLISHERS ── -->
+  <div class="section">
+    <div class="section-title">Step 1 — Admin Creates Publisher Groups</div>
+    <div class="grid2">
+      <div>
+        <div class="card">
+          <div class="card-title">Publishers Page — Admin View</div>
+          <div class="screen">
+            <div class="screen-bar">
+              <div class="dot" style="background:#ef4444"></div>
+              <div class="dot" style="background:#f59e0b"></div>
+              <div class="dot" style="background:#10b981"></div>
+              <span style="font-size:11px;color:#64748b;margin-left:8px">track.apogeemobi.com/publishers</span>
+            </div>
+            <div class="screen-body">
+              <table>
+                <tr><th>Publisher</th><th>Token (pid=)</th><th>Geo</th><th>Status</th></tr>
+                <tr><td>🎲 USA Betting</td><td><code style="color:#a5b4fc;font-size:11px">jm7dXaWAap</code></td><td>🇺🇸 US</td><td><span class="badge badge-green">active</span></td></tr>
+                <tr><td>💳 USA Finance</td><td><code style="color:#a5b4fc;font-size:11px">fin9kXmTpQ</code></td><td>🇺🇸 US</td><td><span class="badge badge-green">active</span></td></tr>
+                <tr><td>🛡 USA Insurance</td><td><code style="color:#a5b4fc;font-size:11px">ins3rWbLpA</code></td><td>🇺🇸 US</td><td><span class="badge badge-green">active</span></td></tr>
+                <tr><td>🇮🇳 India Traffic</td><td><code style="color:#a5b4fc;font-size:11px">ind7yNqCmZ</code></td><td>🇮🇳 IN</td><td><span class="badge badge-green">active</span></td></tr>
+                <tr><td>🇧🇷 Brazil Traffic</td><td><code style="color:#a5b4fc;font-size:11px">bra2xKpRtM</code></td><td>🇧🇷 BR</td><td><span class="badge badge-green">active</span></td></tr>
+                <tr><td>🇲🇽 Mexico Traffic</td><td><code style="color:#a5b4fc;font-size:11px">mex5wLdNsJ</code></td><td>🇲🇽 MX</td><td><span class="badge badge-green">active</span></td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="card-title">Each publisher auto-gets a unique <code style="color:#a5b4fc">pid=</code> token</div>
+          <p style="font-size:13px;color:#94a3b8;line-height:1.7;margin-bottom:14px">
+            When a publisher group is created, the platform auto-generates a short token.
+            This token goes in the <code style="color:#34d399">pid=</code> parameter of every tracking link from that group.
+          </p>
+          <p style="font-size:13px;color:#94a3b8;line-height:1.7;margin-bottom:14px">
+            You also add notes listing which specific websites belong to this group. The individual site is tracked via <code style="color:#34d399">sub1=</code>.
+          </p>
+          <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:12px 14px;font-size:12px;color:#10b981;">
+            ✓ One publisher = one group of related sites<br/>
+            ✓ sub1= tracks which individual site sent the click<br/>
+            ✓ No login needed for your websites — just a link
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Your 19 sites mapped to 6 groups</div>
+          <div style="font-size:12px;line-height:2;color:#94a3b8">
+            <div><span class="badge badge-blue" style="margin-right:8px">USA Betting</span>betmgmbonuscode · draftkings · top10betting · top20betting</div>
+            <div style="margin-top:6px"><span class="badge badge-blue" style="margin-right:8px">USA Finance</span>cashonnow · zerointerestshop</div>
+            <div style="margin-top:6px"><span class="badge badge-blue" style="margin-right:8px">USA Insurance</span>carinsuranceguide · insurancepick · autoinsuranceguide</div>
+            <div style="margin-top:6px"><span class="badge badge-blue" style="margin-right:8px">India</span>creditdost.in · doctorreviews.in</div>
+            <div style="margin-top:6px"><span class="badge badge-blue" style="margin-right:8px">Brazil</span>quizfinanceiro · simuladorinvestimento · quantorende</div>
+            <div style="margin-top:6px"><span class="badge badge-blue" style="margin-right:8px">Mexico</span>compraydespues · llegamas · tusicuro · sincreditoburo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 2: TRACKING LINKS ── -->
+  <div class="section">
+    <div class="section-title">Step 2 — Get Tracking Links from Campaign Detail</div>
+    <div class="card">
+      <div class="card-title">Campaign Detail → Tracking Link tab</div>
+      <div class="screen">
+        <div class="screen-bar">
+          <div class="dot" style="background:#ef4444"></div>
+          <div class="dot" style="background:#f59e0b"></div>
+          <div class="dot" style="background:#10b981"></div>
+          <span style="font-size:11px;color:#64748b;margin-left:8px">track.apogeemobi.com/campaigns/33</span>
+        </div>
+        <div class="screen-body">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">BetMGM — SOI — USA</div>
+          <div style="font-size:12px;color:#94a3b8;margin-bottom:20px">Advertiser: BetMGM · Payout: $25.00 CPI · Geo: US</div>
+          <div class="tab-bar">
+            <button class="tab active">Tracking Link</button>
+            <button class="tab">Postback URLs</button>
+            <button class="tab">Stats</button>
+            <button class="tab">Goals</button>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px">Base Tracking URL</div>
+            <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px 14px;font-family:monospace;font-size:12px;color:#a5b4fc;display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <span>https://track.apogeemobi.com/track/click/<span style="color:#34d399">ABC123TOKEN</span></span>
+              <button class="copy-btn">Copy</button>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">Generated per site (add pid= and sub1=)</div>
+          <table>
+            <tr><th>Website</th><th>Full Tracking Link</th><th></th></tr>
+            <tr>
+              <td style="font-size:12px">betmgmbonuscode.us</td>
+              <td><div style="font-family:monospace;font-size:11px;color:#a5b4fc">.../track/click/ABC123TOKEN?<span class="highlight">pid=jm7dXaWAap</span>&<span style="color:#f59e0b">sub1=betmgmbonuscode</span>&clickid=VISITOR_ID</div></td>
+              <td><button class="copy-btn">Copy</button></td>
+            </tr>
+            <tr>
+              <td style="font-size:12px">draftkingspromocode.us</td>
+              <td><div style="font-family:monospace;font-size:11px;color:#a5b4fc">.../track/click/ABC123TOKEN?<span class="highlight">pid=jm7dXaWAap</span>&<span style="color:#f59e0b">sub1=draftkingspromocode</span>&clickid=VISITOR_ID</div></td>
+              <td><button class="copy-btn">Copy</button></td>
+            </tr>
+            <tr>
+              <td style="font-size:12px">top10betting.us</td>
+              <td><div style="font-family:monospace;font-size:11px;color:#a5b4fc">.../track/click/ABC123TOKEN?<span class="highlight">pid=jm7dXaWAap</span>&<span style="color:#f59e0b">sub1=top10betting</span>&clickid=VISITOR_ID</div></td>
+              <td><button class="copy-btn">Copy</button></td>
+            </tr>
+          </table>
+          <div style="margin-top:14px;padding:10px 14px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.2);border-radius:6px;font-size:12px;color:#f59e0b">
+            💡 Replace <code>VISITOR_ID</code> with a unique ID your website generates per visitor (e.g. session ID or timestamp+random)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 3: WEBSITE PLACEMENT ── -->
+  <div class="section">
+    <div class="section-title">Step 3 — Place Link on Your Website</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">betmgmbonuscode.us — HTML button</div>
+        <div class="code">&lt;!-- Option A: Simple link --&gt;
+&lt;a href="https://track.apogeemobi.com/track/click/<span class="highlight">ABC123TOKEN</span>
+  ?pid=<span class="highlight">jm7dXaWAap</span>
+  &sub1=<span style="color:#f59e0b">betmgmbonuscode</span>
+  &clickid=<span style="color:#f472b6">SESSION_ID</span>"&gt;
+  Get BetMGM $1000 Bonus →
+&lt;/a&gt;
+
+&lt;!-- Option B: With JS-generated unique ID --&gt;
+&lt;script&gt;
+  const cid = Date.now() + '-' + Math.random().toString(36).slice(2,8);
+  document.getElementById('betmgm-btn').href =
+    'https://track.apogeemobi.com/track/click/ABC123TOKEN'
+    + '?pid=jm7dXaWAap&sub1=betmgmbonuscode&clickid=' + cid;
+&lt;/script&gt;</div>
+      </div>
+      <div class="card">
+        <div class="card-title">What happens when user clicks (in &lt;50ms)</div>
+        <div style="font-size:13px;line-height:2;color:#94a3b8">
+          <div>1. Our platform receives the click</div>
+          <div>2. Records: <span style="color:#f1f5f9">pid=jm7dXaWAap</span> (USA Betting)</div>
+          <div>3. Records: <span style="color:#f1f5f9">sub1=betmgmbonuscode</span> (exact site)</div>
+          <div>4. Records: device, geo, OS, time</div>
+          <div>5. Generates unique <span style="color:#34d399">click_id=Xk9mPqR2wT</span></div>
+          <div>6. 302 redirect → BetMGM offer page</div>
+        </div>
+        <div style="margin-top:14px;padding:10px 14px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:6px;font-size:12px;color:#10b981">
+          ✓ User sees no delay — redirect is instant<br/>
+          ✓ Click is recorded even if user doesn't convert
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 4: WHAT HAPPENS AFTER CONVERSION ── -->
+  <div class="section">
+    <div class="section-title">Step 4 — User Converts → Platform Auto-Attributes</div>
+    <div class="card">
+      <div class="card-title">Attribution Chain</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+        <div style="text-align:center;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;font-size:12px">
+          <div style="font-size:18px;margin-bottom:6px">👤</div>
+          <div style="color:#94a3b8">User clicks</div>
+          <div style="color:#a5b4fc;margin-top:4px;font-family:monospace;font-size:11px">clickid=Xk9mPqR2wT</div>
+        </div>
+        <div style="color:#6366f1;font-size:20px">→</div>
+        <div style="text-align:center;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;font-size:12px">
+          <div style="font-size:18px;margin-bottom:6px">📱</div>
+          <div style="color:#94a3b8">User signs up</div>
+          <div style="color:#94a3b8;margin-top:4px;font-size:11px">on BetMGM</div>
+        </div>
+        <div style="color:#6366f1;font-size:20px">→</div>
+        <div style="text-align:center;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;font-size:12px">
+          <div style="font-size:18px;margin-bottom:6px">📡</div>
+          <div style="color:#94a3b8">AppsFlyer fires</div>
+          <div style="color:#a5b4fc;margin-top:4px;font-family:monospace;font-size:11px">clickid=Xk9mPqR2wT</div>
+        </div>
+        <div style="color:#6366f1;font-size:20px">→</div>
+        <div style="text-align:center;padding:12px 16px;background:#0f172a;border:1px solid #334155;border-radius:8px;font-size:12px">
+          <div style="font-size:18px;margin-bottom:6px">🔍</div>
+          <div style="color:#94a3b8">Platform matches</div>
+          <div style="color:#34d399;margin-top:4px;font-size:11px">click found!</div>
+        </div>
+        <div style="color:#6366f1;font-size:20px">→</div>
+        <div style="text-align:center;padding:12px 16px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;font-size:12px">
+          <div style="font-size:18px;margin-bottom:6px">💰</div>
+          <div style="color:#10b981;font-weight:600">$25.00 credited</div>
+          <div style="color:#94a3b8;margin-top:4px;font-size:11px">betmgmbonuscode.us</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STEP 5: REPORTS ── -->
+  <div class="section">
+    <div class="section-title">Step 5 — What You See in Reports</div>
+    <div class="grid4" style="margin-bottom:20px">
+      <div class="stat-card"><div class="stat-label">Total Clicks</div><div class="stat-value">1,847</div><div style="font-size:11px;color:#10b981;margin-top:4px">↑ 12% vs yesterday</div></div>
+      <div class="stat-card"><div class="stat-label">Conversions</div><div class="stat-value">214</div><div style="font-size:11px;color:#10b981;margin-top:4px">11.6% CVR</div></div>
+      <div class="stat-card"><div class="stat-label">Revenue</div><div class="stat-value">$5,350</div><div style="font-size:11px;color:#10b981;margin-top:4px">$25.00 avg payout</div></div>
+      <div class="stat-card"><div class="stat-label">Active Sites</div><div class="stat-value">19</div><div style="font-size:11px;color:#94a3b8;margin-top:4px">across 6 groups</div></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">By Publisher Group</div>
+        <table>
+          <tr><th>Group</th><th>Clicks</th><th>CVR</th><th>Revenue</th></tr>
+          <tr><td>🎲 USA Betting</td><td>642</td><td>14.2%</td><td style="color:#10b981">$2,280</td></tr>
+          <tr><td>🛡 USA Insurance</td><td>389</td><td>10.8%</td><td style="color:#10b981">$1,680</td></tr>
+          <tr><td>💳 USA Finance</td><td>298</td><td>9.1%</td><td style="color:#10b981">$810</td></tr>
+          <tr><td>🇧🇷 Brazil</td><td>241</td><td>8.4%</td><td style="color:#10b981">$360</td></tr>
+          <tr><td>🇲🇽 Mexico</td><td>185</td><td>7.6%</td><td style="color:#10b981">$160</td></tr>
+          <tr><td>🇮🇳 India</td><td>92</td><td>6.5%</td><td style="color:#10b981">$60</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">By Individual Site (sub1 breakdown)</div>
+        <table>
+          <tr><th>Site</th><th>Clicks</th><th>Conv.</th><th>Revenue</th></tr>
+          <tr><td>betmgmbonuscode.us</td><td>280</td><td>41</td><td style="color:#10b981">$1,025</td></tr>
+          <tr><td>draftkingspromocode.us</td><td>198</td><td>26</td><td style="color:#10b981">$650</td></tr>
+          <tr><td>carinsuranceguide.us</td><td>165</td><td>19</td><td style="color:#10b981">$760</td></tr>
+          <tr><td>top10betting.us</td><td>104</td><td>14</td><td style="color:#10b981">$350</td></tr>
+          <tr><td>insurancepick.us</td><td>138</td><td>12</td><td style="color:#10b981">$480</td></tr>
+          <tr><td>cashonnow.us</td><td>152</td><td>11</td><td style="color:#10b981">$330</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── WHAT NEEDS TO BE DONE ── -->
+  <div class="section">
+    <div class="section-title">What Needs to Be Done</div>
+    <div class="grid3">
+      <div class="card">
+        <div style="font-size:22px;margin-bottom:10px">✅</div>
+        <div class="card-title" style="color:#10b981">Already Built</div>
+        <ul style="font-size:13px;color:#94a3b8;line-height:2;padding-left:16px">
+          <li>Publisher creation + pid= token</li>
+          <li>Click tracking with pid + sub1</li>
+          <li>Postback attribution per publisher</li>
+          <li>Reports by publisher</li>
+          <li>Publisher Dashboard (login portal)</li>
+          <li>Fraud detection per publisher</li>
+          <li>Cap enforcement per publisher</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div style="font-size:22px;margin-bottom:10px">🔧</div>
+        <div class="card-title" style="color:#f59e0b">To Do Now</div>
+        <ul style="font-size:13px;color:#94a3b8;line-height:2;padding-left:16px">
+          <li>Create 6 publisher groups on platform</li>
+          <li>Tag campaigns by vertical (betting, finance…)</li>
+          <li>Add geo-targeting to campaigns</li>
+          <li>Generate per-site tracking links</li>
+          <li>Place links on your 19 websites</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div style="font-size:22px;margin-bottom:10px">🚀</div>
+        <div class="card-title" style="color:#818cf8">Optional / Later</div>
+        <ul style="font-size:13px;color:#94a3b8;line-height:2;padding-left:16px">
+          <li>SmartLink — auto-route by geo/device</li>
+          <li>Publisher API — sites pull offers dynamically</li>
+          <li>Auto-rotate best campaign per site</li>
+          <li>Revenue share dashboard for each site</li>
+          <li>Sub-publisher (page-level) tracking</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;color:#475569;font-size:12px;padding:24px 0;border-top:1px solid #1e293b">
+    Apogeemobi Platform — Publisher Flow Preview · Local only · Not deployed
+  </div>
+
+</div>
+</body>
+</html>
