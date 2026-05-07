@@ -189,9 +189,11 @@ async function fetchEverflow(cred) {
   try { extraCfgEf = JSON.parse(cred.extra || '{}'); } catch {}
   const efAffiliateId = extraCfgEf.affiliate_id || '';
 
-  const base = cred.network_id
-    ? `https://${cred.network_id}.api.eflow.team`
-    : 'https://api.eflow.team';
+  // Everflow API is always api.eflow.team regardless of network/white-label name.
+  // network_id is an internal label only — not a subdomain.
+  // EU accounts use api-eu.eflow.team — detect by checking if network_id contains 'eu'
+  const isEU = (cred.network_id || '').toLowerCase().includes('eu');
+  const base = isEU ? 'https://api-eu.eflow.team' : 'https://api.eflow.team';
 
   const res = await fetch(`${base}/v1/affiliates/offers?page=1&page_size=200`, {
     headers: { 'X-Eflow-API-Key': cred.api_key, 'Content-Type': 'application/json' },
