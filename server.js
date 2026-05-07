@@ -154,6 +154,11 @@ if (frontendDist) {
       }
     },
   }));
+  // Serve standalone HTML pages (not part of React SPA)
+  app.get('/publisher-preview.html', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'publisher-preview.html'));
+  });
+
   // All unmatched routes → React SPA (client-side routing)
   app.get('*', (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
