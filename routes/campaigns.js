@@ -487,6 +487,9 @@ router.get('/:id/tracking-url', (req, res) => {
     singular_event:    `${base}/acquisition?clickid={sub1}&event={event_name}&payout={payout}&gaid={advertising_id}`,
     generic_install:   `${base}/acquisition?clickid={transaction_id}&event=install&payout={payout}&gaid={advertising_id}&idfa={idfa}`,
     generic_event:     `${base}/acquisition?clickid={transaction_id}&event={event_name}&payout={payout}&gaid={advertising_id}&idfa={idfa}`,
+    // Everflow-specific (uses google_aid for GAID and payout_amount for payout)
+    everflow_install:  `${base}/acquisition?clickid={transaction_id}&event=install&payout_amount={payout_amount}&google_aid={google_aid}&idfa={idfa}`,
+    everflow_event:    `${base}/acquisition?clickid={transaction_id}&event={event_name}&payout_amount={payout_amount}&google_aid={google_aid}&idfa={idfa}`,
   };
 
   res.json({

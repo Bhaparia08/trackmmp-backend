@@ -38,17 +38,24 @@ function handlePostback(params, ip, io) {
     clickid:  rawClickid,
     transaction_id,
     irclickid, aff_click_id,
-    payout = 0,
+    payout = 0, payout_amount,           // payout_amount = Everflow alias
     event = 'install',
     event_name,
-    advertising_id, gps_adid, gaid, idfa, idfv, android_id,
-    revenue = 0, currency = 'USD',
+    advertising_id, gps_adid, gaid,
+    google_aid, google_advertiser_id,    // Everflow GAID aliases
+    idfa, idfv, android_id,
+    revenue = 0, amount, sale_amount,    // amount / sale_amount = Everflow revenue aliases
+    currency = 'USD',
     event_value, blocked_reason,
     security_token,
   } = params;
 
   const eventType = event || 'install';
-  const deviceId  = advertising_id || gps_adid || gaid || idfa || null;
+  // Resolve GAID: support Everflow's google_aid / google_advertiser_id alongside standard names
+  const deviceId  = advertising_id || gps_adid || gaid || google_aid || google_advertiser_id || idfa || null;
+  // Resolve revenue/payout: support Everflow's amount/sale_amount/payout_amount aliases
+  const resolvedRevenue = +revenue || +amount || +sale_amount || 0;
+  const resolvedPayout  = +payout  || +payout_amount || 0;
 
   // ── Click ID resolution ───────────────────────────────────────────────────
   // Simple approach: all MMPs send their click_id into the 'clickid' parameter.
@@ -90,7 +97,7 @@ function handlePostback(params, ip, io) {
     if (!tokenOwner) {
       db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, event_type, payout, status, raw_params, ip, blocked_reason)
         VALUES (?,?,?,?,'rejected',?,?,?)`)
-        .run(rawClickId||null, pubClickId||null, eventType, +payout, JSON.stringify(params), ip, 'invalid_security_token');
+        .run(rawClickId||null, pubClickId||null, eventType, resolvedPayout, JSON.stringify(params), ip, 'invalid_security_token');
       return;
     }
   }
@@ -136,7 +143,7 @@ function handlePostback(params, ip, io) {
         db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, campaign_id, user_id, event_type, payout, status, raw_params, ip)
           VALUES (?,?,?,?,?,?,'duplicate',?,?)`)
           .run(rawClickId||null, pubClickId||null, impression.campaign_id, impression.user_id,
-               eventType, +payout, JSON.stringify(params), ip);
+               eventType, resolvedPayout, JSON.stringify(params), ip);
         return;
       }
 
@@ -168,7 +175,7 @@ function handlePostback(params, ip, io) {
   if (!click) {
     db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, event_type, payout, status, raw_params, ip)
       VALUES (?,?,?,?,'rejected',?,?)`)
-      .run(rawClickId||null, pubClickId||null, eventType, +payout, JSON.stringify(params), ip);
+      .run(rawClickId||null, pubClickId||null, eventType, resolvedPayout, JSON.stringify(params), ip);
     return;
   }
 
@@ -179,7 +186,7 @@ function handlePostback(params, ip, io) {
   if (Math.floor(Date.now() / 1000) - click.created_at > lookbackSecs) {
     db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, campaign_id, user_id, event_type, payout, status, raw_params, ip)
       VALUES (?,?,?,?,?,?,'rejected',?,?)`)
-      .run(click.click_id, click.publisher_click_id, click.campaign_id, click.user_id, eventType, +payout, JSON.stringify(params), ip);
+      .run(click.click_id, click.publisher_click_id, click.campaign_id, click.user_id, eventType, resolvedPayout, JSON.stringify(params), ip);
     return;
   }
 
@@ -190,7 +197,7 @@ function handlePostback(params, ip, io) {
   if (dup) {
     db.prepare(`INSERT INTO postbacks (click_id, publisher_click_id, campaign_id, user_id, event_type, payout, status, raw_params, ip)
       VALUES (?,?,?,?,?,?,'duplicate',?,?)`)
-      .run(click.click_id, click.publisher_click_id, click.campaign_id, click.user_id, eventType, +payout, JSON.stringify(params), ip);
+      .run(click.click_id, click.publisher_click_id, click.campaign_id, click.user_id, eventType, resolvedPayout, JSON.stringify(params), ip);
     return;
   }
 
@@ -326,8 +333,8 @@ function handlePostback(params, ip, io) {
     ).get(click.campaign_id);
   }
 
-  const finalPayout  = matchedGoal ? matchedGoal.payout  : +payout  || campaign?.payout  || 0;
-  const finalRevenue = matchedGoal ? matchedGoal.revenue : +revenue || 0;
+  const finalPayout  = matchedGoal ? matchedGoal.payout  : resolvedPayout  || campaign?.payout  || 0;
+  const finalRevenue = matchedGoal ? matchedGoal.revenue : resolvedRevenue || 0;
 
   // ── Insert attributed postback ─────────────────────────────────────────────
   const pbResult = db.prepare(`INSERT INTO postbacks
