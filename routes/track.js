@@ -120,8 +120,18 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
 
         let triggered = false;
         if (rule.rule_type === 'empty_advertising_id') {
-          // Block clicks with no advertising ID (often bots / invalid traffic)
-          if (!advertising_id) triggered = true;
+          // Only enforce on mobile app campaigns (ios/android).
+          // Web/browser campaigns never have GAID/IDFA — skip this check for them.
+          // A campaign is mobile if: linked app has platform ios/android,
+          // OR campaign has an iOS/Android store URL set.
+          let isMobileCampaign = false;
+          if (campaign.ios_store_url || campaign.android_store_url) {
+            isMobileCampaign = true;
+          } else if (campaign.app_id) {
+            const linkedApp = db.prepare('SELECT platform FROM apps WHERE id = ?').get(campaign.app_id);
+            isMobileCampaign = linkedApp?.platform === 'ios' || linkedApp?.platform === 'android';
+          }
+          if (isMobileCampaign && !advertising_id) triggered = true;
         } else if (rule.rule_type === 'duplicate_ip_day') {
           // Block same IP converting more than N times per day on same campaign
           const maxHits = cfg.max_hits || 3;
