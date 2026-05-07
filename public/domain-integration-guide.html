@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Domain Integration Guide — Apogeemobi Platform</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',sans-serif;background:#0f172a;color:#f1f5f9;font-size:14px;line-height:1.6}
+  .wrap{max-width:1100px;margin:0 auto;padding:32px 24px}
+  h1{font-size:22px;font-weight:700;margin-bottom:6px}
+  .sub{color:#94a3b8;font-size:13px;margin-bottom:40px}
+  .section{margin-bottom:52px}
+  .sec-title{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#6366f1;font-weight:700;margin-bottom:18px;display:flex;align-items:center;gap:10px}
+  .sec-title::after{content:'';flex:1;height:1px;background:#1e293b}
+  .card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:20px;margin-bottom:14px}
+  .card-title{font-size:14px;font-weight:600;margin-bottom:12px}
+  .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600}
+  .bg{background:rgba(99,102,241,0.15);color:#818cf8}
+  .gg{background:rgba(16,185,129,0.15);color:#10b981}
+  .gy{background:rgba(251,191,36,0.15);color:#f59e0b}
+  .gr{background:rgba(239,68,68,0.15);color:#ef4444}
+  .code{background:#0f172a;border:1px solid #334155;border-radius:7px;padding:14px 16px;font-family:monospace;font-size:12px;color:#a5b4fc;line-height:1.8;margin:10px 0;overflow-x:auto;white-space:pre;position:relative}
+  .hl{color:#34d399}
+  .hy{color:#fbbf24}
+  .hp{color:#f472b6}
+  .hg{color:#94a3b8}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{padding:9px 14px;text-align:left;color:#64748b;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #334155;background:#0f172a}
+  td{padding:10px 14px;border-bottom:1px solid #1e293b;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  .note{padding:12px 16px;border-radius:8px;font-size:12px;margin:12px 0}
+  .note-blue{background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);color:#a5b4fc}
+  .note-green{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);color:#10b981}
+  .note-yellow{background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);color:#f59e0b}
+  .step-row{display:flex;gap:14px;margin-bottom:22px;align-items:flex-start}
+  .step-num{min-width:30px;height:30px;border-radius:50%;background:#6366f1;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .step-body{flex:1;padding-top:4px}
+  .step-body h3{font-size:14px;font-weight:600;margin-bottom:6px}
+  .step-body p{font-size:13px;color:#94a3b8}
+  .domain-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px}
+  .domain-row:last-child{border-bottom:none}
+  .domain-name{font-family:monospace;color:#a5b4fc;min-width:240px}
+  .pid-badge{font-family:monospace;font-size:11px;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.25);color:#818cf8;padding:2px 8px;border-radius:4px}
+  .sub1-badge{font-family:monospace;font-size:11px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.2);color:#fbbf24;padding:2px 8px;border-radius:4px}
+  .copy-btn{background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);color:#818cf8;padding:3px 10px;border-radius:4px;font-size:11px;cursor:pointer;white-space:nowrap}
+  .copy-btn:hover{background:rgba(99,102,241,0.2)}
+  .tab-bar{display:flex;border-bottom:1px solid #334155;margin-bottom:16px}
+  .tab{padding:7px 16px;font-size:12px;border:none;background:none;color:#64748b;border-bottom:2px solid transparent;cursor:pointer}
+  .tab.on{color:#6366f1;border-bottom-color:#6366f1;font-weight:600}
+  .screen{background:#0f172a;border:1px solid #334155;border-radius:8px;overflow:hidden}
+  .screen-bar{background:#1e293b;padding:7px 14px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #334155}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .url-bar{flex:1;font-size:11px;color:#64748b;margin-left:8px}
+  .screen-body{padding:18px}
+  @media(max-width:700px){.grid2,.grid3{grid-template-columns:1fr}.domain-name{min-width:unset}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <img src="/logo.jpg" style="height:40px;border-radius:6px;background:#0d1b35;padding:5px 10px;margin-bottom:24px;display:block"/>
+  <h1>Domain Integration Guide — All 19 Websites</h1>
+  <p class="sub">Complete format for connecting your websites to the platform · Review before deploying</p>
+
+  <!-- ════ SECTION 0 — PLATFORM STATUS ════ -->
+  <div class="section">
+    <div class="sec-title">Platform Status Check</div>
+    <div class="grid3">
+      <div class="card" style="padding:16px">
+        <div style="font-size:11px;color:#64748b;margin-bottom:8px">ALL ENDPOINTS</div>
+        <div style="font-size:22px;font-weight:700;color:#10b981">✓ 0 Errors</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px">13/13 checks passed</div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:11px;color:#64748b;margin-bottom:8px">CLICK TRACKING</div>
+        <div style="font-size:22px;font-weight:700;color:#10b981">✓ Live</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px">302 redirect working</div>
+      </div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:11px;color:#64748b;margin-bottom:8px">POSTBACKS</div>
+        <div style="font-size:22px;font-weight:700;color:#10b981">✓ Attributed</div>
+        <div style="font-size:12px;color:#94a3b8;margin-top:4px">Standard + Everflow aliases</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ SECTION 1 — PUBLISHER GROUPS ════ -->
+  <div class="section">
+    <div class="sec-title">Step 1 — Create These 6 Publisher Groups on Platform</div>
+    <div class="note note-blue">Go to <strong>track.apogeemobi.com → Publishers → Add Publisher</strong> for each group below. The platform auto-generates the <code>pid=</code> token.</div>
+    <div class="card">
+      <table>
+        <tr><th>#</th><th>Publisher Name</th><th>Geo</th><th>Vertical</th><th>Sites Included</th><th>Notes field</th></tr>
+        <tr>
+          <td>1</td><td><strong>USA Betting</strong></td><td>🇺🇸 US</td><td>Gambling / Betting</td>
+          <td style="font-size:12px;color:#94a3b8">4 sites</td>
+          <td style="font-size:11px;color:#64748b">betmgmbonuscode.us, draftkingspromocode.us, top10betting.us, top20betting.us</td>
+        </tr>
+        <tr>
+          <td>2</td><td><strong>USA Finance</strong></td><td>🇺🇸 US</td><td>Finance / Loans</td>
+          <td style="font-size:12px;color:#94a3b8">2 sites</td>
+          <td style="font-size:11px;color:#64748b">cashonnow.us, zerointerestshop.us</td>
+        </tr>
+        <tr>
+          <td>3</td><td><strong>USA Insurance</strong></td><td>🇺🇸 US</td><td>Insurance</td>
+          <td style="font-size:12px;color:#94a3b8">3 sites</td>
+          <td style="font-size:11px;color:#64748b">carinsuranceguide.us, insurancepick.us, autoinsuranceguide.us</td>
+        </tr>
+        <tr>
+          <td>4</td><td><strong>USA Other</strong></td><td>🇺🇸 US</td><td>Mixed</td>
+          <td style="font-size:12px;color:#94a3b8">1 site</td>
+          <td style="font-size:11px;color:#64748b">aftermint.us</td>
+        </tr>
+        <tr>
+          <td>5</td><td><strong>India Traffic</strong></td><td>🇮🇳 IN</td><td>Finance / Health</td>
+          <td style="font-size:12px;color:#94a3b8">2 sites</td>
+          <td style="font-size:11px;color:#64748b">creditdost.in, doctorreviews.in</td>
+        </tr>
+        <tr>
+          <td>6</td><td><strong>Brazil Traffic</strong></td><td>🇧🇷 BR</td><td>Finance / Investment</td>
+          <td style="font-size:12px;color:#94a3b8">3 sites</td>
+          <td style="font-size:11px;color:#64748b">quizfinanceiro.com, simuladorinvestimento.com.br, quantorendeinvestimento.com</td>
+        </tr>
+        <tr>
+          <td>7</td><td><strong>Mexico Traffic</strong></td><td>🇲🇽 MX</td><td>Finance / Credit</td>
+          <td style="font-size:12px;color:#94a3b8">4 sites</td>
+          <td style="font-size:11px;color:#64748b">compraydespues.com, llegamas.com, tusicuro.com, sincreditoburo.com</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════ SECTION 2 — COMPLETE DOMAIN MAPPING ════ -->
+  <div class="section">
+    <div class="sec-title">Step 2 — Complete Domain → Tracking Link Mapping</div>
+    <div class="note note-yellow">After creating publishers above, replace <code style="color:#fbbf24">PID_TOKEN</code> below with the actual <code>pid=</code> value generated by the platform for each group.</div>
+
+    <!-- USA Betting -->
+    <div class="card">
+      <div class="card-title">🎲 USA Betting — pid = <span class="pid-badge">PID_USA_BET</span></div>
+      <div class="domain-row">
+        <div class="domain-name">betmgmbonuscode.us</div>
+        <div class="sub1-badge">sub1=betmgmbonuscode</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 10px">
+          https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_BET</span>&sub1=betmgmbonuscode&clickid=<span style="color:#f472b6">{VISITOR_ID}</span>
+        </div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">draftkingspromocode.us</div>
+        <div class="sub1-badge">sub1=draftkingspromocode</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 10px">
+          https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_BET</span>&sub1=draftkingspromocode&clickid=<span style="color:#f472b6">{VISITOR_ID}</span>
+        </div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">top10betting.us</div>
+        <div class="sub1-badge">sub1=top10betting</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 10px">
+          https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_BET</span>&sub1=top10betting&clickid=<span style="color:#f472b6">{VISITOR_ID}</span>
+        </div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">top20betting.us</div>
+        <div class="sub1-badge">sub1=top20betting</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 10px">
+          https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_BET</span>&sub1=top20betting&clickid=<span style="color:#f472b6">{VISITOR_ID}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- USA Finance -->
+    <div class="card">
+      <div class="card-title">💳 USA Finance — pid = <span class="pid-badge">PID_USA_FIN</span></div>
+      <div class="domain-row">
+        <div class="domain-name">cashonnow.us</div>
+        <div class="sub1-badge">sub1=cashonnow</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_FIN</span>&sub1=cashonnow&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">zerointerestshop.us</div>
+        <div class="sub1-badge">sub1=zerointerest</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_FIN</span>&sub1=zerointerest&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+    </div>
+
+    <!-- USA Insurance -->
+    <div class="card">
+      <div class="card-title">🛡 USA Insurance — pid = <span class="pid-badge">PID_USA_INS</span></div>
+      <div class="domain-row">
+        <div class="domain-name">carinsuranceguide.us</div>
+        <div class="sub1-badge">sub1=carinsurance</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_INS</span>&sub1=carinsurance&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">insurancepick.us</div>
+        <div class="sub1-badge">sub1=insurancepick</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_INS</span>&sub1=insurancepick&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">autoinsuranceguide.us</div>
+        <div class="sub1-badge">sub1=autoinsurance</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_INS</span>&sub1=autoinsurance&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+    </div>
+
+    <!-- USA Other -->
+    <div class="card">
+      <div class="card-title">🌐 USA Other — pid = <span class="pid-badge">PID_USA_OTH</span></div>
+      <div class="domain-row">
+        <div class="domain-name">aftermint.us</div>
+        <div class="sub1-badge">sub1=aftermint</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_USA_OTH</span>&sub1=aftermint&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+    </div>
+
+    <!-- India -->
+    <div class="card">
+      <div class="card-title">🇮🇳 India Traffic — pid = <span class="pid-badge">PID_INDIA</span></div>
+      <div class="domain-row">
+        <div class="domain-name">creditdost.in</div>
+        <div class="sub1-badge">sub1=creditdost</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_INDIA</span>&sub1=creditdost&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">doctorreviews.in</div>
+        <div class="sub1-badge">sub1=doctorreviews</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_INDIA</span>&sub1=doctorreviews&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+    </div>
+
+    <!-- Brazil -->
+    <div class="card">
+      <div class="card-title">🇧🇷 Brazil Traffic — pid = <span class="pid-badge">PID_BRAZIL</span></div>
+      <div class="domain-row">
+        <div class="domain-name">quizfinanceiro.com</div>
+        <div class="sub1-badge">sub1=quizfinanceiro</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_BRAZIL</span>&sub1=quizfinanceiro&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">simuladorinvestimento.com.br</div>
+        <div class="sub1-badge">sub1=simulador</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_BRAZIL</span>&sub1=simulador&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">quantorendeinvestimento.com</div>
+        <div class="sub1-badge">sub1=quantorende</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_BRAZIL</span>&sub1=quantorende&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+    </div>
+
+    <!-- Mexico -->
+    <div class="card">
+      <div class="card-title">🇲🇽 Mexico Traffic — pid = <span class="pid-badge">PID_MEXICO</span></div>
+      <div class="domain-row">
+        <div class="domain-name">compraydespues.com</div>
+        <div class="sub1-badge">sub1=compraydespues</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_MEXICO</span>&sub1=compraydespues&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">llegamas.com</div>
+        <div class="sub1-badge">sub1=llegamas</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_MEXICO</span>&sub1=llegamas&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">tusicuro.com</div>
+        <div class="sub1-badge">sub1=tusicuro</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_MEXICO</span>&sub1=tusicuro&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+      <div class="domain-row">
+        <div class="domain-name">sincreditoburo.com</div>
+        <div class="sub1-badge">sub1=sincreditoburo</div>
+        <div style="flex:1;font-family:monospace;font-size:11px;color:#64748b;padding:0 10px">https://track.apogeemobi.com/track/click/<span style="color:#34d399">{CAMP_TOKEN}</span>?pid=<span style="color:#818cf8">PID_MEXICO</span>&sub1=sincreditoburo&clickid=<span style="color:#f472b6">{VISITOR_ID}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ SECTION 3 — HOW TO PLACE ON WEBSITE ════ -->
+  <div class="section">
+    <div class="sec-title">Step 3 — How to Place on Each Website</div>
+
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-title">Format A — Text / Button Link</div>
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Simplest. Replace the href on any existing button or text link.</div>
+        <div class="code"><span class="hg">&lt;!-- Paste on betmgmbonuscode.us --&gt;</span>
+&lt;a href="https://track.apogeemobi.com/track/click/<span class="hl">CAMP_TOKEN</span>
+  ?pid=<span class="bg" style="color:#818cf8">PID_USA_BET</span>
+  &amp;sub1=<span class="hy">betmgmbonuscode</span>
+  &amp;clickid=<span class="hp">VISITOR_ID</span>"
+  target="_blank"
+  rel="noopener"&gt;
+  Get BetMGM $1000 Bonus →
+&lt;/a&gt;</div>
+        <div class="note note-green">✓ Works on WordPress, Webflow, plain HTML, any CMS</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Format B — Banner Image Link</div>
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Wrap your banner image in the tracking link.</div>
+        <div class="code"><span class="hg">&lt;!-- Banner ad on carinsuranceguide.us --&gt;</span>
+&lt;a href="https://track.apogeemobi.com/track/click/<span class="hl">CAMP_TOKEN</span>
+  ?pid=<span style="color:#818cf8">PID_USA_INS</span>
+  &amp;sub1=<span class="hy">carinsurance</span>
+  &amp;clickid=<span class="hp">VISITOR_ID</span>"
+  target="_blank"&gt;
+  &lt;img
+    src="banner-geico-728x90.jpg"
+    alt="Get Car Insurance Quote"
+    style="width:100%;max-width:728px"
+  /&gt;
+&lt;/a&gt;</div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="card-title">Format C — JavaScript (auto unique clickid)</div>
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Generates a unique visitor ID automatically. Recommended for accurate attribution.</div>
+        <div class="code"><span class="hg">&lt;!-- Place in &lt;head&gt; once per page --&gt;</span>
+&lt;script&gt;
+<span class="hg">// Generate unique visitor ID once per session</span>
+window.APOGEE_VID = sessionStorage.getItem('apg_vid')
+  || (sessionStorage.setItem('apg_vid',
+       Date.now()+'-'+Math.random().toString(36).slice(2,8)),
+     sessionStorage.getItem('apg_vid'));
+
+<span class="hg">// Helper to build tracking URL</span>
+function trackURL(token, pid, sub1) {
+  return 'https://track.apogeemobi.com/track/click/' + token
+    + '?pid=' + pid
+    + '&sub1=' + sub1
+    + '&clickid=' + window.APOGEE_VID;
+}
+&lt;/script&gt;
+
+<span class="hg">&lt;!-- Then on any button --&gt;</span>
+&lt;a id="offer-btn" href="#"
+   onclick="this.href=trackURL(
+     '<span class="hl">CAMP_TOKEN</span>',
+     '<span style="color:#818cf8">PID_USA_BET</span>',
+     '<span class="hy">betmgmbonuscode</span>')"&gt;
+  Claim Bonus
+&lt;/a&gt;</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Format D — WordPress Plugin / Shortcode</div>
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">For WordPress sites — use a redirect plugin (Pretty Links, ThirstyAffiliates) or just paste the link directly.</div>
+        <div class="code"><span class="hg"># Pretty Links setup (WordPress)</span>
+Pretty Links → Add New Link
+  Target URL:
+  https://track.apogeemobi.com/track/click/<span class="hl">CAMP_TOKEN</span>?pid=<span style="color:#818cf8">PID</span>&sub1=<span class="hy">SITE</span>&clickid=PLINK_CLICK_ID
+
+Pretty Links Slug: betmgm-bonus
+→ your site shows: betmgmbonuscode.us/go/betmgm-bonus
+
+<span class="hg"># Shortcode on any page/post:</span>
+[pl_link href="betmgm-bonus"]Get Bonus[/pl_link]</div>
+        <div class="note note-blue">Works with Elementor, Gutenberg, Divi, any page builder</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Format E — Comparison Table (most common use case for your sites)</div>
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:12px">Your betting/insurance/finance sites likely have comparison tables. Each row is a different offer — just swap the tracking link per offer.</div>
+      <div class="code"><span class="hg">&lt;!-- betmgmbonuscode.us — comparison table --&gt;</span>
+&lt;table class="offers-table"&gt;
+  &lt;tr&gt;
+    &lt;td&gt;BetMGM&lt;/td&gt;
+    &lt;td&gt;$1,000 Bonus&lt;/td&gt;
+    &lt;td&gt;&lt;a href="https://track.apogeemobi.com/track/click/<span class="hl">BETMGM_TOKEN</span>?pid=<span style="color:#818cf8">PID_USA_BET</span>&amp;sub1=betmgmbonuscode&amp;clickid=<span class="hp">VID</span>"&gt;Claim&lt;/a&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+    &lt;td&gt;DraftKings&lt;/td&gt;
+    &lt;td&gt;$200 Instant Bonus&lt;/td&gt;
+    &lt;td&gt;&lt;a href="https://track.apogeemobi.com/track/click/<span class="hl">DRAFTKINGS_TOKEN</span>?pid=<span style="color:#818cf8">PID_USA_BET</span>&amp;sub1=betmgmbonuscode&amp;clickid=<span class="hp">VID</span>"&gt;Claim&lt;/a&gt;&lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/table&gt;
+<span class="hg">&lt;!-- Different CAMP_TOKEN per offer, same pid= for all --&gt;</span></div>
+    </div>
+  </div>
+
+  <!-- ════ SECTION 4 — VISITOR ID GUIDE ════ -->
+  <div class="section">
+    <div class="sec-title">Step 4 — The clickid= Parameter (Critical for Attribution)</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">What is clickid= ?</div>
+        <p style="font-size:13px;color:#94a3b8;line-height:1.8;margin-bottom:12px">
+          A unique ID your website generates per visitor. It ties the click to the conversion.
+          Without it, if 100 users click but only 10 convert, you won't know which 10 to credit.
+        </p>
+        <div class="note note-green">
+          ✓ Must be unique per visitor<br/>
+          ✓ Max 64 characters<br/>
+          ✓ No spaces or special chars<br/>
+          ✓ Store it so you can look it up later
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Options — pick one</div>
+        <div class="code"><span class="hg">// Option 1 — Timestamp + random (simplest)</span>
+const cid = Date.now() + '-' + Math.random().toString(36).slice(2,8);
+<span class="hg">// e.g. 1778141817-k9mx2p</span>
+
+<span class="hg">// Option 2 — Session storage (same ID whole visit)</span>
+const cid = sessionStorage.getItem('cid')
+  || crypto.randomUUID().replace(/-/g,'').slice(0,16);
+sessionStorage.setItem('cid', cid);
+
+<span class="hg">// Option 3 — WordPress user cookie</span>
+const cid = getCookie('wordpress_logged_in') || uuid();</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ SECTION 5 — CAMPAIGN MATCHING GUIDE ════ -->
+  <div class="section">
+    <div class="sec-title">Step 5 — Which Campaigns Go on Which Sites</div>
+    <div class="card">
+      <table>
+        <tr><th>Your Website</th><th>Vertical</th><th>Campaigns to Run</th><th>Geo Filter</th></tr>
+        <tr>
+          <td style="font-family:monospace;font-size:12px">betmgmbonuscode.us<br/>draftkingspromocode.us<br/>top10betting.us<br/>top20betting.us</td>
+          <td>🎲 Betting</td>
+          <td style="font-size:13px;color:#94a3b8">Sports betting, casino, fantasy sports offers with US geo</td>
+          <td><span class="badge gg">US only</span></td>
+        </tr>
+        <tr>
+          <td style="font-family:monospace;font-size:12px">cashonnow.us<br/>zerointerestshop.us</td>
+          <td>💳 Finance</td>
+          <td style="font-size:13px;color:#94a3b8">Personal loans, BNPL, credit card offers</td>
+          <td><span class="badge gg">US only</span></td>
+        </tr>
+        <tr>
+          <td style="font-family:monospace;font-size:12px">carinsuranceguide.us<br/>insurancepick.us<br/>autoinsuranceguide.us</td>
+          <td>🛡 Insurance</td>
+          <td style="font-size:13px;color:#94a3b8">Auto insurance, home insurance, life insurance CPL offers</td>
+          <td><span class="badge gg">US only</span></td>
+        </tr>
+        <tr>
+          <td style="font-family:monospace;font-size:12px">aftermint.us</td>
+          <td>🌐 Mixed</td>
+          <td style="font-size:13px;color:#94a3b8">Any high-paying US offer — test multiple verticals</td>
+          <td><span class="badge gg">US only</span></td>
+        </tr>
+        <tr>
+          <td style="font-family:monospace;font-size:12px">creditdost.in<br/>doctorreviews.in</td>
+          <td>🇮🇳 India</td>
+          <td style="font-size:13px;color:#94a3b8">Indian fintech apps, health apps, loan apps</td>
+          <td><span class="badge gy">IN only</span></td>
+        </tr>
+        <tr>
+          <td style="font-family:monospace;font-size:12px">quizfinanceiro.com<br/>simuladorinvestimento.com.br<br/>quantorendeinvestimento.com</td>
+          <td>🇧🇷 Brazil</td>
+          <td style="font-size:13px;color:#94a3b8">Brazilian investment apps, fintech, insurance</td>
+          <td><span class="badge gy">BR only</span></td>
+        </tr>
+        <tr>
+          <td style="font-family:monospace;font-size:12px">compraydespues.com<br/>llegamas.com<br/>tusicuro.com<br/>sincreditoburo.com</td>
+          <td>🇲🇽 Mexico</td>
+          <td style="font-size:13px;color:#94a3b8">Mexican BNPL, credit, insurance, loans</td>
+          <td><span class="badge gy">MX only</span></td>
+        </tr>
+      </table>
+    </div>
+    <div class="note note-yellow">💡 Set <strong>geo-targeting</strong> on each campaign so non-matching traffic is auto-redirected to a fallback URL — your USA campaign won't waste Brazilian clicks.</div>
+  </div>
+
+  <!-- ════ SECTION 6 — CHECKLIST ════ -->
+  <div class="section">
+    <div class="sec-title">Deployment Checklist — Do In This Order</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">On Our Platform (admin)</div>
+        <div style="font-size:13px;line-height:2.2;color:#94a3b8">
+          <div>☐ Create 7 publisher groups (names + geo + notes)</div>
+          <div>☐ Note the <code style="color:#818cf8">pid=</code> token for each group</div>
+          <div>☐ Tag campaigns by vertical (betting/finance/insurance…)</div>
+          <div>☐ Set geo-targeting per campaign</div>
+          <div>☐ Set geo fallback URL per campaign</div>
+          <div>☐ Get campaign token for each offer</div>
+          <div>☐ Test one click end-to-end before rolling out</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">On Each Website</div>
+        <div style="font-size:13px;line-height:2.2;color:#94a3b8">
+          <div>☐ Add clickid= generator script to &lt;head&gt;</div>
+          <div>☐ Replace offer button/banner hrefs with tracking links</div>
+          <div>☐ Use correct <code style="color:#818cf8">pid=</code> for the publisher group</div>
+          <div>☐ Use correct <code style="color:#fbbf24">sub1=</code> for the specific site</div>
+          <div>☐ Use correct <code style="color:#34d399">campaign token</code> per offer</div>
+          <div>☐ Test one click — confirm it appears in Clicks log</div>
+          <div>☐ Confirm geo redirect works for non-target traffic</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;color:#334155;font-size:12px;padding:24px 0;border-top:1px solid #1e293b;margin-top:20px">
+    Apogeemobi Platform — Domain Integration Guide · <a href="/publisher-preview.html" style="color:#6366f1">← Publisher Flow Preview</a>
+  </div>
+
+</div>
+</body>
+</html>

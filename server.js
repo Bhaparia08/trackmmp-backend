@@ -158,6 +158,9 @@ if (frontendDist) {
   app.get('/publisher-preview.html', (req, res) => {
     res.sendFile(path.join(frontendDist, 'publisher-preview.html'));
   });
+  app.get('/domain-integration-guide.html', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'domain-integration-guide.html'));
+  });
 
   // All unmatched routes → React SPA (client-side routing)
   app.get('*', (req, res) => {
