@@ -27,11 +27,20 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     const { device_type, os, browser, platform } = parseDevice(ua);
     const language = req.headers['accept-language']?.split(',')[0] || '';
 
-    // Resolve publisher
+    // Resolve publisher — supports both numeric PID (industry standard) and token
     let publisher_id = null;
     if (q.pid) {
-      const pub = db.prepare('SELECT id FROM publishers WHERE pub_token = ? AND user_id = ?')
-        .get(q.pid, campaign.user_id);
+      const pidVal = q.pid;
+      let pub = null;
+      // Try numeric ID first (e.g. pid=38), then fall back to token (e.g. pid=z50ac0YVXE)
+      if (/^\d+$/.test(pidVal)) {
+        pub = db.prepare('SELECT id FROM publishers WHERE id = ? AND user_id = ?')
+          .get(Number(pidVal), campaign.user_id);
+      }
+      if (!pub) {
+        pub = db.prepare('SELECT id FROM publishers WHERE pub_token = ? AND user_id = ?')
+          .get(pidVal, campaign.user_id);
+      }
       if (pub) publisher_id = pub.id;
     }
 
