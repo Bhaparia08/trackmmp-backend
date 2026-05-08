@@ -527,6 +527,15 @@ const migrations = [
      LIMIT 1
    )
    WHERE role = 'account_manager'`,
+
+  // campaigns: vertical for publisher-campaign matching
+  `ALTER TABLE campaigns ADD COLUMN vertical TEXT DEFAULT ''`,
+
+  // publishers: vertical, geo, website URL for organisation and AI matching
+  `ALTER TABLE publishers ADD COLUMN vertical TEXT DEFAULT ''`,
+  `ALTER TABLE publishers ADD COLUMN geo TEXT DEFAULT ''`,
+  `ALTER TABLE publishers ADD COLUMN website_url TEXT DEFAULT ''`,
+  `ALTER TABLE publishers ADD COLUMN traffic_type TEXT DEFAULT 'web'`,
 ];
 
 const IGNORABLE = [

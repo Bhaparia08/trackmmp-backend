@@ -44,14 +44,15 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res, next) => {
   try {
-    const { name, email, notes } = req.body;
+    const { name, email, notes, vertical, geo, website_url, traffic_type } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
     // FIX #11: transaction makes seq_num read+insert atomic
     const insert = db.transaction(() => {
       const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM publishers').get().n;
       return db.prepare(
-        'INSERT INTO publishers (user_id, name, email, pub_token, notes, seq_num) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(req.user.id, name, email || null, nanoid10(), notes || null, nextSeq);
+        'INSERT INTO publishers (user_id, name, email, pub_token, notes, seq_num, vertical, geo, website_url, traffic_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(req.user.id, name, email || null, nanoid10(), notes || null, nextSeq,
+            vertical || '', geo || '', website_url || '', traffic_type || 'web');
     });
     const result = insert();
     res.status(201).json(db.prepare('SELECT * FROM publishers WHERE id = ?').get(result.lastInsertRowid));
@@ -75,8 +76,12 @@ router.put('/:id', (req, res, next) => {
     const notesVal             = 'notes'             in body ? (body.notes || null)             : p.notes;
     const statusVal            = body.status             !== undefined ? (body.status || p.status)       : p.status;
     const postbackVal          = 'global_postback_url' in body ? (body.global_postback_url ?? '')        : p.global_postback_url;
-    db.prepare('UPDATE publishers SET name=?, email=?, notes=?, status=?, global_postback_url=? WHERE id=?')
-      .run(nameVal, emailVal, notesVal, statusVal, postbackVal, p.id);
+    const verticalVal          = 'vertical'          in body ? (body.vertical ?? '')            : (p.vertical || '');
+    const geoVal               = 'geo'               in body ? (body.geo ?? '')                 : (p.geo || '');
+    const websiteUrlVal        = 'website_url'       in body ? (body.website_url ?? '')         : (p.website_url || '');
+    const trafficTypeVal       = 'traffic_type'      in body ? (body.traffic_type ?? 'web')    : (p.traffic_type || 'web');
+    db.prepare('UPDATE publishers SET name=?, email=?, notes=?, status=?, global_postback_url=?, vertical=?, geo=?, website_url=?, traffic_type=? WHERE id=?')
+      .run(nameVal, emailVal, notesVal, statusVal, postbackVal, verticalVal, geoVal, websiteUrlVal, trafficTypeVal, p.id);
     res.json(db.prepare('SELECT * FROM publishers WHERE id = ?').get(p.id));
   } catch (err) { next(err); }
 });
