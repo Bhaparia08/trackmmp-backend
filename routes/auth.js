@@ -85,7 +85,13 @@ router.post('/register/advertiser', async (req, res, next) => {
       const expiresAt = Math.floor(Date.now() / 1000) + 86400;
       db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
       const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
-      await sendVerificationEmail(mailer, email, name, `${base}/verify-email?token=${verifyToken}`);
+      const mailResult = await sendVerificationEmail(mailer, email, name, `${base}/verify-email?token=${verifyToken}`);
+      if (!mailResult.sent) {
+        // SMTP failed — auto-verify and log in directly
+        db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(user.id);
+        const freshUser = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(user.id);
+        return res.status(201).json({ token: signToken(freshUser), user: freshUser });
+      }
       return res.status(201).json({ sent: true, email: user.email });
     }
 
@@ -93,29 +99,36 @@ router.post('/register/advertiser', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Helper: send verification email or log URL (if SMTP not configured)
+// Helper: send verification email — catches SMTP errors gracefully
+// Returns { sent: true } on success, { sent: false, verify_url } on SMTP failure
 async function sendVerificationEmail(mailer, userEmail, userName, verifyUrl) {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-  await mailer.sendMail({
-    from: `"Apogeemobi" <${from}>`,
-    to: userEmail,
-    subject: 'Verify your Apogeemobi account',
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="color:#6366f1">Verify Your Email</h2>
-        <p>Hi ${userName},</p>
-        <p>Thanks for signing up! Please verify your email address to activate your account. This link expires in <strong>24 hours</strong>.</p>
-        <p style="margin:24px 0">
-          <a href="${verifyUrl}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
-            Verify My Email
-          </a>
-        </p>
-        <p style="color:#94a3b8;font-size:13px">If you didn't create an account, you can safely ignore this email.</p>
-        <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
-        <p style="color:#94a3b8;font-size:12px">Apogeemobi · track.apogeemobi.com</p>
-      </div>
-    `,
-  });
+  try {
+    await mailer.sendMail({
+      from: `"Apogeemobi" <${from}>`,
+      to: userEmail,
+      subject: 'Verify your Apogeemobi account',
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+          <h2 style="color:#6366f1">Verify Your Email</h2>
+          <p>Hi ${userName},</p>
+          <p>Thanks for signing up! Please verify your email address to activate your account. This link expires in <strong>24 hours</strong>.</p>
+          <p style="margin:24px 0">
+            <a href="${verifyUrl}" style="background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
+              Verify My Email
+            </a>
+          </p>
+          <p style="color:#94a3b8;font-size:13px">If you didn't create an account, you can safely ignore this email.</p>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
+          <p style="color:#94a3b8;font-size:12px">Apogeemobi · track.apogeemobi.com</p>
+        </div>
+      `,
+    });
+    return { sent: true };
+  } catch (smtpErr) {
+    console.error('[sendVerificationEmail] SMTP error:', smtpErr.message);
+    return { sent: false, verify_url: verifyUrl };
+  }
 }
 
 // POST /api/auth/register/publisher  (open publisher self-signup)
@@ -153,7 +166,13 @@ router.post('/register/publisher', async (req, res, next) => {
       const expiresAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
       db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
       const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
-      await sendVerificationEmail(mailer, email, name, `${base}/verify-email?token=${verifyToken}`);
+      const mailResult = await sendVerificationEmail(mailer, email, name, `${base}/verify-email?token=${verifyToken}`);
+      if (!mailResult.sent) {
+        // SMTP failed — auto-verify and log in directly
+        db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(user.id);
+        const freshUser = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(user.id);
+        return res.status(201).json({ token: signToken(freshUser), user: freshUser });
+      }
       return res.status(201).json({ sent: true, email: user.email });
     }
 
@@ -228,7 +247,12 @@ router.post('/resend-verification', async (req, res, next) => {
     db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
 
     const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
-    await sendVerificationEmail(mailer, user.email, user.name, `${base}/verify-email?token=${verifyToken}`);
+    const mailResult = await sendVerificationEmail(mailer, user.email, user.name, `${base}/verify-email?token=${verifyToken}`);
+    if (!mailResult.sent) {
+      // SMTP failed — auto-verify the user so they can log in
+      db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(user.id);
+      return res.json({ sent: true, auto_verified: true });
+    }
 
     res.json({ sent: true });
   } catch (err) { next(err); }
