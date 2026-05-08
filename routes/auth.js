@@ -131,52 +131,48 @@ async function sendVerificationEmail(mailer, userEmail, userName, verifyUrl) {
   }
 }
 
-// POST /api/auth/register/publisher  (open publisher self-signup)
+// POST /api/auth/register/publisher  (open publisher self-signup — requires admin approval)
 router.post('/register/publisher', async (req, res, next) => {
   try {
-    const { email, password, name, company_name } = req.body;
+    const { email, password, name, company_name, website_url, vertical, geo, traffic_type, monthly_traffic } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'email, password and name are required' });
 
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
-    const mailer = getMailer();
-    const needsVerification = !!mailer;
-
     const hash = await bcrypt.hash(password, SALT_ROUNDS);
     const nextSeqUser = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n);
+    // New publishers start as 'pending' — admin must approve before they can log in
     const result = db.prepare(
-      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified, seq_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(email, hash, name, company_name || null, 'publisher', newPostbackToken(), needsVerification ? 0 : 1, nextSeqUser);
+      'INSERT INTO users (email, password, name, company_name, role, postback_token, email_verified, status, seq_num) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(email, hash, name, company_name || null, 'publisher', newPostbackToken(), 1, 'pending', nextSeqUser);
 
     const user = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
 
-    // Auto-create a publisher record linked to this user.
+    // Auto-create a publisher record linked to this user with vertical/geo info
     const { nanoid } = require('nanoid');
     const pub_token = nanoid(10);
     const adminRow = db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get();
     const adminUserId = adminRow?.id || 1;
     const nextSeqPub = (db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM publishers').get().n);
     db.prepare(
-      'INSERT INTO publishers (user_id, publisher_user_id, name, email, pub_token, seq_num) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(adminUserId, result.lastInsertRowid, name, email, pub_token, nextSeqPub);
+      'INSERT INTO publishers (user_id, publisher_user_id, name, email, pub_token, seq_num, vertical, geo, website_url, traffic_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(adminUserId, result.lastInsertRowid, company_name || name, email, pub_token, nextSeqPub,
+          vertical || '', geo || '', website_url || '', traffic_type || 'web',
+          monthly_traffic ? `Monthly traffic: ${monthly_traffic}` : '');
 
-    if (needsVerification) {
-      const verifyToken = nanoid32();
-      const expiresAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
-      db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
-      const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
-      const mailResult = await sendVerificationEmail(mailer, email, name, `${base}/verify-email?token=${verifyToken}`);
-      if (!mailResult.sent) {
-        // SMTP failed — auto-verify and log in directly
-        db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(user.id);
-        const freshUser = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(user.id);
-        return res.status(201).json({ token: signToken(freshUser), user: freshUser });
-      }
-      return res.status(201).json({ sent: true, email: user.email });
-    }
+    // Notify admin via socket if available
+    try {
+      const io = req.app.get('io');
+      if (io) io.to(adminUserId.toString()).emit('new_publisher_application', {
+        id: user.id, name, email, company_name, website_url, vertical, geo,
+      });
+    } catch {}
 
-    res.status(201).json({ token: signToken(user), user });
+    res.status(201).json({
+      pending: true,
+      message: 'Your application has been submitted. Our team will review it and get back to you within 24 hours.',
+    });
   } catch (err) { next(err); }
 });
 
@@ -190,6 +186,8 @@ router.post('/login', async (req, res, next) => {
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     if (user.status === 'suspended') return res.status(403).json({ error: 'Account suspended. Contact admin.' });
+    if (user.status === 'pending') return res.status(403).json({ error: 'Your application is under review. Our team will get back to you within 24 hours.', pending: true });
+    if (user.status === 'rejected') return res.status(403).json({ error: 'Your application was not approved. Contact support for more details.' });
 
     if (!user.email_verified) {
       return res.status(403).json({

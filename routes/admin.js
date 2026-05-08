@@ -168,6 +168,34 @@ router.patch('/users/:id/verify', requireAdmin, (req, res) => {
   res.json({ success: true, email: user.email });
 });
 
+// PATCH /api/admin/users/:id/approve — approve a pending publisher/advertiser application
+router.patch('/users/:id/approve', requireAdmin, (req, res) => {
+  const user = db.prepare('SELECT id, email, name, status, role FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.status !== 'pending') return res.status(400).json({ error: `User is already ${user.status}` });
+  db.prepare("UPDATE users SET status = 'active' WHERE id = ?").run(user.id);
+  // Optionally assign AM
+  if (req.body.account_manager_id) {
+    const am = db.prepare('SELECT id FROM account_managers WHERE id = ?').get(req.body.account_manager_id);
+    if (am) {
+      db.prepare('INSERT OR IGNORE INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)').run(user.id, am.id);
+    }
+  }
+  res.json({ success: true, email: user.email, status: 'active' });
+});
+
+// PATCH /api/admin/users/:id/reject — reject a pending application
+router.patch('/users/:id/reject', requireAdmin, (req, res) => {
+  const user = db.prepare('SELECT id, email, name, status FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.status !== 'pending') return res.status(400).json({ error: `User is already ${user.status}` });
+  const reason = req.body.reason || '';
+  db.prepare("UPDATE users SET status = 'rejected' WHERE id = ?").run(user.id);
+  // Also pause the linked publisher record
+  db.prepare("UPDATE publishers SET status = 'paused' WHERE publisher_user_id = ?").run(user.id);
+  res.json({ success: true, email: user.email, status: 'rejected' });
+});
+
 // POST /api/admin/users/:id/account-managers — assign an AM to a user
 router.post('/users/:id/account-managers', requireAdmin, (req, res) => {
   const { account_manager_id } = req.body;
