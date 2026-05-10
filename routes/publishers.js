@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db/init');
 const { requireAuth } = require('../middleware/auth');
 const { nanoid10 } = require('../utils/clickId');
+const audit = require('../utils/auditLog');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -55,7 +56,9 @@ router.post('/', (req, res, next) => {
             vertical || '', geo || '', website_url || '', traffic_type || 'web');
     });
     const result = insert();
-    res.status(201).json(db.prepare('SELECT * FROM publishers WHERE id = ?').get(result.lastInsertRowid));
+    const created = db.prepare('SELECT * FROM publishers WHERE id = ?').get(result.lastInsertRowid);
+    audit.log(req, 'create', 'publisher', created.id, created.name, { vertical: created.vertical, geo: created.geo });
+    res.status(201).json(created);
   } catch (err) { next(err); }
 });
 
@@ -82,6 +85,7 @@ router.put('/:id', (req, res, next) => {
     const trafficTypeVal       = 'traffic_type'      in body ? (body.traffic_type ?? 'web')    : (p.traffic_type || 'web');
     db.prepare('UPDATE publishers SET name=?, email=?, notes=?, status=?, global_postback_url=?, vertical=?, geo=?, website_url=?, traffic_type=? WHERE id=?')
       .run(nameVal, emailVal, notesVal, statusVal, postbackVal, verticalVal, geoVal, websiteUrlVal, trafficTypeVal, p.id);
+    audit.log(req, 'update', 'publisher', p.id, nameVal, { fields: Object.keys(req.body) });
     res.json(db.prepare('SELECT * FROM publishers WHERE id = ?').get(p.id));
   } catch (err) { next(err); }
 });

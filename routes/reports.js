@@ -498,4 +498,89 @@ router.get('/cost-roi', (req, res) => {
   res.json(enriched);
 });
 
+// ─── GET /api/reports/by-inventory ───────────────────────────────────────────
+// Per-owned-inventory rollup: clicks, conversions, payout, revenue.
+// Optional: ?from=YYYY-MM-DD&to=YYYY-MM-DD&inventory_ids=1,2,3
+router.get('/by-inventory', (req, res, next) => {
+  try {
+    const { from, to, inventory_ids } = req.query;
+    const scope = userScope(req.user, 'cl');
+    const conditions = [scope.clause, 'cl.inventory_id IS NOT NULL'];
+    const params = [...scope.params];
+    if (inventory_ids) {
+      const ids = inventory_ids.split(',').map((s) => Number(s.trim())).filter(Number.isFinite);
+      if (ids.length > 0) {
+        conditions.push(`cl.inventory_id IN (${ids.map(() => '?').join(',')})`);
+        params.push(...ids);
+      }
+    }
+    if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); params.push(from); }
+    if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); params.push(to); }
+
+    const rows = db.prepare(`
+      SELECT
+        cl.inventory_id              AS id,
+        i.name                        AS name,
+        i.type                        AS type,
+        i.vertical                    AS vertical,
+        i.geo                         AS geo,
+        COUNT(DISTINCT cl.id)         AS clicks,
+        COUNT(DISTINCT CASE WHEN pb.status='attributed' THEN pb.id END) AS conversions,
+        ROUND(COALESCE(SUM(CASE WHEN pb.status='attributed' THEN pb.payout  END), 0), 2) AS payout,
+        ROUND(COALESCE(SUM(CASE WHEN pb.status='attributed' THEN pb.revenue END), 0), 2) AS revenue
+      FROM clicks cl
+      LEFT JOIN postbacks       pb ON pb.click_id   = cl.click_id
+      LEFT JOIN owned_inventory i  ON i.id          = cl.inventory_id
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY cl.inventory_id
+      ORDER BY revenue DESC, clicks DESC
+    `).all(...params);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/reports/by-placement ───────────────────────────────────────────
+// Per-placement rollup. Optional: ?from=&to=&inventory_id=&placement_ids=1,2,3
+router.get('/by-placement', (req, res, next) => {
+  try {
+    const { from, to, inventory_id, placement_ids } = req.query;
+    const scope = userScope(req.user, 'cl');
+    const conditions = [scope.clause, 'cl.placement_id IS NOT NULL'];
+    const params = [...scope.params];
+    if (inventory_id) { conditions.push('cl.inventory_id = ?'); params.push(Number(inventory_id)); }
+    if (placement_ids) {
+      const ids = placement_ids.split(',').map((s) => Number(s.trim())).filter(Number.isFinite);
+      if (ids.length > 0) {
+        conditions.push(`cl.placement_id IN (${ids.map(() => '?').join(',')})`);
+        params.push(...ids);
+      }
+    }
+    if (from) { conditions.push("date(cl.created_at,'unixepoch') >= ?"); params.push(from); }
+    if (to)   { conditions.push("date(cl.created_at,'unixepoch') <= ?"); params.push(to); }
+
+    const rows = db.prepare(`
+      SELECT
+        cl.placement_id                AS id,
+        p.name                         AS name,
+        p.slug                         AS slug,
+        p.placement_type               AS placement_type,
+        p.format                       AS format,
+        cl.inventory_id                AS inventory_id,
+        i.name                         AS inventory_name,
+        COUNT(DISTINCT cl.id)          AS clicks,
+        COUNT(DISTINCT CASE WHEN pb.status='attributed' THEN pb.id END) AS conversions,
+        ROUND(COALESCE(SUM(CASE WHEN pb.status='attributed' THEN pb.payout  END), 0), 2) AS payout,
+        ROUND(COALESCE(SUM(CASE WHEN pb.status='attributed' THEN pb.revenue END), 0), 2) AS revenue
+      FROM clicks cl
+      LEFT JOIN postbacks       pb ON pb.click_id   = cl.click_id
+      LEFT JOIN placements      p  ON p.id          = cl.placement_id
+      LEFT JOIN owned_inventory i  ON i.id          = cl.inventory_id
+      WHERE ${conditions.join(' AND ')}
+      GROUP BY cl.placement_id
+      ORDER BY revenue DESC, clicks DESC
+    `).all(...params);
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

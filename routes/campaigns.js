@@ -4,6 +4,7 @@ const { requireAuth } = require('../middleware/auth');
 const { nanoid12, nanoid16 } = require('../utils/clickId');
 const { customAlphabet } = require('nanoid');
 const nanoid20hex = customAlphabet('0123456789abcdef', 20);
+const audit = require('../utils/auditLog');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -146,6 +147,7 @@ router.post('/', (req, res, next) => {
     const approvedPubs = db.prepare(
       "SELECT publisher_id FROM campaign_access_requests WHERE campaign_id = ? AND status = 'approved'"
     ).all(campaignId).map(r => r.publisher_id);
+    audit.log(req, 'create', 'campaign', campaign.id, campaign.name, { payout: campaign.payout, vertical: campaign.vertical });
     res.status(201).json({ ...campaign, approved_publishers: approvedPubs });
   } catch (err) { next(err); }
 });
@@ -266,7 +268,9 @@ router.put('/:id', (req, res, next) => {
       "SELECT publisher_id FROM campaign_access_requests WHERE campaign_id = ? AND status = 'approved'"
     ).all(c.id).map(r => r.publisher_id);
 
-    res.json({ ...db.prepare('SELECT * FROM campaigns WHERE id = ?').get(c.id), approved_publishers: approvedPubs });
+    const updated = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(c.id);
+    audit.log(req, 'update', 'campaign', c.id, updated.name, { fields: Object.keys(req.body) });
+    res.json({ ...updated, approved_publishers: approvedPubs });
   } catch (err) { next(err); }
 });
 
@@ -355,6 +359,7 @@ router.delete('/:id', (req, res, next) => {
       }
     }
     db.prepare("UPDATE campaigns SET status='archived', updated_at=unixepoch() WHERE id=?").run(c.id);
+    audit.log(req, 'delete', 'campaign', c.id, c.name);
     res.json({ success: true });
   } catch (err) { next(err); }
 });

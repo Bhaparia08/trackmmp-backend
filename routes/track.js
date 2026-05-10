@@ -82,6 +82,18 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     // Support Adjust's gps_adid, idfa, adid
     const advertising_id = q.advertising_id || q.gps_adid || q.idfa || q.adid || null;
 
+    // Phase 0 owned-inventory attribution: `inv` and `pl` query params
+    // identify which owned inventory unit and placement slot the click came
+    // from. Minted by /api/v1/serve. Bad/missing values store NULL — never
+    // fail the click on attribution data.
+    const parseId = (v) => {
+      if (v === undefined || v === null || v === '') return null;
+      const n = Number(v);
+      return Number.isInteger(n) && n > 0 ? n : null;
+    };
+    const inventory_id = parseId(q.inv);
+    const placement_id = parseId(q.pl);
+
     // ── Geo-targeting check ──────────────────────────────────────────────────
     // If campaign has allowed_countries set, block traffic from other geos.
     // Blocked traffic is redirected to geo_fallback_url (should be a smart link)
@@ -107,11 +119,13 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
         // FIX #4: log a rejected click so publisher can debug, still return 200
         db.prepare(`INSERT INTO clicks
           (click_id, campaign_id, publisher_id, user_id, pid, publisher_click_id,
-           ip, user_agent, country, device_type, os, platform, advertising_id, status)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'geo_blocked')`)
+           ip, user_agent, country, device_type, os, platform, advertising_id,
+           inventory_id, placement_id, status)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'geo_blocked')`)
           .run(nanoid16(), campaign.id, publisher_id, campaign.user_id,
                q.pid||null, publisher_click_id, ip, ua, country,
-               device_type, os, platform, advertising_id||null);
+               device_type, os, platform, advertising_id||null,
+               inventory_id, placement_id);
         return res.status(200).send('GEO_BLOCKED');
       }
     }
@@ -303,8 +317,8 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
        sub6, sub7, sub8, sub9, sub10,
        publisher_click_id, ip, user_agent, country, language,
        device_type, os, browser, advertising_id, platform, referrer,
-       creative_id, ad_id, landing_page_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+       creative_id, ad_id, landing_page_id, inventory_id, placement_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(click_id, campaign.id, publisher_id, campaign.user_id,
            q.pid||null, q.af_c_id||null, q.af_siteid||null,
            q.af_sub1||q.sub1||null, q.af_sub2||q.sub2||null,
@@ -314,7 +328,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
            device_type, os, browser, advertising_id, platform,
            req.headers.referer||null,
            q.creative_id||q.creative||null, q.ad_id||null,
-           landing_page_id);
+           landing_page_id, inventory_id, placement_id);
 
     // Daily stats upsert
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
@@ -668,18 +682,27 @@ router.get('/smart/:token', clickLimiter, async (req, res, next) => {
       if (pub) publisher_id = pub.id;
     }
 
+    // Phase 0: smart links can also receive inv/pl attribution params
+    const sl_parseId = (v) => {
+      if (v === undefined || v === null || v === '') return null;
+      const n = Number(v);
+      return Number.isInteger(n) && n > 0 ? n : null;
+    };
+    const sl_inventory_id = sl_parseId(q.inv);
+    const sl_placement_id = sl_parseId(q.pl);
+
     db.prepare(`INSERT INTO clicks
       (click_id, campaign_id, publisher_id, user_id,
        pid, publisher_click_id, ip, user_agent, country, language,
        device_type, os, advertising_id, platform, referrer,
        af_sub1, af_sub2, af_sub3, af_sub4, af_sub5,
-       smart_link_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+       smart_link_id, inventory_id, placement_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(click_id, selected.campaign_id, publisher_id, selected.user_id,
            q.pid||null, publisher_click_id, ip, ua, country, language,
            device_type, os, advertising_id, platform||null, req.headers.referer||null,
            q.sub1||null, q.sub2||null, q.sub3||null, q.sub4||null, q.sub5||null,
-           sl.id);
+           sl.id, sl_inventory_id, sl_placement_id);
 
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)
       VALUES (?,?,?,?,date('now'),1)

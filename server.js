@@ -76,6 +76,9 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/apps', require('./routes/apps'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/publishers', require('./routes/publishers'));
+app.use('/api/inventory',  require('./routes/inventory'));
+app.use('/api/placements', require('./routes/placements'));
+app.use('/api/inventory-approvals', require('./routes/inventoryApprovals'));
 app.use('/api/clicks', require('./routes/clicks'));
 app.use('/api/s2s', require('./routes/s2s'));
 app.use('/api/reports', require('./routes/reports'));
@@ -83,11 +86,40 @@ app.use('/api/fraud', require('./routes/fraud'));
 app.use('/api/campaigns/:campaign_id/goals',          require('./routes/goals'));
 app.use('/api/campaigns/:campaign_id/publisher-caps', require('./routes/publisherCaps'));
 app.use('/api/campaigns/:campaign_id/landing-pages',  require('./routes/landingPages'));
+app.use('/api/campaigns/:campaign_id/creatives',      require('./routes/creatives'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/publisher', require('./routes/publisher'));
 app.use('/api/am', require('./routes/am'));
 app.use('/api/attendance', require('./routes/attendance'));
 app.use('/api/apikeys', require('./routes/apikeys'));
+
+// ── OpenAPI spec + Swagger UI ─────────────────────────────────────────────
+// Mounted BEFORE /api/v1 so the spec endpoints don't go through requireApiKey.
+//   /api/v1/openapi.yaml — raw spec (for Postman/Insomnia/codegen import)
+//   /api/v1/openapi.json — parsed spec
+//   /api/docs            — interactive Swagger UI (try-it-out enabled)
+{
+  const swaggerUi = require('swagger-ui-express');
+  const yaml      = require('js-yaml');
+  const specPath  = path.join(__dirname, 'public', 'openapi.yaml');
+  let spec;
+  try {
+    spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
+  } catch (e) {
+    console.error('[openapi] failed to load spec:', e.message);
+  }
+  if (spec) {
+    app.get('/api/v1/openapi.json', (_, res) => res.json(spec));
+    app.get('/api/v1/openapi.yaml', (_, res) => {
+      res.type('text/yaml').sendFile(specPath);
+    });
+    app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(spec, {
+      customSiteTitle: 'TrackMMP Publisher API — Docs',
+      swaggerOptions: { persistAuthorization: true },
+    }));
+  }
+}
+
 app.use('/api/v1', require('./routes/v1'));
 app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/campaign-access', require('./routes/campaignAccess'));
@@ -104,6 +136,7 @@ app.use('/api/postbacks', (req, res, next) => {  // alias: GET /api/postbacks �
 });
 app.use('/skan',                  require('./routes/skan'));
 app.use('/api/permissions',       require('./routes/permissions'));
+app.use('/api/audit-log',         require('./routes/auditLog'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

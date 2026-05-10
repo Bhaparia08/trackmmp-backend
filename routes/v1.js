@@ -13,6 +13,9 @@ const express    = require('express');
 const rateLimit  = require('express-rate-limit');
 const db         = require('../db/init');
 const { requireApiKey } = require('../middleware/apiKeyAuth');
+const { lookupCountry } = require('../utils/geoip');
+const { parseDevice }   = require('../utils/deviceParser');
+const serveCache        = require('../utils/serveCache');
 
 const router = express.Router();
 
@@ -124,6 +127,209 @@ router.get('/offers/:id', (req, res) => {
     goals,
     publisher: { id: pub.id, name: pub.name, pub_token: pub.pub_token },
   });
+});
+
+// ─── GET /api/v1/placements ──────────────────────────────────────────────────
+// Lists active placements visible to this api key's publisher. Used by the
+// WordPress plugin's settings page to populate a "test connection" dropdown
+// and validate slugs before the editor types them into shortcodes.
+router.get('/placements', (req, res) => {
+  const rows = db.prepare(`
+    SELECT p.id, p.slug, p.name, p.placement_type, p.format, p.max_offers,
+           i.id AS inventory_id, i.name AS inventory_name,
+           i.vertical AS inventory_vertical, i.geo AS inventory_geo, i.type AS inventory_type
+    FROM placements p
+    JOIN owned_inventory i ON i.id = p.inventory_id
+    WHERE p.status = 'active' AND i.status = 'active' AND i.publisher_id = ?
+    ORDER BY i.name ASC, p.slug ASC
+  `).all(req.publisherId);
+  res.json({ placements: rows });
+});
+
+// ─── GET /api/v1/serve ───────────────────────────────────────────────────────
+// Returns approved campaigns for a placement, filtered by visitor context.
+// Used by the WordPress plugin and other publisher integrations.
+//
+// Query params:
+//   placement_slug | placement_id  (one required)
+//   country  — ISO-3166 alpha-2 (optional; falls back to GeoIP from request IP)
+//   device   — 'mobile' | 'tablet' | 'desktop' (optional; falls back to UA parse)
+//   os       — 'android' | 'ios' | 'windows' | 'macos' | 'linux' (optional)
+//   limit    — override placement.max_offers (capped at 50)
+//   nocache  — '1' to bypass the cache (debugging only)
+router.get('/serve', async (req, res, next) => {
+  try {
+    const pubId = req.publisherId;
+    const { placement_slug, placement_id, limit, nocache } = req.query;
+
+    if (!placement_slug && !placement_id) {
+      return res.status(400).json({ error: 'placement_slug or placement_id is required' });
+    }
+
+    // Resolve placement → must belong to inventory under this api-key's publisher.
+    const placement = placement_id
+      ? db.prepare(`
+          SELECT p.*, i.id AS inv_id, i.name AS inv_name, i.vertical AS inv_vertical,
+                 i.geo AS inv_geo, i.publisher_id AS inv_publisher_id
+          FROM placements p
+          JOIN owned_inventory i ON i.id = p.inventory_id
+          WHERE p.id = ? AND p.status = 'active' AND i.status = 'active' AND i.publisher_id = ?
+        `).get(Number(placement_id), pubId)
+      : db.prepare(`
+          SELECT p.*, i.id AS inv_id, i.name AS inv_name, i.vertical AS inv_vertical,
+                 i.geo AS inv_geo, i.publisher_id AS inv_publisher_id
+          FROM placements p
+          JOIN owned_inventory i ON i.id = p.inventory_id
+          WHERE p.slug = ? AND p.status = 'active' AND i.status = 'active' AND i.publisher_id = ?
+        `).get(placement_slug, pubId);
+
+    if (!placement) {
+      return res.status(404).json({ error: 'Placement not found or not authorized for this api key' });
+    }
+
+    // Resolve visitor context — explicit query params first, then fall back to req.
+    let country = (req.query.country || '').toUpperCase().trim();
+    if (!country) {
+      const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      country = ((await lookupCountry(ip)) || '').toUpperCase();
+    }
+
+    let device = (req.query.device || '').toLowerCase().trim();
+    let os     = (req.query.os || '').toLowerCase().trim();
+    if (!device || !os) {
+      const ua = req.headers['user-agent'] || '';
+      const parsed = parseDevice(ua);
+      if (!device) device = (parsed.device_type || '').toLowerCase();
+      if (!os)     os     = (parsed.os || '').toLowerCase();
+    }
+
+    const cacheKey = `serve:${placement.id}:${country}:${device}:${os}`;
+    if (nocache !== '1') {
+      const cached = serveCache.get(cacheKey);
+      if (cached) {
+        return res.json({ ...cached, cached: true, cache_key: cacheKey });
+      }
+    }
+
+    // Approved campaigns for this inventory. LEFT JOIN to the highest-weight
+    // active creative per campaign so the response carries rich offer data
+    // (logo, headline, bonus, rating, terms, CTA copy) when available.
+    const offers = db.prepare(`
+      SELECT c.id, c.name, c.advertiser_name, c.campaign_token, c.payout, c.payout_type,
+             c.vertical, c.tags, c.allowed_countries, c.allowed_devices, c.preview_url,
+             c.destination_url,
+             cia.priority, cia.weight,
+             cre.logo_url, cre.hero_image_url, cre.brand_name, cre.headline,
+             cre.subheadline, cre.bonus_amount, cre.bonus_label, cre.terms_short,
+             cre.cta_text, cre.rating, cre.rating_count, cre.badge_text, cre.badge_color
+      FROM campaign_inventory_approvals cia
+      JOIN campaigns c ON c.id = cia.campaign_id
+      LEFT JOIN campaign_creatives cre ON cre.id = (
+        SELECT id FROM campaign_creatives
+        WHERE campaign_id = c.id AND status = 'active'
+        ORDER BY weight DESC, id ASC LIMIT 1
+      )
+      WHERE cia.inventory_id = ?
+        AND cia.status = 'approved'
+        AND c.status   = 'active'
+        AND COALESCE(c.visibility, 'open') != 'private'
+    `).all(placement.inv_id);
+
+    // Country/device filter
+    const filtered = offers.filter((o) => {
+      if (country && o.allowed_countries && o.allowed_countries.trim() !== '') {
+        const allowed = o.allowed_countries.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+        if (allowed.length > 0 && !allowed.includes(country)) return false;
+      }
+      if (device && o.allowed_devices && o.allowed_devices.trim() !== '' && o.allowed_devices.toLowerCase() !== 'all') {
+        const allowed = o.allowed_devices.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+        if (allowed.length > 0 && !allowed.includes(device)) return false;
+      }
+      return true;
+    });
+
+    // Sort: priority DESC, then weighted random within priority tier.
+    // Weighted random within tier — pick by cumulative weight.
+    const byPriority = new Map();
+    for (const o of filtered) {
+      const key = o.priority || 0;
+      if (!byPriority.has(key)) byPriority.set(key, []);
+      byPriority.get(key).push(o);
+    }
+    const sortedPriorities = [...byPriority.keys()].sort((a, b) => b - a);
+    const ordered = [];
+    for (const pr of sortedPriorities) {
+      const group = byPriority.get(pr);
+      // Weighted-random shuffle within tier
+      while (group.length > 0) {
+        const totalWeight = group.reduce((s, o) => s + (o.weight || 1), 0);
+        let r = Math.random() * totalWeight;
+        let pickIdx = group.length - 1;
+        for (let i = 0; i < group.length; i++) {
+          r -= (group[i].weight || 1);
+          if (r <= 0) { pickIdx = i; break; }
+        }
+        ordered.push(group.splice(pickIdx, 1)[0]);
+      }
+    }
+
+    const maxN  = Math.min(50, Number(limit) || placement.max_offers || 1);
+    const top   = ordered.slice(0, maxN);
+    const pub   = db.prepare('SELECT pub_token FROM publishers WHERE id = ?').get(pubId);
+    const TRACKING_BASE = process.env.TRACKING_DOMAIN || 'https://track.apogeemobi.com';
+
+    const offersOut = top.map((o) => ({
+      campaign_id:     o.id,
+      name:            o.name,
+      advertiser_name: o.advertiser_name,
+      vertical:        o.vertical,
+      tags:            o.tags,
+      payout:          o.payout,
+      payout_type:     o.payout_type,
+      preview_url:     o.preview_url,
+      // Creative fields — null when no creative is configured. The WP plugin
+      // falls back to the bare campaign name + payout in that case.
+      creative: o.brand_name || o.headline || o.logo_url ? {
+        brand_name:     o.brand_name,
+        headline:       o.headline,
+        subheadline:    o.subheadline,
+        logo_url:       o.logo_url,
+        hero_image_url: o.hero_image_url,
+        bonus_amount:   o.bonus_amount,
+        bonus_label:    o.bonus_label,
+        terms_short:    o.terms_short,
+        cta_text:       o.cta_text || 'Get Offer',
+        rating:         o.rating,
+        rating_count:   o.rating_count,
+        badge_text:     o.badge_text,
+        badge_color:    o.badge_color,
+      } : null,
+      tracking_url: `${TRACKING_BASE}/track/click/${o.campaign_token}` +
+        `?pid=${pub.pub_token}&inv=${placement.inv_id}&pl=${placement.id}&clickid={your_click_id}`,
+    }));
+
+    const response = {
+      placement: {
+        id:    placement.id,
+        slug:  placement.slug,
+        type:  placement.placement_type,
+        format:placement.format,
+      },
+      inventory: {
+        id:       placement.inv_id,
+        name:     placement.inv_name,
+        vertical: placement.inv_vertical,
+        geo:      placement.inv_geo,
+      },
+      visitor: { country, device, os },
+      offers:  offersOut,
+      ttl:     60,
+      cached:  false,
+    };
+
+    if (nocache !== '1') serveCache.set(cacheKey, response, 60_000);
+    res.json(response);
+  } catch (err) { next(err); }
 });
 
 // ─── GET /api/v1/clicks ─────────────────────────────────────────────────────

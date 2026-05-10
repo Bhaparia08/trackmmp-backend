@@ -5,6 +5,7 @@ const { customAlphabet } = require('nanoid');
 const nodemailer = require('nodemailer');
 const db = require('../db/init');
 const { requireAuth } = require('../middleware/auth');
+const audit = require('../utils/auditLog');
 
 const nanoid20hex = customAlphabet('0123456789abcdef', 20);
 const nanoid32    = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 32);
@@ -201,6 +202,7 @@ router.post('/login', async (req, res, next) => {
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
     const { password: _p, ...safeUser } = user;
+    audit.log(req, 'login', 'user', user.id, user.email, { role: user.role });
     res.json({ token: signToken(safeUser), user: safeUser });
   } catch (err) { next(err); }
 });

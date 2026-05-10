@@ -4,7 +4,9 @@ require('dotenv').config();
 
 const Database = require('better-sqlite3');
 
-const dbPath = process.env.DB_PATH || './data/tracking.db';
+// DB path is absolute by default so the same DB is loaded regardless of cwd.
+// Override via env var if you really want a different location.
+const dbPath = process.env.DB_PATH || path.resolve(__dirname, '..', 'data', 'tracking.db');
 const dbDir = path.dirname(dbPath);
 
 if (!fs.existsSync(dbDir)) {
@@ -536,6 +538,120 @@ const migrations = [
   `ALTER TABLE publishers ADD COLUMN geo TEXT DEFAULT ''`,
   `ALTER TABLE publishers ADD COLUMN website_url TEXT DEFAULT ''`,
   `ALTER TABLE publishers ADD COLUMN traffic_type TEXT DEFAULT 'web'`,
+
+  // ── Phase 0: Owned Inventory Monetization ─────────────────────────────────
+  // Owned websites/apps registered as inventory under a publisher (House model).
+  `CREATE TABLE IF NOT EXISTS owned_inventory (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    publisher_id INTEGER NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+    type         TEXT    NOT NULL DEFAULT 'website',
+    name         TEXT    NOT NULL,
+    domain       TEXT,
+    bundle_id    TEXT,
+    vertical     TEXT    NOT NULL DEFAULT '',
+    geo          TEXT    NOT NULL DEFAULT '',
+    status       TEXT    NOT NULL DEFAULT 'active',
+    notes        TEXT,
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at   INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_owned_inv_publisher ON owned_inventory(publisher_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_owned_inv_user      ON owned_inventory(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_owned_inv_vertgeo   ON owned_inventory(vertical, geo)`,
+
+  // Placements: ad slots within an inventory unit.
+  `CREATE TABLE IF NOT EXISTS placements (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    inventory_id    INTEGER NOT NULL REFERENCES owned_inventory(id) ON DELETE CASCADE,
+    name            TEXT    NOT NULL,
+    slug            TEXT    NOT NULL,
+    placement_type  TEXT    NOT NULL DEFAULT 'comparison_table',
+    format          TEXT    NOT NULL DEFAULT 'html',
+    max_offers      INTEGER NOT NULL DEFAULT 1,
+    status          TEXT    NOT NULL DEFAULT 'active',
+    notes           TEXT,
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(inventory_id, slug)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_placements_inv ON placements(inventory_id)`,
+
+  // Per-inventory campaign approvals — granular control beyond per-publisher.
+  `CREATE TABLE IF NOT EXISTS campaign_inventory_approvals (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    inventory_id INTEGER NOT NULL REFERENCES owned_inventory(id) ON DELETE CASCADE,
+    status       TEXT    NOT NULL DEFAULT 'pending',
+    priority     INTEGER NOT NULL DEFAULT 0,
+    weight       INTEGER NOT NULL DEFAULT 100,
+    reviewed_by  INTEGER REFERENCES users(id),
+    reviewed_at  INTEGER,
+    notes        TEXT,
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(campaign_id, inventory_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_cia_inv  ON campaign_inventory_approvals(inventory_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_cia_camp ON campaign_inventory_approvals(campaign_id, status)`,
+
+  // Audit log for inventory approvals — separate from global audit_log.
+  `CREATE TABLE IF NOT EXISTS inventory_approval_audit (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    approval_id  INTEGER REFERENCES campaign_inventory_approvals(id) ON DELETE SET NULL,
+    campaign_id  INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    inventory_id INTEGER NOT NULL REFERENCES owned_inventory(id) ON DELETE CASCADE,
+    actor_id     INTEGER NOT NULL REFERENCES users(id),
+    action       TEXT    NOT NULL,
+    before_state TEXT,
+    after_state  TEXT,
+    reason       TEXT,
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_iaa_inv  ON inventory_approval_audit(inventory_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_iaa_camp ON inventory_approval_audit(campaign_id, created_at)`,
+
+  // Per-slot click attribution (mirrors landing_page_id pattern).
+  `ALTER TABLE clicks ADD COLUMN inventory_id INTEGER REFERENCES owned_inventory(id)`,
+  `ALTER TABLE clicks ADD COLUMN placement_id INTEGER REFERENCES placements(id)`,
+  `CREATE INDEX IF NOT EXISTS idx_clicks_inventory ON clicks(inventory_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_clicks_placement ON clicks(placement_id)`,
+
+  // ── Phase 1: Campaign Creatives ────────────────────────────────────────────
+  // Rich offer presentation data (logo, headline, bonus, rating, terms, CTA).
+  // 1:N from campaigns. Highest-weight active creative is rendered by default;
+  // weight enables A/B testing of creative variants per campaign.
+  `CREATE TABLE IF NOT EXISTS campaign_creatives (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    campaign_id     INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    name            TEXT    NOT NULL DEFAULT 'default',  -- internal label
+    -- Visual elements
+    logo_url        TEXT    NOT NULL DEFAULT '',         -- brand logo (60x60 ish)
+    hero_image_url  TEXT    NOT NULL DEFAULT '',         -- larger hero for offer cards
+    -- Copy
+    brand_name      TEXT    NOT NULL DEFAULT '',         -- "BetMGM" — overrides campaign.name in render
+    headline        TEXT    NOT NULL DEFAULT '',         -- "Up to $1,500 First Bet Offer"
+    subheadline     TEXT    NOT NULL DEFAULT '',         -- "Use code WIN2026"
+    bonus_amount    TEXT    NOT NULL DEFAULT '',         -- "$1,500" — display value
+    bonus_label     TEXT    NOT NULL DEFAULT '',         -- "First Bet Offer"
+    terms_short     TEXT    NOT NULL DEFAULT '',         -- "21+ NJ/PA/MI only. Terms apply."
+    cta_text        TEXT    NOT NULL DEFAULT 'Get Offer',-- button label
+    -- Trust signals
+    rating          REAL,                                 -- 4.7 (nullable)
+    rating_count    INTEGER NOT NULL DEFAULT 0,           -- 12453
+    badge_text      TEXT    NOT NULL DEFAULT '',         -- "EDITOR'S PICK", "BEST OVERALL"
+    badge_color     TEXT    NOT NULL DEFAULT '',         -- hex without #, optional
+    -- Optimization
+    weight          INTEGER NOT NULL DEFAULT 100,        -- A/B weight within campaign
+    status          TEXT    NOT NULL DEFAULT 'active',
+    notes           TEXT,
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_creatives_campaign ON campaign_creatives(campaign_id, status)`,
 ];
 
 const IGNORABLE = [
@@ -864,18 +980,29 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
     const integAdmin = db.prepare("SELECT id FROM users WHERE email = 'integration@apogeemobi.com'").get();
     const createdBy  = integAdmin?.id || leelamUser?.id || 1;
 
-    // 3. Ensure each advertiser exists
+    // 3. Ensure each advertiser exists.
+    //    Passwords are read from env vars; if missing, a random secure
+    //    password is generated and printed once to the console (operator
+    //    must capture it from the boot log). Source code never contains
+    //    real credentials.
     const advertisers = [
-      { name: 'Adgrowth', email: 'admin@adgrowth.com',  password: 'Adgrowth@2026', company: 'Adgrowth' },
-      { name: 'Mobupps',  email: 'admin@mobupps.com',   password: 'Mobupps@2026',  company: 'Mobupps'  },
-      { name: 'Admattic', email: 'info@admattic.com',   password: 'Admattic@2026', company: 'Admattic' },
-      { name: 'Ojo7',     email: 'contact@ojo7.com',    password: 'Ojo7App@2026',  company: 'Ojo7'     },
+      { name: 'Adgrowth', email: 'admin@adgrowth.com',  envKey: 'SEED_ADGROWTH_PW', company: 'Adgrowth' },
+      { name: 'Mobupps',  email: 'admin@mobupps.com',   envKey: 'SEED_MOBUPPS_PW',  company: 'Mobupps'  },
+      { name: 'Admattic', email: 'info@admattic.com',   envKey: 'SEED_ADMATTIC_PW', company: 'Admattic' },
+      { name: 'Ojo7',     email: 'contact@ojo7.com',    envKey: 'SEED_OJO7_PW',     company: 'Ojo7'     },
     ];
 
     for (const adv of advertisers) {
       let u = db.prepare('SELECT id, account_manager_id FROM users WHERE email = ?').get(adv.email);
       if (!u) {
-        const hash    = bcrypt.hashSync(adv.password, 12);
+        // Use env-supplied password if available, otherwise generate a random
+        // one and surface it ONCE in the boot log so the operator can save it.
+        let password = process.env[adv.envKey];
+        if (!password) {
+          password = require('crypto').randomBytes(12).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+          console.log(`[ensure] ⚠ ${adv.envKey} not set — generated random password for ${adv.email}: ${password}  (save this; it will not be shown again)`);
+        }
+        const hash    = bcrypt.hashSync(password, 12);
         const token   = nanoid20hex();
         const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
         const res = db.prepare(
@@ -931,6 +1058,48 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
     } catch (e) {
       console.error('[migration] invoices_sent_at_v1 failed:', e.message);
     }
+  }
+}
+
+// ── Ensure: ApogeeMobi House publisher under the operator's primary admin ───
+// Phase 0 (owned-inventory monetization): all owned websites/apps register as
+// inventory under this single house publisher; reporting is sliced by
+// inventory_id. Runs every boot — idempotent.
+// Preference: admin@test.com (the primary operator account where the existing
+// publisher portfolio lives), then integration@apogeemobi.com, then any admin.
+// If the house publisher already exists under a different admin, it's moved
+// to the preferred one (preserves pub_token, status, history).
+{
+  try {
+    const admin =
+      db.prepare("SELECT id FROM users WHERE email = 'admin@test.com' AND role = 'admin'").get() ||
+      db.prepare("SELECT id FROM users WHERE email = 'integration@apogeemobi.com' AND role = 'admin'").get() ||
+      db.prepare("SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1").get();
+    if (admin) {
+      const existing = db.prepare(
+        "SELECT id, user_id FROM publishers WHERE name = 'ApogeeMobi House' AND status != 'deleted'"
+      ).get();
+      if (!existing) {
+        const nextSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM publishers').get().n;
+        db.prepare(
+          `INSERT INTO publishers (user_id, name, pub_token, status, seq_num, vertical, geo, traffic_type, notes)
+           VALUES (?, 'ApogeeMobi House', ?, 'active', ?, '', '', 'web', 'Internal house publisher for owned-and-operated inventory')`
+        ).run(admin.id, nanoid20hex(), nextSeq);
+        console.log('[ensure] ApogeeMobi House publisher created for admin id=' + admin.id);
+      } else if (existing.user_id !== admin.id) {
+        // Re-point the house publisher to the preferred admin.
+        db.prepare('UPDATE publishers SET user_id = ? WHERE id = ?').run(admin.id, existing.id);
+        // Re-point any owned_inventory rows so their user_id stays consistent
+        // with the publisher's new owner. Same for placements.
+        db.prepare('UPDATE owned_inventory SET user_id = ? WHERE publisher_id = ?').run(admin.id, existing.id);
+        db.prepare(
+          'UPDATE placements SET user_id = ? WHERE inventory_id IN (SELECT id FROM owned_inventory WHERE publisher_id = ?)'
+        ).run(admin.id, existing.id);
+        console.log('[ensure] ApogeeMobi House publisher moved from user_id=' + existing.user_id + ' to user_id=' + admin.id);
+      }
+    }
+  } catch (e) {
+    console.error('[ensure] ApogeeMobi House publisher seed failed:', e.message);
   }
 }
 

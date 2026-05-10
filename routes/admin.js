@@ -4,6 +4,7 @@ const { nanoid } = require('nanoid');
 const { customAlphabet } = require('nanoid');
 const db = require('../db/init');
 const { requireAdmin } = require('../middleware/auth');
+const audit = require('../utils/auditLog');
 
 const nanoid20hex = customAlphabet('0123456789abcdef', 20);
 
@@ -181,6 +182,7 @@ router.patch('/users/:id/approve', requireAdmin, (req, res) => {
       db.prepare('INSERT OR IGNORE INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)').run(user.id, am.id);
     }
   }
+  audit.log(req, 'approve', 'user', user.id, user.email, { role: user.role });
   res.json({ success: true, email: user.email, status: 'active' });
 });
 
@@ -191,8 +193,8 @@ router.patch('/users/:id/reject', requireAdmin, (req, res) => {
   if (user.status !== 'pending') return res.status(400).json({ error: `User is already ${user.status}` });
   const reason = req.body.reason || '';
   db.prepare("UPDATE users SET status = 'rejected' WHERE id = ?").run(user.id);
-  // Also pause the linked publisher record
   db.prepare("UPDATE publishers SET status = 'paused' WHERE publisher_user_id = ?").run(user.id);
+  audit.log(req, 'reject', 'user', user.id, user.email, { reason });
   res.json({ success: true, email: user.email, status: 'rejected' });
 });
 
