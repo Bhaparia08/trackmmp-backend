@@ -652,6 +652,81 @@ const migrations = [
     updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
   `CREATE INDEX IF NOT EXISTS idx_creatives_campaign ON campaign_creatives(campaign_id, status)`,
+
+  // ── Phase 1: Discovery Hub — campaign_candidates + validation_queue ────────
+  // Discovery Hub aggregates offers pulled from all integrated networks
+  // (Everflow, TUNE, Impact, Adjust, Branch, CityAds, Rakuten, Custom),
+  // validates landing pages, and scores each candidate against owned inventory.
+  // Both tables are ADDITIVE — no existing tables are modified, no foreign keys
+  // out of existing schemas are required to function.
+  `CREATE TABLE IF NOT EXISTS campaign_candidates (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_credential_id     INTEGER,
+    source_platform          TEXT    NOT NULL,
+    source_offer_id          TEXT    NOT NULL,
+    source_advertiser_id     TEXT,
+    source_advertiser_name   TEXT,
+
+    name                     TEXT    NOT NULL,
+    vertical                 TEXT,
+    payout                   REAL    DEFAULT 0,
+    payout_type              TEXT,
+    payout_currency          TEXT    DEFAULT 'USD',
+
+    allowed_countries        TEXT,                     -- JSON array
+    allowed_devices          TEXT,                     -- JSON array
+    allowed_os               TEXT,                     -- JSON array
+
+    destination_url          TEXT,
+    tracking_url_template    TEXT,
+    preview_url              TEXT,
+
+    normalized_payload       TEXT    NOT NULL,         -- JSON of NormalizedOffer
+    raw_payload              TEXT,                     -- JSON of original
+
+    validation_status        TEXT    NOT NULL DEFAULT 'pending',  -- pending|valid|broken|redirect_loop|parked|geo_blocked|malware|timeout
+    validation_checked_at    INTEGER,
+    validation_final_url     TEXT,
+    validation_http_code     INTEGER,
+    validation_redirect_chain TEXT,                    -- JSON
+    validation_notes         TEXT,
+
+    best_match_score         REAL,
+    best_match_inventory_id  INTEGER,
+    match_breakdown          TEXT,                     -- JSON
+
+    import_status            TEXT    NOT NULL DEFAULT 'new',      -- new|reviewing|approved|imported|rejected|duplicate
+    imported_campaign_id     INTEGER,
+    reviewed_by              INTEGER,
+    reviewed_at              INTEGER,
+    rejection_reason         TEXT,
+
+    first_seen_at            INTEGER NOT NULL DEFAULT (unixepoch()),
+    last_seen_at             INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_candidates_unique ON campaign_candidates(source_platform, source_offer_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_status   ON campaign_candidates(import_status, validation_status)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_score    ON campaign_candidates(best_match_score DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_advert   ON campaign_candidates(source_advertiser_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_seen     ON campaign_candidates(last_seen_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS discovery_validation_queue (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id    INTEGER NOT NULL,
+    attempt_count   INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    status          TEXT    NOT NULL DEFAULT 'pending',  -- pending|running|done|failed
+    last_error      TEXT,
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_dvq_pending ON discovery_validation_queue(status, next_attempt_at)`,
+
+  // Sync state tracking on advertiser_api_credentials — additive columns only
+  `ALTER TABLE advertiser_api_credentials ADD COLUMN auto_sync          INTEGER DEFAULT 1`,
+  `ALTER TABLE advertiser_api_credentials ADD COLUMN last_synced_at     INTEGER`,
+  `ALTER TABLE advertiser_api_credentials ADD COLUMN last_sync_status   TEXT`,
+  `ALTER TABLE advertiser_api_credentials ADD COLUMN last_sync_error    TEXT`,
+  `ALTER TABLE advertiser_api_credentials ADD COLUMN last_offer_count   INTEGER DEFAULT 0`,
 ];
 
 const IGNORABLE = [

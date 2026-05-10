@@ -137,6 +137,7 @@ app.use('/api/postbacks', (req, res, next) => {  // alias: GET /api/postbacks �
 app.use('/skan',                  require('./routes/skan'));
 app.use('/api/permissions',       require('./routes/permissions'));
 app.use('/api/audit-log',         require('./routes/auditLog'));
+app.use('/api/discovery',         require('./routes/discovery'));
 
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
@@ -162,6 +163,27 @@ const { runAlertChecks } = require('./utils/alertEngine');
 setInterval(() => {
   try { runAlertChecks(io); } catch (e) { console.error('[AlertEngine]', e.message); }
 }, 2 * 60 * 1000);
+
+// ── Discovery Hub — scan every 6h, process validation queue every 60s ─────
+// Kill switch: set DISCOVERY_HUB_ENABLED=false to disable.
+const discoveryEngine = require('./utils/discoveryEngine');
+if (discoveryEngine.isEnabled()) {
+  // Scan all credentials every 6 hours
+  setInterval(async () => {
+    try { await discoveryEngine.scanAll(); }
+    catch (e) { console.error('[DiscoveryScan]', e.message); }
+  }, discoveryEngine.DEFAULT_SCAN_INTERVAL_MS);
+
+  // Drain pending landing-page validations every 60 seconds (10 at a time)
+  setInterval(async () => {
+    try { await discoveryEngine.processValidationQueue(10); }
+    catch (e) { console.error('[DiscoveryValidator]', e.message); }
+  }, 60 * 1000);
+
+  console.log('[DiscoveryHub] enabled — scan every 6h, validator every 60s');
+} else {
+  console.log('[DiscoveryHub] disabled via DISCOVERY_HUB_ENABLED=false');
+}
 
 // ── In production, serve the built React frontend from Express ────────────────
 // Checks multiple candidate paths in priority order:
