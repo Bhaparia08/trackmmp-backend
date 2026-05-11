@@ -87,13 +87,13 @@ router.get('/campaign/:campaign_id', requireRole('admin', 'account_manager'), (r
     const campaign = db.prepare('SELECT id, user_id, visibility FROM campaigns WHERE id = ?').get(req.params.campaign_id);
     if (!campaign || campaign.user_id !== ownerId) return res.status(404).json({ error: 'Campaign not found' });
 
-    // All publishers for this account, LEFT JOIN so we see everyone regardless of request status
+    // All active publishers for this account, LEFT JOIN so we see everyone regardless of request status
     const rows = db.prepare(`
       SELECT p.id AS publisher_id, p.name AS publisher_name, p.pub_token, p.email,
              r.id, r.status AS access_status, r.created_at, r.reviewed_at
       FROM publishers p
       LEFT JOIN campaign_access_requests r ON r.campaign_id = ? AND r.publisher_id = p.id
-      WHERE p.user_id = ?
+      WHERE p.user_id = ? AND p.status != 'deleted'
       ORDER BY r.status ASC, p.name ASC
     `).all(campaign.id, ownerId);
     res.json(rows);
