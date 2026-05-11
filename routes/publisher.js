@@ -77,17 +77,17 @@ router.get('/tracking-url/:campaign_id', (req, res) => {
     || 'https://track.apogeemobi.com';
 
   // Publisher's numeric PID is pre-filled (industry standard — same as Trackier/Affise).
-  // {CLICK_ID} is their ad network's click ID macro placeholder.
+  // {click_id} is the standard macro — publisher replaces with their network's click ID.
   const trackingUrl = `${base}/track/click/${c.campaign_token}`
     + `?pid=${pub.id}`
-    + `&clickid={CLICK_ID}`
-    + `&sub1={SUB1}`
-    + `&sub2={SUB2}`
-    + `&sub3={SUB3}`;
+    + `&clickid={click_id}`
+    + `&sub1={sub1}`
+    + `&sub2={sub2}`
+    + `&sub3={sub3}`;
 
   const pubPayout = c.publisher_payout ?? 0;
   const postbackUrl = `${base}/pb`
-    + `?clickid={CLICK_ID}`
+    + `?clickid={click_id}`
     + `&payout=${pubPayout}`
     + `&event=install`;
 
