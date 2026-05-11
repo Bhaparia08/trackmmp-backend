@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ApogeeMobi Offers SDK — Live demo / playground</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; font: 14px/1.6 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px; }
+    h1 { font-size: 26px; margin: 0 0 6px; }
+    h2 { font-size: 18px; margin: 32px 0 12px; padding-top: 22px; border-top: 1px solid #ffffff14; color: #818cf8; }
+    .lede { color: #94a3b8; margin: 0 0 18px; }
+    a { color: #818cf8; }
+    .panel { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 10px; padding: 18px; margin: 14px 0; }
+    label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+    input { width: 100%; padding: 9px 12px; background: #0f0f1a; border: 1px solid #ffffff20; border-radius: 6px; color: #e2e8f0; font-size: 13px; font-family: inherit; box-sizing: border-box; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+    .row > div { flex: 1; min-width: 200px; }
+    button { padding: 10px 18px; background: #6366f1; color: #fff; border: 0; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
+    button:hover { background: #4f46e5; }
+    .render-area { background: #fff; color: #1a1a2e; padding: 24px; border-radius: 10px; margin-top: 14px; min-height: 100px; font-family: Georgia, serif; }
+    .render-area h2 { color: #0f172a; font-size: 24px; margin: 0 0 6px; padding: 0; border: 0; }
+    .render-area .meta { color: #6b7280; font-size: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 14px; font-family: system-ui; }
+    .render-area p { font-family: system-ui; font-size: 14px; }
+    pre { background: #0a0a14; color: #a5f3fc; padding: 12px; border-radius: 6px; font-size: 11px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>SDK Live Playground</h1>
+<p class="lede">Paste your API key and a placement slug. Hit Render. The SDK fetches real offers from the platform and renders them below.</p>
+
+<div class="panel">
+  <div class="row">
+    <div>
+      <label>API Key</label>
+      <input id="apg-key" type="text" placeholder="apg_xxxxx" autocomplete="off">
+    </div>
+    <div style="max-width: 220px">
+      <label>Placement slug</label>
+      <input id="apg-slug" type="text" placeholder="top-10-sportsbooks" autocomplete="off">
+    </div>
+    <div style="max-width: 80px">
+      <label>Country</label>
+      <input id="apg-country" type="text" placeholder="US" maxlength="2" autocomplete="off">
+    </div>
+    <div style="max-width: 80px">
+      <label>Limit</label>
+      <input id="apg-limit" type="number" placeholder="10" min="1" max="50" autocomplete="off">
+    </div>
+    <div style="flex: 0">
+      <button id="apg-render">Render</button>
+    </div>
+  </div>
+</div>
+
+<p style="font-size: 12px; color: #94a3b8;">
+  The render area below is styled like a real review-site article. The SDK injects offers into the placeholder div.
+</p>
+
+<div class="render-area">
+  <h2 id="demo-title">Your Article Title Here</h2>
+  <div class="meta">Updated 2026 · Editor's Pick</div>
+  <p>Lorem ipsum article content. The placeholder below will be replaced by the SDK with real offers from the platform.</p>
+  <div id="apg-target" data-apg-placement=""></div>
+  <p style="font-size: 11px; color: #6b7280; margin-top: 16px;">Disclosure: This page contains affiliate links. We may earn a commission when you sign up via the buttons above.</p>
+</div>
+
+<h2>What's happening behind the scenes</h2>
+<div class="panel">
+  <pre id="apg-log">Set API key + slug above, then click Render.</pre>
+</div>
+
+<h2>Inspect the SDK request</h2>
+<p>Open DevTools → Network tab → filter by "serve". You'll see the actual <code>/api/v1/serve</code> call.
+You'll also see the <code>/track/click/...</code> request when you click an offer.</p>
+
+<h2>Want to install this on your own site?</h2>
+<p>See the <a href="/sdk/docs.html">integration docs</a>. The whole install is 2 lines of HTML.</p>
+
+<p style="margin-top: 40px; padding-top: 18px; border-top: 1px solid #ffffff14; color: #64748b; font-size: 12px;">
+  ApogeeMobi Offers SDK Demo · <a href="https://track.apogeemobi.com">track.apogeemobi.com</a>
+</p>
+
+</div>
+
+<script>
+  document.getElementById('apg-render').addEventListener('click', function () {
+    var key   = document.getElementById('apg-key').value.trim();
+    var slug  = document.getElementById('apg-slug').value.trim();
+    var country = document.getElementById('apg-country').value.trim().toUpperCase();
+    var limit = document.getElementById('apg-limit').value.trim();
+    var log = document.getElementById('apg-log');
+
+    if (!key || !slug) {
+      log.textContent = '⚠ Please provide both API Key and Placement slug.';
+      return;
+    }
+
+    var target = document.getElementById('apg-target');
+    target.setAttribute('data-apg-placement', slug);
+    if (country) target.setAttribute('data-apg-country', country);
+    if (limit) target.setAttribute('data-apg-limit', limit);
+    target.removeAttribute('data-apg-rendered');
+    target.innerHTML = '';
+
+    var title = 'Best ' + slug.replace(/-/g, ' ').replace(/\b\w/g, function(c){return c.toUpperCase();}) + ' 2026';
+    document.getElementById('demo-title').textContent = title;
+
+    var oldScript = document.getElementById('apg-sdk');
+    if (oldScript) oldScript.remove();
+
+    var newScript = document.createElement('script');
+    newScript.id = 'apg-sdk';
+    newScript.src = '/sdk/v1/apogee.js?cb=' + Date.now();
+    newScript.setAttribute('data-api-key', key);
+    newScript.setAttribute('data-debug', '');
+    newScript.async = true;
+    document.head.appendChild(newScript);
+
+    log.textContent =
+      'Loaded SDK with key=' + key.slice(0, 8) + '…\n' +
+      'Requesting placement=' + slug + (country ? ', country=' + country : '') + (limit ? ', limit=' + limit : '') + '\n' +
+      'Watch DevTools Network tab for the /api/v1/serve call.';
+  });
+</script>
+</body>
+</html>

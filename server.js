@@ -139,6 +139,22 @@ app.use('/api/permissions',       require('./routes/permissions'));
 app.use('/api/audit-log',         require('./routes/auditLog'));
 app.use('/api/discovery',         require('./routes/discovery'));
 
+// ── SDK static files ──────────────────────────────────────────────────────
+// Serves backend/sdk/ at /sdk/. This is OUTSIDE backend/public/ so Vite's
+// build (which empties backend/public/) doesn't wipe the SDK files.
+// CORS Allow-Origin: * so the SDK can be loaded by any website.
+app.use('/sdk', express.static(path.join(__dirname, 'sdk'), {
+  setHeaders(res, filePath) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (filePath.endsWith('.js')) {
+      res.setHeader('Cache-Control', 'public, max-age=300'); // 5 min
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+  },
+}));
+
 // Health check
 app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
 
