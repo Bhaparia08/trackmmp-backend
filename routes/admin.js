@@ -183,6 +183,13 @@ router.patch('/users/:id/approve', requireAdmin, (req, res) => {
     }
   }
   audit.log(req, 'approve', 'user', user.id, user.email, { role: user.role });
+
+  // Notify publisher via socket that they're approved
+  try {
+    const io = req.app.get('io');
+    if (io) io.to(user.id.toString()).emit('application_approved', { message: 'Your publisher account has been approved! You can now log in.' });
+  } catch {}
+
   res.json({ success: true, email: user.email, status: 'active' });
 });
 
@@ -195,6 +202,13 @@ router.patch('/users/:id/reject', requireAdmin, (req, res) => {
   db.prepare("UPDATE users SET status = 'rejected' WHERE id = ?").run(user.id);
   db.prepare("UPDATE publishers SET status = 'paused' WHERE publisher_user_id = ?").run(user.id);
   audit.log(req, 'reject', 'user', user.id, user.email, { reason });
+
+  // Notify publisher via socket that they're rejected
+  try {
+    const io = req.app.get('io');
+    if (io) io.to(user.id.toString()).emit('application_rejected', { message: 'Your publisher application was not approved.', reason });
+  } catch {}
+
   res.json({ success: true, email: user.email, status: 'rejected' });
 });
 

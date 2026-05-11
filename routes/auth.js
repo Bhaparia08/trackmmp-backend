@@ -132,10 +132,16 @@ async function sendVerificationEmail(mailer, userEmail, userName, verifyUrl) {
   }
 }
 
+// GET /api/auth/account-managers — public list of AM names for publisher signup dropdown
+router.get('/account-managers', (req, res) => {
+  const ams = db.prepare('SELECT id, name FROM account_managers ORDER BY name').all();
+  res.json(ams.map(a => ({ id: a.id, name: a.name })));
+});
+
 // POST /api/auth/register/publisher  (open publisher self-signup — requires admin approval)
 router.post('/register/publisher', async (req, res, next) => {
   try {
-    const { email, password, name, company_name, website_url, vertical, geo, traffic_type, monthly_traffic } = req.body;
+    const { email, password, name, company_name, website_url, vertical, geo, traffic_type, monthly_traffic, account_manager_id } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'email, password and name are required' });
 
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
@@ -162,12 +168,26 @@ router.post('/register/publisher', async (req, res, next) => {
           vertical || '', geo || '', website_url || '', traffic_type || 'web',
           monthly_traffic ? `Monthly traffic: ${monthly_traffic}` : '');
 
-    // Notify admin via socket if available
+    // Assign selected account manager (if chosen during signup)
+    if (account_manager_id) {
+      const am = db.prepare('SELECT id FROM account_managers WHERE id = ?').get(account_manager_id);
+      if (am) {
+        db.prepare('INSERT OR IGNORE INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)').run(result.lastInsertRowid, am.id);
+      }
+    }
+
+    // Notify admin + assigned AM via socket
     try {
       const io = req.app.get('io');
-      if (io) io.to(adminUserId.toString()).emit('new_publisher_application', {
-        id: user.id, name, email, company_name, website_url, vertical, geo,
-      });
+      if (io) {
+        const notification = { id: user.id, name, email, company_name, website_url, account_manager_id };
+        io.to(adminUserId.toString()).emit('new_publisher_application', notification);
+        // Also notify the assigned AM if they have a user account
+        if (account_manager_id) {
+          const amUser = db.prepare('SELECT user_id FROM account_managers WHERE id = ?').get(account_manager_id);
+          if (amUser?.user_id) io.to(amUser.user_id.toString()).emit('new_publisher_application', notification);
+        }
+      }
     } catch {}
 
     res.status(201).json({
