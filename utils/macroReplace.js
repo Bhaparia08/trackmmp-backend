@@ -118,6 +118,9 @@ function macroReplace(url, data) {
     '{offer_id}':            String(data.campaign_id || data.af_c_id || ''),
     '{publisher_click_id}':  data.publisher_click_id || '',
     '{pub_click_id}':        data.publisher_click_id || '',
+    '{cid}':                 data.publisher_click_id || data.click_id || '',  // Trackier alias
+    '{externalid}':          data.publisher_click_id || data.click_id || '',  // Voluum/Binom alias
+    '{external_id}':         data.publisher_click_id || data.click_id || '',  // Voluum/Binom alias
     '{pub_id}':              String(data.publisher_id || ''),
     '{event}':               data.event_name || data.event || 'install',
     '{event_type}':          data.event_name || data.event || 'install',
