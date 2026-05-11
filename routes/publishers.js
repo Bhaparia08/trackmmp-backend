@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db/init');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 const { nanoid10 } = require('../utils/clickId');
 const audit = require('../utils/auditLog');
 
@@ -43,7 +43,7 @@ router.get('/', (req, res) => {
   res.json(rows.map(r => ({ ...r, assigned_ams: amMap[r.publisher_user_id] || [] })));
 });
 
-router.post('/', (req, res, next) => {
+router.post('/', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
     const { name, email, notes, vertical, geo, website_url, traffic_type } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
@@ -68,7 +68,7 @@ router.get('/:id', (req, res) => {
   res.json(p);
 });
 
-router.put('/:id', (req, res, next) => {
+router.put('/:id', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
     const p = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!p) return res.status(404).json({ error: 'Publisher not found' });
@@ -90,7 +90,7 @@ router.put('/:id', (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/:id', (req, res, next) => {
+router.delete('/:id', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
     const p = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!p) return res.status(404).json({ error: 'Publisher not found' });
