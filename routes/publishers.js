@@ -18,12 +18,30 @@ function getOwnerId(req) {
 
 router.get('/', (req, res) => {
   const ownerId = getOwnerId(req);
-  const rows = db.prepare(`
-    SELECT p.*, COUNT(c.id) AS click_count
-    FROM publishers p
-    LEFT JOIN clicks c ON c.publisher_id = p.id
-    WHERE p.user_id = ? AND p.status != 'deleted' GROUP BY p.id ORDER BY p.created_at DESC
-  `).all(ownerId);
+
+  let rows;
+  if (req.user.role === 'account_manager') {
+    // AM only sees publishers assigned to them via user_account_managers
+    const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(req.user.id);
+    if (!am) return res.json([]);
+    rows = db.prepare(`
+      SELECT p.*, COUNT(c.id) AS click_count
+      FROM publishers p
+      LEFT JOIN clicks c ON c.publisher_id = p.id
+      WHERE p.status != 'deleted'
+        AND p.publisher_user_id IN (
+          SELECT uam.user_id FROM user_account_managers uam WHERE uam.account_manager_id = ?
+        )
+      GROUP BY p.id ORDER BY p.created_at DESC
+    `).all(am.id);
+  } else {
+    rows = db.prepare(`
+      SELECT p.*, COUNT(c.id) AS click_count
+      FROM publishers p
+      LEFT JOIN clicks c ON c.publisher_id = p.id
+      WHERE p.user_id = ? AND p.status != 'deleted' GROUP BY p.id ORDER BY p.created_at DESC
+    `).all(ownerId);
+  }
 
   // Attach assigned AMs for publishers that have a user account
   const userIds = rows.map(r => r.publisher_user_id).filter(Boolean);
