@@ -75,6 +75,9 @@ app.use('/sellers.json', require('./routes/sellersJson'));
 // Adjust-compatible S2S endpoints (no auth — token validated per-request)
 app.use('/adjust', require('./routes/adjust'));
 
+// OneLink public resolver (no auth — UA-based device routing)
+app.use('/go', require('./routes/go'));
+
 // Authenticated API routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
@@ -126,12 +129,20 @@ app.use('/api/apikeys', require('./routes/apikeys'));
   }
 }
 
+// /api/v1/links — programmatic OneLink API (JWT-authed; mounted BEFORE /api/v1
+// so it isn't swallowed by the publisher x-api-key middleware on /api/v1).
+app.use('/api/v1/links', require('./routes/v1Links'));
+
 app.use('/api/v1', require('./routes/v1'));
 app.use('/api/integrations', require('./routes/integrations'));
 app.use('/api/campaign-access', require('./routes/campaignAccess'));
 app.use('/api/smart-links',    require('./routes/smartLinks'));
 app.use('/api/automation',     require('./routes/automation'));
 app.use('/api/preview',        require('./routes/preview'));
+app.use('/api/plan',           require('./routes/plan'));
+app.use('/api/preview',        require('./routes/datascape'));
+app.use('/api/preview',        require('./routes/incrementality'));
+app.use('/api/preview',        require('./routes/predictedLtv'));
 app.use('/api/impact',         require('./routes/impact'));
 app.use('/api/invoices',          require('./routes/invoices'));
 app.use('/api/insertion-orders',  require('./routes/insertionOrders'));

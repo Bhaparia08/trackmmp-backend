@@ -12,7 +12,9 @@ const registry = require('./connectors');
 const validator = require('./landingPageValidator');
 const matcher = require('./inventoryMatcher');
 
-const DEFAULT_SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000;  // 6 h
+// Default: 5 minutes. Override with DISCOVERY_SCAN_INTERVAL_SEC env var (in seconds).
+// Production guidance: keep ≥ 300 (5 min) to avoid hammering external network APIs.
+const DEFAULT_SCAN_INTERVAL_MS = (Number(process.env.DISCOVERY_SCAN_INTERVAL_SEC) || 5 * 60) * 1000;
 
 function isEnabled() {
   return process.env.DISCOVERY_HUB_ENABLED !== 'false';   // default: enabled

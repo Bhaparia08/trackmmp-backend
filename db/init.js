@@ -1251,4 +1251,30 @@ if (process.env.SEED_ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD) {
   }
 }
 
+// ── onelinks (OneLink wizard — preview feature) ──────────────────────────
+// Standalone table; intentionally NOT entangled with smart_links so the
+// wizard can ship without breaking existing campaign mappings.
+try {
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS onelinks (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name                TEXT    NOT NULL,
+      slug                TEXT    NOT NULL UNIQUE,
+      ios_store_url       TEXT    NOT NULL DEFAULT '',
+      android_store_url   TEXT    NOT NULL DEFAULT '',
+      web_fallback_url    TEXT    NOT NULL DEFAULT '',
+      ios_deep_link       TEXT    NOT NULL DEFAULT '',
+      android_deep_link   TEXT    NOT NULL DEFAULT '',
+      total_clicks        INTEGER NOT NULL DEFAULT 0,
+      status              TEXT    NOT NULL DEFAULT 'active',
+      created_at          INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at          INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `).run();
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_onelinks_user ON onelinks(user_id)`).run();
+  // Migration: add expires_at column for OneLink v2 (idempotent).
+  try { db.prepare(`ALTER TABLE onelinks ADD COLUMN expires_at INTEGER`).run(); } catch {}
+} catch (e) { console.error('[init] onelinks table:', e.message); }
+
 module.exports = db;

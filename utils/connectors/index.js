@@ -8,12 +8,14 @@
 const Everflow = require('./everflow');
 const TUNE     = require('./tune');
 const Impact   = require('./impact');
+const Insparx  = require('./insparx');
 const { AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector } = require('./stubs');
 
 const connectors = {
   everflow: Everflow,
   tune:     TUNE,
   impact:   Impact,
+  insparx:  Insparx,
   adjust:   AdjustConnector,
   branch:   BranchConnector,
   cityads:  CityAdsConnector,
