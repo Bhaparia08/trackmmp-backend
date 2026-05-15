@@ -23,6 +23,12 @@ const {
 } = require('@simplewebauthn/server');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
+// IST = UTC+5:30 — all attendance dates/times use IST
+const IST_OFFSET = '+05:30';
+// SQLite: date(ts, 'unixepoch', '+5 hours', '+30 minutes') converts to IST date
+const IST_DATE_SQL = "date(created_at, 'unixepoch', '+5 hours', '+30 minutes')";
+const IST_NOW_DATE = "date('now', '+5 hours', '+30 minutes')";
+
 const router   = express.Router();
 const requireAM    = requireRole('account_manager', 'admin');
 const requireAdmin = requireRole('admin');
@@ -219,7 +225,7 @@ router.post('/checkout', requireAM, async (req, res) => {
   // Check they actually checked in today
   const todayIn = db.prepare(`SELECT id FROM attendance
     WHERE user_id = ? AND type = 'check_in'
-    AND date(created_at, 'unixepoch') = date('now')
+    AND date(created_at, 'unixepoch', '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes')
     ORDER BY created_at DESC LIMIT 1`).get(user.id);
   if (!todayIn) return res.status(400).json({ error: 'You have not checked in today.' });
 
@@ -274,8 +280,8 @@ router.get('/my', requireAM, (req, res) => {
   const { from, to, limit = 30, offset = 0 } = req.query;
   let where = 'WHERE a.user_id = ?';
   const params = [req.user.id];
-  if (from) { where += ' AND date(a.created_at,\'unixepoch\') >= ?'; params.push(from); }
-  if (to)   { where += ' AND date(a.created_at,\'unixepoch\') <= ?'; params.push(to); }
+  if (from) { where += " AND date(a.created_at,'unixepoch','+5 hours','+30 minutes') >= ?"; params.push(from); }
+  if (to)   { where += " AND date(a.created_at,'unixepoch','+5 hours','+30 minutes') <= ?"; params.push(to); }
 
   const rows = db.prepare(`SELECT a.* FROM attendance a ${where}
     ORDER BY a.created_at DESC LIMIT ? OFFSET ?`)
@@ -292,8 +298,8 @@ router.get('/', requireAdmin, (req, res) => {
   let where = 'WHERE 1=1';
   const params = [];
   if (user_id) { where += ' AND a.user_id = ?'; params.push(+user_id); }
-  if (from)    { where += ' AND date(a.created_at,\'unixepoch\') >= ?'; params.push(from); }
-  if (to)      { where += ' AND date(a.created_at,\'unixepoch\') <= ?'; params.push(to); }
+  if (from)    { where += " AND date(a.created_at,'unixepoch','+5 hours','+30 minutes') >= ?"; params.push(from); }
+  if (to)      { where += " AND date(a.created_at,'unixepoch','+5 hours','+30 minutes') <= ?"; params.push(to); }
 
   const rows = db.prepare(`
     SELECT a.*, u.name as am_name, u.email as am_email
@@ -310,22 +316,25 @@ router.get('/', requireAdmin, (req, res) => {
 // ── Admin: today's summary ─────────────────────────────────────────────────
 
 router.get('/summary', requireAdmin, (req, res) => {
-  const date = req.query.date || new Date().toISOString().slice(0, 10);
+  // Default to today in IST (UTC+5:30)
+  const now = new Date();
+  const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  const date = req.query.date || istNow.toISOString().slice(0, 10);
 
   const ams = db.prepare(`
     SELECT u.id, u.name, u.email,
       (SELECT created_at FROM attendance WHERE user_id = u.id AND type = 'check_in'
-        AND date(created_at,'unixepoch') = ? ORDER BY created_at ASC LIMIT 1) as check_in_at,
+        AND date(created_at,'unixepoch','+5 hours','+30 minutes') = ? ORDER BY created_at ASC LIMIT 1) as check_in_at,
       (SELECT lat FROM attendance WHERE user_id = u.id AND type = 'check_in'
-        AND date(created_at,'unixepoch') = ? ORDER BY created_at ASC LIMIT 1) as check_in_lat,
+        AND date(created_at,'unixepoch','+5 hours','+30 minutes') = ? ORDER BY created_at ASC LIMIT 1) as check_in_lat,
       (SELECT lng FROM attendance WHERE user_id = u.id AND type = 'check_in'
-        AND date(created_at,'unixepoch') = ? ORDER BY created_at ASC LIMIT 1) as check_in_lng,
+        AND date(created_at,'unixepoch','+5 hours','+30 minutes') = ? ORDER BY created_at ASC LIMIT 1) as check_in_lng,
       (SELECT address FROM attendance WHERE user_id = u.id AND type = 'check_in'
-        AND date(created_at,'unixepoch') = ? ORDER BY created_at ASC LIMIT 1) as check_in_address,
+        AND date(created_at,'unixepoch','+5 hours','+30 minutes') = ? ORDER BY created_at ASC LIMIT 1) as check_in_address,
       (SELECT biometric_verified FROM attendance WHERE user_id = u.id AND type = 'check_in'
-        AND date(created_at,'unixepoch') = ? ORDER BY created_at ASC LIMIT 1) as biometric_verified,
+        AND date(created_at,'unixepoch','+5 hours','+30 minutes') = ? ORDER BY created_at ASC LIMIT 1) as biometric_verified,
       (SELECT created_at FROM attendance WHERE user_id = u.id AND type = 'check_out'
-        AND date(created_at,'unixepoch') = ? ORDER BY created_at DESC LIMIT 1) as check_out_at
+        AND date(created_at,'unixepoch','+5 hours','+30 minutes') = ? ORDER BY created_at DESC LIMIT 1) as check_out_at
     FROM users u
     WHERE u.role = 'account_manager' AND u.status = 'active'
     ORDER BY u.name

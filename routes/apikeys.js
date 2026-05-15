@@ -31,16 +31,34 @@ function getAMAdvertiserIds(userId) {
 
 // GET /api/apikeys — list publisher API keys
 router.get('/', (req, res) => {
-  if (req.user.role === 'admin') {
-    // Admins see ALL keys across all admin accounts
-    const rows = db.prepare(`
-      SELECT k.*, p.name AS publisher_name, p.email AS publisher_email,
-             u.name AS created_by_name, u.email AS created_by_email
-      FROM publisher_api_keys k
-      LEFT JOIN publishers p ON p.id = k.publisher_id
-      LEFT JOIN users u ON u.id = k.created_by
-      ORDER BY k.created_at DESC
-    `).all();
+  if (req.user.role === 'admin' || req.user.role === 'account_manager') {
+    // Admins see ALL keys; AMs see keys for their assigned publishers
+    let rows;
+    if (req.user.role === 'admin') {
+      rows = db.prepare(`
+        SELECT k.*, p.name AS publisher_name, p.email AS publisher_email,
+               u.name AS created_by_name, u.email AS created_by_email
+        FROM publisher_api_keys k
+        LEFT JOIN publishers p ON p.id = k.publisher_id
+        LEFT JOIN users u ON u.id = k.created_by
+        ORDER BY k.created_at DESC
+      `).all();
+    } else {
+      // AM — only keys for their assigned publishers
+      const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(req.user.id);
+      if (!am) return res.json([]);
+      rows = db.prepare(`
+        SELECT k.*, p.name AS publisher_name, p.email AS publisher_email,
+               u.name AS created_by_name, u.email AS created_by_email
+        FROM publisher_api_keys k
+        LEFT JOIN publishers p ON p.id = k.publisher_id
+        LEFT JOIN users u ON u.id = k.created_by
+        WHERE p.publisher_user_id IN (
+          SELECT uam.user_id FROM user_account_managers uam WHERE uam.account_manager_id = ?
+        )
+        ORDER BY k.created_at DESC
+      `).all(am.id);
+    }
     return res.json(rows);
   }
   if (req.user.role === 'publisher') {
@@ -76,6 +94,24 @@ router.post('/', (req, res, next) => {
       if (!publisher_id) return res.status(400).json({ error: 'publisher_id is required' });
       const pub = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(publisher_id, req.user.id);
       if (!pub) return res.status(404).json({ error: 'Publisher not found' });
+    } else if (req.user.role === 'account_manager') {
+      if (!publisher_id) return res.status(400).json({ error: 'publisher_id is required' });
+      // AM can only create keys for their assigned publishers
+      // Match the same scoping as /api/am/publishers uses
+      const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(req.user.id);
+      if (!am) return res.status(403).json({ error: 'Account manager profile not found' });
+      const pub = db.prepare(`SELECT p.* FROM publishers p
+        WHERE p.id = ? AND (
+          p.publisher_user_id IN (
+            SELECT uam.user_id FROM user_account_managers uam WHERE uam.account_manager_id = ?
+          )
+          OR p.user_id IN (
+            SELECT u.created_by FROM users u
+            JOIN user_account_managers uam ON uam.user_id = u.id
+            WHERE uam.account_manager_id = ? AND u.role = 'admin'
+          )
+        )`).get(publisher_id, am.id, am.id);
+      if (!pub) return res.status(404).json({ error: 'Publisher not found or not assigned to you' });
     } else {
       return res.status(403).json({ error: 'Not allowed' });
     }
@@ -95,7 +131,10 @@ router.patch('/:id', (req, res, next) => {
   try {
     const row = db.prepare('SELECT * FROM publisher_api_keys WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Not found' });
-    if (req.user.role !== 'admin' && row.user_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
+    // Admin, AM (who created it), or publisher (who owns it) can update
+    if (req.user.role !== 'admin' && req.user.role !== 'account_manager' && row.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
 
     const { name, status } = req.body;
     db.prepare('UPDATE publisher_api_keys SET name=COALESCE(?,name), status=COALESCE(?,status) WHERE id=?')
@@ -110,7 +149,10 @@ router.delete('/:id', (req, res, next) => {
   try {
     const row = db.prepare('SELECT * FROM publisher_api_keys WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'Not found' });
-    if (req.user.role !== 'admin' && row.user_id !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
+    // Admin, AM, or publisher (who owns it) can revoke
+    if (req.user.role !== 'admin' && req.user.role !== 'account_manager' && row.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
     db.prepare("UPDATE publisher_api_keys SET status = 'revoked' WHERE id = ?").run(row.id);
     res.json({ success: true });
   } catch (err) { next(err); }
