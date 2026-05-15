@@ -209,13 +209,28 @@ router.put('/:id', (req, res, next) => {
     const maxOffVal   = b.max_offers     !== undefined ? Number(b.max_offers) : row.max_offers;
     const statusVal   = b.status         !== undefined ? (b.status || row.status) : row.status;
     const notesVal    = 'notes'          in b ? (b.notes || null)        : row.notes;
+    // Prebid hooks — floor eCPM and (optionally) JSON config for SDK to consume
+    const floorVal    = b.floor_ecpm     !== undefined ? Math.max(0, Number(b.floor_ecpm) || 0) : row.floor_ecpm;
+    let   prebidVal   = row.prebid_config;
+    if (b.prebid_config !== undefined) {
+      const v = b.prebid_config;
+      if (v === '' || v === null) prebidVal = '';
+      else if (typeof v === 'string') {
+        try { JSON.parse(v); prebidVal = v; }
+        catch { return res.status(400).json({ error: 'prebid_config must be valid JSON or empty string' }); }
+      } else if (typeof v === 'object') {
+        prebidVal = JSON.stringify(v);
+      }
+    }
 
     try {
       db.prepare(
         `UPDATE placements
-         SET name=?, slug=?, placement_type=?, format=?, max_offers=?, status=?, notes=?, updated_at=unixepoch()
+         SET name=?, slug=?, placement_type=?, format=?, max_offers=?, status=?, notes=?,
+             floor_ecpm=?, prebid_config=?, updated_at=unixepoch()
          WHERE id=?`
-      ).run(nameVal, slugVal, typeVal, formatVal, maxOffVal, statusVal, notesVal, row.id);
+      ).run(nameVal, slugVal, typeVal, formatVal, maxOffVal, statusVal, notesVal,
+            floorVal, prebidVal, row.id);
     } catch (e) {
       if (/UNIQUE/i.test(e.message)) {
         return res.status(409).json({ error: 'A placement with this slug already exists on this inventory' });

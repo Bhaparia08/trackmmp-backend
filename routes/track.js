@@ -310,6 +310,15 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       }
     }
 
+    // Creative variant + consent: which A/B variant earned the click and
+    // whether the visitor had given consent.  `cv` is the variant id minted
+    // by /api/v1/serve; `consent` is the SDK's snapshot of consent state.
+    const cre_variant_id = (() => {
+      const n = Number(q.cv);
+      return Number.isInteger(n) && n > 0 ? n : null;
+    })();
+    const consent_state = (typeof q.consent === 'string' && q.consent.length < 256) ? q.consent : null;
+
     db.prepare(`INSERT INTO clicks
       (click_id, campaign_id, publisher_id, user_id,
        pid, af_c_id, af_siteid,
@@ -317,8 +326,9 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
        sub6, sub7, sub8, sub9, sub10,
        publisher_click_id, ip, user_agent, country, language,
        device_type, os, browser, advertising_id, platform, referrer,
-       creative_id, ad_id, landing_page_id, inventory_id, placement_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+       creative_id, ad_id, landing_page_id, inventory_id, placement_id,
+       cre_variant_id, consent_state)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(click_id, campaign.id, publisher_id, campaign.user_id,
            q.pid||null, q.af_c_id||null, q.af_siteid||null,
            q.af_sub1||q.sub1||null, q.af_sub2||q.sub2||null,
@@ -328,7 +338,15 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
            device_type, os, browser, advertising_id, platform,
            req.headers.referer||null,
            q.creative_id||q.creative||null, q.ad_id||null,
-           landing_page_id, inventory_id, placement_id);
+           landing_page_id, inventory_id, placement_id,
+           cre_variant_id, consent_state);
+
+    // A/B testing: bump click counter on the creative variant that earned it.
+    if (cre_variant_id) {
+      try {
+        db.prepare(`UPDATE campaign_creatives SET clicks = clicks + 1 WHERE id = ?`).run(cre_variant_id);
+      } catch {/* swallow — running tally is non-critical */}
+    }
 
     // Daily stats upsert
     db.prepare(`INSERT INTO daily_stats (user_id, app_id, campaign_id, publisher_id, date, clicks)

@@ -727,6 +727,53 @@ const migrations = [
   `ALTER TABLE advertiser_api_credentials ADD COLUMN last_sync_status   TEXT`,
   `ALTER TABLE advertiser_api_credentials ADD COLUMN last_sync_error    TEXT`,
   `ALTER TABLE advertiser_api_credentials ADD COLUMN last_offer_count   INTEGER DEFAULT 0`,
+
+  // ── Phase 2: Programmatic readiness (freq cap, consent, A/B, Prebid) ──────
+  // All additive — no existing data is rewritten.
+  //
+  // 1) Frequency capping per visitor.  Zero = no cap.
+  `ALTER TABLE campaigns ADD COLUMN freq_cap_per_user_per_day     INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE campaigns ADD COLUMN freq_cap_per_user_per_hour    INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE campaigns ADD COLUMN freq_cap_per_user_per_session INTEGER NOT NULL DEFAULT 0`,
+
+  // 2) A/B testing creatives — running tallies + opt-in auto-rotation.
+  `ALTER TABLE campaign_creatives ADD COLUMN impressions   INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE campaign_creatives ADD COLUMN clicks        INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE campaign_creatives ADD COLUMN auto_optimize INTEGER NOT NULL DEFAULT 0`,
+
+  // 3) Prebid.js header-bidding hooks per placement.
+  `ALTER TABLE placements ADD COLUMN floor_ecpm    REAL NOT NULL DEFAULT 0`,
+  `ALTER TABLE placements ADD COLUMN prebid_config TEXT NOT NULL DEFAULT ''`,
+
+  // 4) Extend the existing VTA impressions table with owned-inventory context.
+  //    Old rows have NULL placement_id/visitor_id, which is fine — they were
+  //    pixel-view impressions, not on-site placement impressions.
+  `ALTER TABLE impressions ADD COLUMN visitor_id    TEXT`,
+  `ALTER TABLE impressions ADD COLUMN inventory_id  INTEGER REFERENCES owned_inventory(id) ON DELETE SET NULL`,
+  `ALTER TABLE impressions ADD COLUMN placement_id  INTEGER REFERENCES placements(id) ON DELETE SET NULL`,
+  `ALTER TABLE impressions ADD COLUMN creative_id   INTEGER REFERENCES campaign_creatives(id) ON DELETE SET NULL`,
+  `ALTER TABLE impressions ADD COLUMN consent_state TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_imp_visitor_camp ON impressions(visitor_id, campaign_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_imp_placement    ON impressions(placement_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_imp_creative     ON impressions(creative_id, created_at)`,
+
+  // 5) Track creative variant + consent state on each click.
+  `ALTER TABLE clicks ADD COLUMN cre_variant_id INTEGER REFERENCES campaign_creatives(id) ON DELETE SET NULL`,
+  `ALTER TABLE clicks ADD COLUMN consent_state  TEXT`,
+
+  // 6) Consent audit log (GDPR/CCPA compliance).
+  `CREATE TABLE IF NOT EXISTS visitor_consent (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    visitor_id    TEXT    NOT NULL,
+    consent_state TEXT    NOT NULL,       -- 'accepted' | 'rejected' | 'limited' | 'tcf'
+    tcf_string    TEXT,                   -- full TCF v2.2 consent string when present
+    country       TEXT,
+    ip_hash       TEXT,                   -- SHA-256(ip+salt) for audit, never raw IP
+    user_agent    TEXT,
+    placement_id  INTEGER REFERENCES placements(id) ON DELETE SET NULL,
+    created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_consent_visitor ON visitor_consent(visitor_id, created_at)`,
 ];
 
 const IGNORABLE = [

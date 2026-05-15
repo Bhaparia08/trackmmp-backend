@@ -11,11 +11,14 @@
  */
 const express    = require('express');
 const rateLimit  = require('express-rate-limit');
+const crypto     = require('crypto');
 const db         = require('../db/init');
 const { requireApiKey } = require('../middleware/apiKeyAuth');
 const { lookupCountry } = require('../utils/geoip');
 const { parseDevice }   = require('../utils/deviceParser');
 const serveCache        = require('../utils/serveCache');
+const { getVisitorId, hashIp } = require('../utils/visitorId');
+const { requiresConsent, normalizeConsent, permitsPersonalization } = require('../utils/consent');
 
 const router = express.Router();
 
@@ -203,40 +206,47 @@ router.get('/serve', async (req, res, next) => {
       if (!os)     os     = (parsed.os || '').toLowerCase();
     }
 
+    // Consent + visitor identification (used for cap filtering, A/B, audit)
+    const visitorId   = getVisitorId(req);
+    const jurisdiction = requiresConsent(country, req.query.region);
+    const consentRaw  = req.query.consent || req.headers['x-apg-consent'] || '';
+    const consentState = normalizeConsent(consentRaw);
+    const consentOk    = permitsPersonalization(consentState, jurisdiction);
+
+    // The cache excludes visitor — pool of eligible campaigns is the same per
+    // (placement, country, device, os).  Frequency cap + creative variant are
+    // applied per-request, so the cache stays useful but each visitor still
+    // gets fresh capping/A-B selection.
     const cacheKey = `serve:${placement.id}:${country}:${device}:${os}`;
+    let baseOffers;
     if (nocache !== '1') {
       const cached = serveCache.get(cacheKey);
-      if (cached) {
-        return res.json({ ...cached, cached: true, cache_key: cacheKey });
-      }
+      if (cached) baseOffers = cached;
     }
 
-    // Approved campaigns for this inventory. LEFT JOIN to the highest-weight
-    // active creative per campaign so the response carries rich offer data
-    // (logo, headline, bonus, rating, terms, CTA copy) when available.
-    const offers = db.prepare(`
-      SELECT c.id, c.name, c.advertiser_name, c.campaign_token, c.payout, c.payout_type,
-             c.vertical, c.tags, c.allowed_countries, c.allowed_devices, c.preview_url,
-             c.destination_url,
-             cia.priority, cia.weight,
-             cre.logo_url, cre.hero_image_url, cre.brand_name, cre.headline,
-             cre.subheadline, cre.bonus_amount, cre.bonus_label, cre.terms_short,
-             cre.cta_text, cre.rating, cre.rating_count, cre.badge_text, cre.badge_color
-      FROM campaign_inventory_approvals cia
-      JOIN campaigns c ON c.id = cia.campaign_id
-      LEFT JOIN campaign_creatives cre ON cre.id = (
-        SELECT id FROM campaign_creatives
-        WHERE campaign_id = c.id AND status = 'active'
-        ORDER BY weight DESC, id ASC LIMIT 1
-      )
-      WHERE cia.inventory_id = ?
-        AND cia.status = 'approved'
-        AND c.status   = 'active'
-        AND COALESCE(c.visibility, 'open') != 'private'
-    `).all(placement.inv_id);
+    if (!baseOffers) {
+      // Approved campaigns for this inventory.  No creative join here — we
+      // pick the variant per-request below to enable real A/B testing.
+      baseOffers = db.prepare(`
+        SELECT c.id, c.name, c.advertiser_name, c.campaign_token, c.payout, c.payout_type,
+               c.vertical, c.tags, c.allowed_countries, c.allowed_devices, c.preview_url,
+               c.destination_url,
+               COALESCE(c.freq_cap_per_user_per_day, 0)  AS cap_day,
+               COALESCE(c.freq_cap_per_user_per_hour, 0) AS cap_hour,
+               cia.priority, cia.weight
+        FROM campaign_inventory_approvals cia
+        JOIN campaigns c ON c.id = cia.campaign_id
+        WHERE cia.inventory_id = ?
+          AND cia.status = 'approved'
+          AND c.status   = 'active'
+          AND COALESCE(c.visibility, 'open') != 'private'
+      `).all(placement.inv_id);
+      if (nocache !== '1') serveCache.set(cacheKey, baseOffers, 60_000);
+    }
+    const offers = baseOffers;
 
     // Country/device filter
-    const filtered = offers.filter((o) => {
+    let filtered = offers.filter((o) => {
       if (country && o.allowed_countries && o.allowed_countries.trim() !== '') {
         const allowed = o.allowed_countries.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
         if (allowed.length > 0 && !allowed.includes(country)) return false;
@@ -247,6 +257,38 @@ router.get('/serve', async (req, res, next) => {
       }
       return true;
     });
+
+    // Frequency-cap filter — drop campaigns where this visitor has already
+    // hit their per-day or per-hour limit.  Uses the impressions table for
+    // server-side enforcement (SDK localStorage is a hint, not the source
+    // of truth).  Only campaigns with caps > 0 are evaluated.
+    const cappedCampaigns = filtered.filter(o => (o.cap_day > 0) || (o.cap_hour > 0)).map(o => o.id);
+    let capLookup = {};
+    if (cappedCampaigns.length > 0) {
+      const placeholders = cappedCampaigns.map(() => '?').join(',');
+      const rows = db.prepare(`
+        SELECT campaign_id,
+               COUNT(*) FILTER (WHERE created_at >= unixepoch() - 86400) AS d24,
+               COUNT(*) FILTER (WHERE created_at >= unixepoch() - 3600)  AS h1
+        FROM impressions
+        WHERE visitor_id = ? AND campaign_id IN (${placeholders})
+        GROUP BY campaign_id
+      `).all(visitorId, ...cappedCampaigns);
+      for (const r of rows) capLookup[r.campaign_id] = { d24: r.d24, h1: r.h1 };
+    }
+    const cappedOut = [];
+    filtered = filtered.filter(o => {
+      const seen = capLookup[o.id];
+      if (!seen) return true;
+      if (o.cap_day  > 0 && seen.d24 >= o.cap_day)  { cappedOut.push({ id: o.id, reason: 'day', seen: seen.d24 });  return false; }
+      if (o.cap_hour > 0 && seen.h1  >= o.cap_hour) { cappedOut.push({ id: o.id, reason: 'hour', seen: seen.h1 });  return false; }
+      return true;
+    });
+
+    // Under GDPR with no consent: serve contextual-only — strip personalized
+    // creative fields (keep brand + headline so the offer still renders).
+    // We DON'T drop the offer entirely — affiliate offers are inherently
+    // contextual (vertical-matched), not behavioral.
 
     // Sort: priority DESC, then weighted random within priority tier.
     // Weighted random within tier — pick by cumulative weight.
@@ -278,35 +320,75 @@ router.get('/serve', async (req, res, next) => {
     const pub   = db.prepare('SELECT pub_token FROM publishers WHERE id = ?').get(pubId);
     const TRACKING_BASE = process.env.TRACKING_DOMAIN || 'https://track.apogeemobi.com';
 
-    const offersOut = top.map((o) => ({
-      campaign_id:     o.id,
-      name:            o.name,
-      advertiser_name: o.advertiser_name,
-      vertical:        o.vertical,
-      tags:            o.tags,
-      payout:          o.payout,
-      payout_type:     o.payout_type,
-      preview_url:     o.preview_url,
-      // Creative fields — null when no creative is configured. The WP plugin
-      // falls back to the bare campaign name + payout in that case.
-      creative: o.brand_name || o.headline || o.logo_url ? {
-        brand_name:     o.brand_name,
-        headline:       o.headline,
-        subheadline:    o.subheadline,
-        logo_url:       o.logo_url,
-        hero_image_url: o.hero_image_url,
-        bonus_amount:   o.bonus_amount,
-        bonus_label:    o.bonus_label,
-        terms_short:    o.terms_short,
-        cta_text:       o.cta_text || 'Get Offer',
-        rating:         o.rating,
-        rating_count:   o.rating_count,
-        badge_text:     o.badge_text,
-        badge_color:    o.badge_color,
-      } : null,
-      tracking_url: `${TRACKING_BASE}/track/click/${o.campaign_token}` +
-        `?pid=${pub.pub_token}&inv=${placement.inv_id}&pl=${placement.id}&clickid={your_click_id}`,
-    }));
+    // Pre-fetch active creatives per campaign in one query — weighted-random
+    // pick per response gives real A/B testing instead of always serving
+    // the highest-weight variant.
+    const creativesByCampaign = new Map();
+    if (top.length > 0) {
+      const ids = top.map(o => o.id);
+      const placeholders = ids.map(() => '?').join(',');
+      const creRows = db.prepare(`
+        SELECT id, campaign_id, name, logo_url, hero_image_url, brand_name, headline,
+               subheadline, bonus_amount, bonus_label, terms_short, cta_text,
+               rating, rating_count, badge_text, badge_color, weight
+        FROM campaign_creatives
+        WHERE status = 'active' AND campaign_id IN (${placeholders})
+      `).all(...ids);
+      for (const r of creRows) {
+        if (!creativesByCampaign.has(r.campaign_id)) creativesByCampaign.set(r.campaign_id, []);
+        creativesByCampaign.get(r.campaign_id).push(r);
+      }
+    }
+    function pickCreative(campaignId) {
+      const list = creativesByCampaign.get(campaignId);
+      if (!list || list.length === 0) return null;
+      if (list.length === 1) return list[0];
+      const tot = list.reduce((s, c) => s + Math.max(1, c.weight || 1), 0);
+      let r = Math.random() * tot;
+      for (const c of list) {
+        r -= Math.max(1, c.weight || 1);
+        if (r <= 0) return c;
+      }
+      return list[list.length - 1];
+    }
+
+    const offersOut = top.map((o) => {
+      const cre = pickCreative(o.id);
+      const personalize = consentOk;
+      return {
+        campaign_id:     o.id,
+        name:            o.name,
+        advertiser_name: o.advertiser_name,
+        vertical:        o.vertical,
+        tags:            o.tags,
+        payout:          o.payout,
+        payout_type:     o.payout_type,
+        preview_url:     o.preview_url,
+        // Under no-consent jurisdictions: keep brand identity (allowed as
+        // contextual content) but drop personalization-tier fields like
+        // rating counts that imply behavioral data.
+        creative: cre ? {
+          creative_id:    cre.id,
+          brand_name:     cre.brand_name,
+          headline:       cre.headline,
+          subheadline:    personalize ? cre.subheadline : '',
+          logo_url:       cre.logo_url,
+          hero_image_url: cre.hero_image_url,
+          bonus_amount:   cre.bonus_amount,
+          bonus_label:    cre.bonus_label,
+          terms_short:    cre.terms_short,
+          cta_text:       cre.cta_text || 'Get Offer',
+          rating:         personalize ? cre.rating       : null,
+          rating_count:   personalize ? cre.rating_count : 0,
+          badge_text:     cre.badge_text,
+          badge_color:    cre.badge_color,
+        } : null,
+        tracking_url: `${TRACKING_BASE}/track/click/${o.campaign_token}` +
+          `?pid=${pub.pub_token}&inv=${placement.inv_id}&pl=${placement.id}` +
+          (cre ? `&cv=${cre.id}` : '') +
+          `&clickid={your_click_id}`,
+      };
+    });
 
     const response = {
       placement: {
@@ -314,6 +396,8 @@ router.get('/serve', async (req, res, next) => {
         slug:  placement.slug,
         type:  placement.placement_type,
         format:placement.format,
+        floor_ecpm:    placement.floor_ecpm    || 0,
+        prebid_config: placement.prebid_config || '',
       },
       inventory: {
         id:       placement.inv_id,
@@ -321,13 +405,19 @@ router.get('/serve', async (req, res, next) => {
         vertical: placement.inv_vertical,
         geo:      placement.inv_geo,
       },
-      visitor: { country, device, os },
-      offers:  offersOut,
-      ttl:     60,
-      cached:  false,
+      visitor: {
+        country, device, os,
+        visitor_id:        visitorId,
+        jurisdiction:      jurisdiction || null,
+        consent_state:     consentState || '',
+        consent_required:  Boolean(jurisdiction) && !consentOk,
+      },
+      offers:        offersOut,
+      capped_out:    cappedOut,
+      ttl:           60,
+      cached:        Boolean(baseOffers && !nocache),
     };
 
-    if (nocache !== '1') serveCache.set(cacheKey, response, 60_000);
     res.json(response);
   } catch (err) { next(err); }
 });
@@ -456,6 +546,101 @@ router.get('/stats', (req, res) => {
   `).all(...clickParams);
 
   res.json({ totals, by_campaign: byCampaign, daily });
+});
+
+// ─── POST /api/v1/impression ─────────────────────────────────────────────────
+// Lightweight beacon called by the SDK on render.  Powers:
+//   • Frequency capping (per-visitor per-campaign tallies)
+//   • A/B test impression counts (per creative variant)
+//   • Consent audit (records consent_state at impression time)
+//
+// Body (or query) params:
+//   placement_id  — required (must belong to this api key's publisher)
+//   campaign_id   — required
+//   creative_id   — optional (the variant that was shown)
+//   consent       — optional (consent state string)
+//
+// Returns { ok: true } quickly.  Errors are swallowed (beacon must not block UX).
+router.post('/impression', (req, res) => {
+  try {
+    const q = { ...req.query, ...req.body };
+    const placementId = Number(q.placement_id || q.pl);
+    const campaignId  = Number(q.campaign_id  || q.cid);
+    const creativeId  = q.creative_id || q.cv ? Number(q.creative_id || q.cv) : null;
+    if (!placementId || !campaignId) return res.json({ ok: false, error: 'placement_id and campaign_id required' });
+
+    // Validate the placement belongs to this api key's publisher
+    const placement = db.prepare(`
+      SELECT p.id, p.inventory_id, i.publisher_id
+      FROM placements p
+      JOIN owned_inventory i ON i.id = p.inventory_id
+      WHERE p.id = ? AND p.status = 'active' AND i.publisher_id = ?
+    `).get(placementId, req.publisherId);
+    if (!placement) return res.json({ ok: false, error: 'unauthorized placement' });
+
+    const visitorId = getVisitorId(req);
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    const ua = req.headers['user-agent'] || '';
+    const consentState = normalizeConsent(q.consent || req.headers['x-apg-consent'] || '');
+    const country = (q.country || '').toUpperCase();
+    const device  = (q.device  || '').toLowerCase();
+    const os      = (q.os      || '').toLowerCase();
+    const impressionId = 'imp_' + crypto.randomBytes(10).toString('base64url');
+
+    db.prepare(`
+      INSERT INTO impressions
+        (impression_id, campaign_id, publisher_id, user_id, pid,
+         ip, user_agent, country, device_type, os, platform,
+         visitor_id, inventory_id, placement_id, creative_id, consent_state)
+      VALUES (?, ?, ?, (SELECT user_id FROM campaigns WHERE id = ?), NULL,
+              ?, ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?)
+    `).run(impressionId, campaignId, req.publisherId, campaignId,
+           ip, ua, country, device, os, '',
+           visitorId, placement.inventory_id, placementId, creativeId, consentState);
+
+    // Per-creative running tally for A/B reporting
+    if (creativeId) {
+      try {
+        db.prepare(`UPDATE campaign_creatives SET impressions = impressions + 1 WHERE id = ?`).run(creativeId);
+      } catch {/* swallow */}
+    }
+
+    res.json({ ok: true, impression_id: impressionId, visitor_id: visitorId });
+  } catch (err) {
+    // Beacon errors are non-fatal — log and ack
+    console.warn('[v1/impression]', err.message);
+    res.json({ ok: false });
+  }
+});
+
+// ─── POST /api/v1/consent ────────────────────────────────────────────────────
+// Audit log of consent events (banner Accept/Reject, TCF strings).  Required
+// for GDPR/CCPA evidence ("we had consent at this time for this visitor").
+router.post('/consent', (req, res) => {
+  try {
+    const q = { ...req.query, ...req.body };
+    const consentState = normalizeConsent(q.consent || '');
+    if (!consentState) return res.json({ ok: false, error: 'consent state required' });
+
+    const visitorId = getVisitorId(req);
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    const ua = req.headers['user-agent'] || '';
+    const tcfString = consentState.startsWith('tcf:') ? consentState.slice(4) : null;
+    const placementId = q.placement_id ? Number(q.placement_id) : null;
+
+    db.prepare(`
+      INSERT INTO visitor_consent
+        (visitor_id, consent_state, tcf_string, country, ip_hash, user_agent, placement_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(visitorId, consentState, tcfString,
+           (q.country || '').toUpperCase(), hashIp(ip), ua, placementId);
+
+    res.json({ ok: true, visitor_id: visitorId, consent_state: consentState });
+  } catch (err) {
+    console.warn('[v1/consent]', err.message);
+    res.json({ ok: false });
+  }
 });
 
 module.exports = router;

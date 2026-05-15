@@ -205,7 +205,8 @@ router.put('/:id', (req, res, next) => {
             is_retargeting, visibility, approved_publishers, tags, geo_fallback_url,
             start_date, end_date, description, channel, allowed_devices,
             cap_monthly, cap_redirect_url, conversion_hold_days, featured,
-            url_masking, referrer_cloaking } = req.body;
+            url_masking, referrer_cloaking,
+            freq_cap_per_user_per_day, freq_cap_per_user_per_hour, freq_cap_per_user_per_session } = req.body;
 
     const {
       attribution_model, deep_link_url, ios_store_url, android_store_url,
@@ -259,6 +260,18 @@ router.put('/:id', (req, res, next) => {
            re_engagement_window_days??null, re_engagement_postback_url!=null?re_engagement_postback_url:null,
            req.body.vertical!=null?req.body.vertical:null,
            c.id);
+
+    // Frequency caps — secondary UPDATE so we don't have to expand the
+    // giant SET clause above.  Only touches fields that were provided.
+    const capUpdates = [];
+    const capValues  = [];
+    if (freq_cap_per_user_per_day     !== undefined) { capUpdates.push('freq_cap_per_user_per_day = ?');     capValues.push(Math.max(0, Number(freq_cap_per_user_per_day)     || 0)); }
+    if (freq_cap_per_user_per_hour    !== undefined) { capUpdates.push('freq_cap_per_user_per_hour = ?');    capValues.push(Math.max(0, Number(freq_cap_per_user_per_hour)    || 0)); }
+    if (freq_cap_per_user_per_session !== undefined) { capUpdates.push('freq_cap_per_user_per_session = ?'); capValues.push(Math.max(0, Number(freq_cap_per_user_per_session) || 0)); }
+    if (capUpdates.length > 0) {
+      db.prepare(`UPDATE campaigns SET ${capUpdates.join(', ')}, updated_at = unixepoch() WHERE id = ?`)
+        .run(...capValues, c.id);
+    }
 
     if (Array.isArray(approved_publishers)) {
       upsertApprovedPublishers(c.id, approved_publishers, req.user.id);

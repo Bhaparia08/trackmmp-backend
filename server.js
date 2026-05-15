@@ -67,6 +67,11 @@ app.use('/pb', require('./routes/postbacks'));
 app.use('/postbacks', require('./routes/postbacks'));   // friendly alias
 app.use('/acquisition', require('./routes/acquisition')); // Trackier-compatible
 
+// IAB Sellers.json — public, declares every publisher we monetize.  Premium
+// SSPs (Magnite, PubMatic, OpenX, Google AdX) refuse to monetize supply
+// without this file at the root of the seller domain.
+app.use('/sellers.json', require('./routes/sellersJson'));
+
 // Adjust-compatible S2S endpoints (no auth — token validated per-request)
 app.use('/adjust', require('./routes/adjust'));
 
@@ -79,6 +84,7 @@ app.use('/api/publishers', require('./routes/publishers'));
 app.use('/api/inventory',  require('./routes/inventory'));
 app.use('/api/placements', require('./routes/placements'));
 app.use('/api/inventory-approvals', require('./routes/inventoryApprovals'));
+app.use('/api/ads-text',   require('./routes/adsText'));
 app.use('/api/clicks', require('./routes/clicks'));
 app.use('/api/s2s', require('./routes/s2s'));
 app.use('/api/reports', require('./routes/reports'));
@@ -196,7 +202,8 @@ if (discoveryEngine.isEnabled()) {
     catch (e) { console.error('[DiscoveryValidator]', e.message); }
   }, 60 * 1000);
 
-  console.log('[DiscoveryHub] enabled — scan every 6h, validator every 60s');
+  const scanMin = Math.round(discoveryEngine.DEFAULT_SCAN_INTERVAL_MS / 60000);
+  console.log(`[DiscoveryHub] enabled — scan every ${scanMin}min, validator every 60s`);
 } else {
   console.log('[DiscoveryHub] disabled via DISCOVERY_HUB_ENABLED=false');
 }

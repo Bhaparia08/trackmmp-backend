@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ApogeeMobi SDK — Prebid.js header bidding integration</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; font: 14px/1.6 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px; }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    h2 { font-size: 18px; margin: 32px 0 10px; padding-top: 24px; border-top: 1px solid #ffffff14; color: #818cf8; }
+    p, li { color: #94a3b8; }
+    a { color: #818cf8; }
+    code { background: rgba(99,102,241,0.15); color: #a5f3fc; padding: 1px 6px; border-radius: 4px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; }
+    pre { background: #0a0a14; color: #a5f3fc; padding: 14px; border-radius: 8px; font-size: 12px; line-height: 1.5; overflow-x: auto; border: 1px solid #ffffff14; }
+    .note { background: rgba(245,158,11,0.08); border-left: 3px solid #f59e0b; padding: 10px 14px; margin: 14px 0; font-size: 13px; color: #fde68a; border-radius: 4px; }
+    .ok   { background: rgba(16,185,129,0.08);  border-left: 3px solid #10b981; padding: 10px 14px; margin: 14px 0; font-size: 13px; color: #a7f3d0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Prebid.js header bidding integration</h1>
+<p style="font-size: 16px; color: #cbd5e1">
+  Mix direct affiliate offers with programmatic display revenue via Prebid.js.
+  The TrackMMP SDK exposes a hook so a Prebid auction can run in parallel with <code>/api/v1/serve</code>
+  and the higher-eCPM result wins.
+</p>
+
+<h2>1) Set a floor eCPM on the placement</h2>
+<p>In the admin → <strong>Inventory → [site] → Placements → Edit</strong>:</p>
+<ul>
+  <li><strong>Floor eCPM</strong> — minimum bid you'll accept (e.g. <code>1.50</code> means $1.50 CPM).
+      Below this, the direct offer always wins.</li>
+  <li><strong>Prebid config</strong> — JSON wrapper config (see below).</li>
+</ul>
+
+<h2>2) Add Prebid.js to your site</h2>
+<p>Build a Prebid.js bundle at <a href="https://docs.prebid.org/dev-docs/getting-started.html" target="_blank">prebid.org</a>
+   with the adapters you have accounts with (Magnite, PubMatic, OpenX, AppNexus, ix, etc.).</p>
+<pre><code>&lt;script src="/path/to/prebid.js" async&gt;&lt;/script&gt;</code></pre>
+
+<h2>3) Wire the ApogeeMobi onServe hook</h2>
+<p>The SDK fires <code>window.ApogeeMobi.onServe(data, el)</code> after rendering when the placement
+   has <code>prebid_config</code> set.  Use that hook to run an auction and replace the rendered HTML if
+   a bid beats the floor.</p>
+<pre><code>window.ApogeeMobi = window.ApogeeMobi || {};
+window.ApogeeMobi.onServe = function (data, slotEl) {
+  var p = data.placement;
+  if (!p.prebid_config) return;
+  var floor = parseFloat(p.floor_ecpm) || 0;
+
+  var cfg;
+  try { cfg = JSON.parse(p.prebid_config); } catch (e) { return; }
+  // cfg.bids = [ { bidder: 'magnite', params: {…} }, … ]
+
+  pbjs.que.push(function () {
+    pbjs.addAdUnits([{
+      code:  'apg-' + p.slug,
+      sizes: cfg.sizes || [[300, 250], [728, 90]],
+      bids:  cfg.bids || [],
+    }]);
+    pbjs.requestBids({
+      timeout: 1200,
+      adUnitCodes: ['apg-' + p.slug],
+      bidsBackHandler: function () {
+        var top = pbjs.getHighestCpmBids('apg-' + p.slug)[0];
+        if (!top) return;
+        var cpm = top.cpm;       // dollars per 1000 impressions
+        if (cpm &lt; floor) return; // direct offer wins
+        // Replace the ApogeeMobi-rendered HTML with the winning ad
+        slotEl.innerHTML = '';
+        pbjs.renderAd(slotEl, top.adId);
+      },
+    });
+  });
+};</code></pre>
+
+<h2>4) Example prebid_config JSON</h2>
+<pre><code>{
+  "sizes": [[300, 250], [728, 90]],
+  "bids": [
+    { "bidder": "magnite",  "params": { "accountId": 12345, "siteId": 67890, "zoneId": 111 } },
+    { "bidder": "pubmatic", "params": { "publisherId": "12345", "adSlot": "abc/123@300x250" } },
+    { "bidder": "openx",    "params": { "unit": "5555555", "delDomain": "yourname-d.openx.net" } }
+  ]
+}</code></pre>
+
+<div class="note">
+  Each adapter needs its own publisher account.  Sign up directly with the SSP and they'll give you
+  the <code>params</code> values.  You usually start with 2-3 adapters and add more over time.
+</div>
+
+<h2>How the auction works</h2>
+<ol>
+  <li>SDK calls <code>/api/v1/serve</code> → direct offer comes back (Brand X, $250 CPA).</li>
+  <li>SDK renders the direct offer immediately (no delay).</li>
+  <li><code>onServe</code> hook fires.  Prebid runs its auction in parallel (1200ms timeout).</li>
+  <li>If a programmatic bid &gt; floor_ecpm, the rendered HTML is swapped out.</li>
+  <li>Otherwise the direct offer stays.  Best of both worlds.</li>
+</ol>
+
+<div class="ok">
+  This pattern means you <strong>never serve below your floor</strong> — direct affiliate revenue is the
+  guaranteed floor; programmatic only wins when it beats your direct expected eCPM.
+</div>
+
+<h2>Eventual flow</h2>
+<p>The next phase is auto-computing floor_ecpm from your historical CPA × conversion rate — the platform
+   already has the data; we just need to roll it up. Ask in the next session.</p>
+
+<p style="margin-top: 40px; padding-top: 18px; border-top: 1px solid #ffffff14; color: #64748b; font-size: 12px;">
+  ApogeeMobi Offers SDK v1.1 · <a href="/sdk/docs.html">Back to docs</a> · <a href="/sdk/demo.html">Live demo</a>
+</p>
+
+</div>
+</body>
+</html>
