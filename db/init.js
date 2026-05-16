@@ -721,6 +721,11 @@ const migrations = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_dvq_pending ON discovery_validation_queue(status, next_attempt_at)`,
 
+  // Phase 3a: Review Queue — admin-overridden vertical mapping
+  // (e.g. Insparx returns "Matchmaking" → reviewer maps to internal "Dating")
+  // Falls back to candidate.vertical when null. Used at import time.
+  `ALTER TABLE campaign_candidates ADD COLUMN mapped_vertical TEXT`,
+
   // Sync state tracking on advertiser_api_credentials — additive columns only
   `ALTER TABLE advertiser_api_credentials ADD COLUMN auto_sync          INTEGER DEFAULT 1`,
   `ALTER TABLE advertiser_api_credentials ADD COLUMN last_synced_at     INTEGER`,
@@ -774,6 +779,57 @@ const migrations = [
     created_at    INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
   `CREATE INDEX IF NOT EXISTS idx_consent_visitor ON visitor_consent(visitor_id, created_at)`,
+
+  // ── Phase 3: Discovery Hub review-queue automation ────────────────────────
+  // Vertical alias map: upstream verticals (e.g. "Matchmaking") → our
+  // canonical taxonomy (e.g. "us-finance").  Applied on candidate ingestion
+  // and re-applicable via bulk-remap so the inventory matcher actually scores
+  // incoming offers against your owned sites.
+  `CREATE TABLE IF NOT EXISTS vertical_aliases (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_vertical   TEXT    NOT NULL,
+    mapped_vertical   TEXT    NOT NULL,
+    notes             TEXT,
+    created_by        INTEGER REFERENCES users(id),
+    created_at        INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at        INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(source_vertical)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_valias_source ON vertical_aliases(source_vertical)`,
+
+  // Auto-import rules: when a freshly-scanned/validated candidate matches
+  // ALL conditions in a rule, the engine imports it as a campaign and (if
+  // best_match_inventory_id is set + auto_deploy_to_inventory is true) also
+  // approves it onto that inventory in one shot.
+  `CREATE TABLE IF NOT EXISTS auto_import_rules (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT    NOT NULL,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    priority        INTEGER NOT NULL DEFAULT 100,
+    conditions      TEXT    NOT NULL DEFAULT '{}',
+    actions         TEXT    NOT NULL DEFAULT '{}',
+    matched_count   INTEGER NOT NULL DEFAULT 0,
+    last_matched_at INTEGER,
+    created_by      INTEGER REFERENCES users(id),
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_air_enabled ON auto_import_rules(enabled, priority)`,
+
+  // Audit trail for bulk + auto-import operations.
+  `CREATE TABLE IF NOT EXISTS discovery_bulk_audit (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_id     INTEGER REFERENCES users(id),
+    rule_id      INTEGER REFERENCES auto_import_rules(id) ON DELETE SET NULL,
+    action       TEXT    NOT NULL,
+    candidate_id INTEGER REFERENCES campaign_candidates(id) ON DELETE CASCADE,
+    before_state TEXT,
+    after_state  TEXT,
+    result       TEXT,
+    created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_dba_candidate ON discovery_bulk_audit(candidate_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_dba_rule      ON discovery_bulk_audit(rule_id, created_at)`,
 ];
 
 const IGNORABLE = [
