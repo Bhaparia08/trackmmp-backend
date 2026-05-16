@@ -75,12 +75,18 @@ router.get('/', requireRole(...ADMIN_ROLES), (req, res, next) => {
     }
     if (req.query.vertical) { conditions.push('i.vertical = ?'); params.push(req.query.vertical); }
     if (req.query.geo)      { conditions.push('i.geo = ?');      params.push(req.query.geo); }
+    if (req.query.advertiser_id) {
+      conditions.push('c.advertiser_id = ?');
+      params.push(Number(req.query.advertiser_id));
+    }
 
     const rows = db.prepare(`
       SELECT cia.*,
              c.name AS campaign_name, c.campaign_token, c.payout, c.payout_type, c.vertical AS campaign_vertical,
              c.allowed_countries, c.allowed_devices, c.tags AS campaign_tags, c.status AS campaign_status,
              c.visibility AS campaign_visibility,
+             c.advertiser_id,
+             COALESCE(NULLIF(u.name, ''), NULLIF(c.advertiser_name, '')) AS advertiser_name,
              i.name AS inventory_name, i.type AS inventory_type, i.domain AS inventory_domain,
              i.vertical AS inventory_vertical, i.geo AS inventory_geo, i.status AS inventory_status,
              i.publisher_id AS inventory_publisher_id,
@@ -88,12 +94,34 @@ router.get('/', requireRole(...ADMIN_ROLES), (req, res, next) => {
       FROM campaign_inventory_approvals cia
       JOIN campaigns       c  ON c.id = cia.campaign_id
       JOIN owned_inventory i  ON i.id = cia.inventory_id
+      LEFT JOIN users      u  ON u.id = c.advertiser_id
       LEFT JOIN users      rb ON rb.id = cia.reviewed_by
       WHERE ${conditions.join(' AND ')}
       ORDER BY cia.status ASC, cia.created_at DESC
       LIMIT 500
     `).all(...params);
     res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/inventory-approvals/advertisers ────────────────────────────────
+// Distinct list of advertisers appearing in this owner's approval rows,
+// for the filter dropdown at the top of the queue UI.
+router.get('/advertisers', requireRole(...ADMIN_ROLES), (req, res, next) => {
+  try {
+    const ownerId = getOwnerId(req);
+    const rows = db.prepare(`
+      SELECT DISTINCT
+             c.advertiser_id,
+             COALESCE(NULLIF(u.name, ''), NULLIF(c.advertiser_name, ''), '(unassigned)') AS name,
+             COUNT(*) OVER (PARTITION BY c.advertiser_id) AS approval_count
+      FROM campaign_inventory_approvals cia
+      JOIN campaigns c  ON c.id = cia.campaign_id
+      LEFT JOIN users u ON u.id = c.advertiser_id
+      WHERE cia.user_id = ?
+      ORDER BY name ASC
+    `).all(ownerId);
+    res.json({ advertisers: rows });
   } catch (err) { next(err); }
 });
 
