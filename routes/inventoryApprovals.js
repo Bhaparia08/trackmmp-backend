@@ -141,23 +141,33 @@ router.post('/auto-suggest', requireRole(...ADMIN_ROLES), (req, res, next) => {
       const invVertical = (inv.vertical || '').toLowerCase().trim();
       const invGeo      = (inv.geo || '').toUpperCase().trim();
       for (const c of campaigns) {
-        // Vertical match: inv.vertical empty → match any; otherwise match
-        // c.vertical OR c.tags contains inv.vertical.
-        let verticalOk = !invVertical;
-        if (!verticalOk) {
-          const cVert = (c.vertical || '').toLowerCase().trim();
-          const cTags = (',' + (c.tags || '').toLowerCase() + ',');
+        const cVert    = (c.vertical || '').toLowerCase().trim();
+        const cTags    = (',' + (c.tags || '').toLowerCase() + ',');
+        const cGeos    = (c.allowed_countries || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+
+        // Smart matching logic:
+        // 1. Both campaign + inventory have vertical → must match
+        // 2. Either side missing vertical → skip vertical check (match by geo only)
+        // 3. Both have geo → must match
+        // 4. Either side missing geo → skip geo check (match by vertical only)
+        // 5. Neither has vertical nor geo → match everything (admin reviews)
+
+        let verticalOk = true;
+        if (invVertical && cVert) {
+          // Both have vertical — must match (also check tags)
           verticalOk = cVert === invVertical || cTags.includes(',' + invVertical + ',');
         }
+        // If either side has no vertical, skip check (verticalOk stays true)
+
         if (!verticalOk) continue;
 
-        // GEO match: inv.geo empty → any; campaign.allowed_countries empty → any;
-        // otherwise the country must appear in allowed_countries.
-        let geoOk = !invGeo || !c.allowed_countries;
-        if (!geoOk) {
-          const allowed = c.allowed_countries.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
-          geoOk = allowed.length === 0 || allowed.includes(invGeo);
+        let geoOk = true;
+        if (invGeo && cGeos.length > 0) {
+          // Both have geo — must match
+          geoOk = cGeos.includes(invGeo);
         }
+        // If either side has no geo, skip check (geoOk stays true)
+
         if (!geoOk) continue;
 
         suggestions.push({ campaign_id: c.id, inventory_id: inv.id, campaign_name: c.name });
