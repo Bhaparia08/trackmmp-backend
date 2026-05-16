@@ -623,7 +623,43 @@ async function fetchAdmitad(cred) {
   });
 }
 
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad };
+/**
+ * Insparx (CAKE Affiliate Platform) — Offer Import adapter
+ *
+ * Reuses the live-tested CAKE connector at utils/connectors/insparx.js so we
+ * don't duplicate the OfferFeed XML-parsing logic. That module is already
+ * verified against affiliate_id 18518 (318 offers fetched).
+ *
+ * cred.api_key    = Insparx API Key
+ * cred.network_id = Insparx Affiliate ID
+ */
+async function fetchInsparx(cred) {
+  if (!cred?.api_key || !cred?.network_id) {
+    throw new Error('Insparx requires API Key and Affiliate ID');
+  }
+  const Insparx = require('../utils/connectors/insparx');
+  const rawOffers = await Insparx.listOffers(cred);
+  return rawOffers.map(raw => {
+    const norm = Insparx.normalizeOffer(raw, cred);
+    return {
+      external_id:       norm.source_offer_id,
+      name:              norm.name,
+      description:       norm.description || '',
+      payout:            norm.payout || 0,
+      payout_type:       norm.payout_type || 'cpa',
+      currency:          norm.payout_currency || 'USD',
+      status:            (norm.status === 'active' || norm.status === 'public') ? 'active' : 'paused',
+      tracking_url:      norm.tracking_url_template || '',
+      preview_url:       norm.preview_url || norm.destination_url || '',
+      allowed_countries: (norm.allowed_countries || []).join(','),
+      advertiser_name:   norm.advertiser_name || 'Insparx',
+      categories:        norm.vertical || '',
+      raw:               raw,
+    };
+  });
+}
+
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {
