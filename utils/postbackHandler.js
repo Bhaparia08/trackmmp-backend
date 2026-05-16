@@ -3,6 +3,7 @@ const fetch = require('node-fetch');
 const { macroReplace } = require('./macroReplace');
 const { nanoid16 } = require('./clickId');
 const { enqueueWebhook } = require('./webhookRetry');
+const plans = require('./plans');
 
 function logFraud(click, type, details, action = 'flagged') {
   try {
@@ -335,6 +336,23 @@ function handlePostback(params, ip, io) {
 
   const finalPayout  = matchedGoal ? matchedGoal.payout  : resolvedPayout  || campaign?.payout  || 0;
   const finalRevenue = matchedGoal ? matchedGoal.revenue : resolvedRevenue || 0;
+
+  // ── Plan quota check ───────────────────────────────────────────────────────
+  // If the campaign owner is over their monthly conversion cap, record the
+  // postback as 'over_quota' (not attributed). Visible in admin reports so the
+  // owner can upgrade. Does not affect click status — the click stays clicked.
+  if (!plans.canIngestAttributedConversion(click.user_id)) {
+    db.prepare(`INSERT INTO postbacks
+      (click_id, publisher_click_id, campaign_id, user_id, event_type, event_name, event_value,
+       payout, revenue, currency, advertising_id, status, blocked_reason, raw_params, ip)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(click.click_id, click.publisher_click_id, click.campaign_id, click.user_id,
+           finalEventType, event_name||null, event_value||null,
+           finalPayout, finalRevenue, currency,
+           deviceId||null, 'over_quota', 'monthly_conversion_cap_exceeded',
+           JSON.stringify(params), ip);
+    return;
+  }
 
   // ── Insert attributed postback ─────────────────────────────────────────────
   const pbResult = db.prepare(`INSERT INTO postbacks
