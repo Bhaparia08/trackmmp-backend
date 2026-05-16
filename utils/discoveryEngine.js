@@ -185,6 +185,16 @@ async function scanCredential(cred) {
         .get(normalized.source_platform, normalized.source_offer_id);
       const id = upsertCandidate(normalized, cred.id);
       if (!existing) { newCount++; enqueueValidation(id); }
+
+      // Match scoring at ingest — decoupled from LP validation.
+      // Some connectors (e.g. Insparx CAKE OfferFeed) don't return destination URLs,
+      // so LP validation marks them 'broken' and the post-validation scoring branch
+      // never fires. Scoring here ensures every candidate gets a score regardless.
+      try {
+        const m = matcher.score(normalized);
+        db.prepare(`UPDATE campaign_candidates SET best_match_score = ?, best_match_inventory_id = ?, match_breakdown = ? WHERE id = ?`)
+          .run(m.score, m.best_inventory_id, JSON.stringify(m.breakdown || {}), id);
+      } catch (e) { /* scoring is best-effort; never fail the scan */ }
     } catch (e) { console.error('[discovery] normalize/upsert failed:', e.message); }
   }
 
