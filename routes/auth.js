@@ -357,6 +357,41 @@ router.post('/reset-password', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/change-password — authenticated self-service password change
+// Requires the current password; rejects weak/common new passwords.
+const WEAK_PASSWORDS = new Set([
+  'admin123', 'password', 'password1', '12345678', '123456789', 'qwerty123',
+  'admin1234', 'changeme', 'letmein1', 'trackmmp1',
+]);
+router.post('/change-password', requireAuth, async (req, res, next) => {
+  try {
+    const { current_password, new_password } = req.body || {};
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'current_password and new_password are required' });
+    }
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+    if (WEAK_PASSWORDS.has(new_password.toLowerCase())) {
+      return res.status(400).json({ error: 'That password is too common — choose something stronger' });
+    }
+    const user = db.prepare('SELECT id, email, password FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const ok = await bcrypt.compare(current_password, user.password);
+    if (!ok) return res.status(401).json({ error: 'Current password is incorrect' });
+
+    if (await bcrypt.compare(new_password, user.password)) {
+      return res.status(400).json({ error: 'New password must be different from the current one' });
+    }
+
+    const hash = await bcrypt.hash(new_password, SALT_ROUNDS);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, user.id);
+    try { audit.log(req, 'change_password', 'user', user.id, user.email, {}); } catch {}
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
 // POST /api/auth/create-admin  — create additional admin accounts (super-admin only)
 // Only integration@apogeemobi.com can call this. New admin starts with a fresh user_id (isolated data).
 router.post('/create-admin', requireAuth, async (req, res, next) => {

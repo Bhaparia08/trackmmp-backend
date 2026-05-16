@@ -911,7 +911,12 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   if (!done) {
     try {
       const bcrypt = require('bcrypt');
-      const hash = bcrypt.hashSync('admin123', 12);
+      // SECURITY: never use a weak default password on production. In prod the
+      // admin must recover access via the forgot-password flow.
+      const seedPw = process.env.NODE_ENV === 'production'
+        ? require('crypto').randomBytes(24).toString('hex')
+        : 'admin123';
+      const hash = bcrypt.hashSync(seedPw, 12);
       const existingAdmin = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").get();
       if (existingAdmin) {
         // Reset email + password for whatever admin account exists on this server
@@ -1088,11 +1093,15 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   if (!done) {
     try {
       const bcrypt = require('bcrypt');
-      const hash = bcrypt.hashSync('admin123', 12);
+      // SECURITY: weak default only in dev. On production, set a strong random
+      // password — the admin recovers via forgot-password.
+      const isProd = process.env.NODE_ENV === 'production';
+      const seedPw = isProd ? require('crypto').randomBytes(24).toString('hex') : 'admin123';
+      const hash = bcrypt.hashSync(seedPw, 12);
       const admin = db.prepare("SELECT id FROM users WHERE email = 'admin@test.com' AND role = 'admin' LIMIT 1").get();
       if (admin) {
         db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hash, admin.id);
-        console.log('[migration] reset_admin_v3: admin@test.com password → admin123');
+        console.log(`[migration] reset_admin_v3: admin@test.com password reset (${isProd ? 'random — use forgot-password' : 'admin123 — dev'})`);
       }
       db.prepare("INSERT INTO migrations (name) VALUES ('reset_admin_v3')").run();
     } catch (e) {
