@@ -222,13 +222,25 @@ router.put('/adv-credentials/:id', (req, res, next) => {
       const advIds = getAMAdvertiserIds(req.user.id);
       if (row.advertiser_id && !advIds.includes(row.advertiser_id)) return res.status(403).json({ error: 'Advertiser not assigned to you' });
     }
-    const { label, api_key, api_secret, network_id, extra } = req.body;
-    if (!api_key) return res.status(400).json({ error: 'api_key is required' });
-    db.prepare(`
-      UPDATE advertiser_api_credentials
-      SET label = ?, api_key = ?, api_secret = ?, network_id = ?, extra = ?
-      WHERE id = ?
-    `).run(label || row.label, api_key, api_secret || null, network_id || null, extra ? JSON.stringify(extra) : null, row.id);
+    // Partial updates — only touch fields present in the body.  Allows
+    // e.g. {"auto_sync": 0} to disable a broken credential without having
+    // to re-paste the api_key, and prevents accidental wipes when only
+    // one field is being changed.
+    const b = req.body || {};
+    const sets = [];
+    const vals = [];
+    if (b.label       !== undefined) { sets.push('label = ?');       vals.push(b.label); }
+    if (b.api_key     !== undefined) {
+      if (!b.api_key) return res.status(400).json({ error: 'api_key cannot be empty' });
+      sets.push('api_key = ?'); vals.push(b.api_key);
+    }
+    if (b.api_secret  !== undefined) { sets.push('api_secret = ?');  vals.push(b.api_secret || null); }
+    if (b.network_id  !== undefined) { sets.push('network_id = ?');  vals.push(b.network_id || null); }
+    if (b.extra       !== undefined) { sets.push('extra = ?');       vals.push(b.extra ? JSON.stringify(b.extra) : null); }
+    if (b.auto_sync   !== undefined) { sets.push('auto_sync = ?');   vals.push(b.auto_sync ? 1 : 0); }
+    if (sets.length === 0) return res.status(400).json({ error: 'no fields to update' });
+
+    db.prepare(`UPDATE advertiser_api_credentials SET ${sets.join(', ')} WHERE id = ?`).run(...vals, row.id);
     res.json(db.prepare('SELECT * FROM advertiser_api_credentials WHERE id = ?').get(row.id));
   } catch (err) { next(err); }
 });
