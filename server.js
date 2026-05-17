@@ -88,6 +88,7 @@ app.use('/api/inventory',  require('./routes/inventory'));
 app.use('/api/placements', require('./routes/placements'));
 app.use('/api/inventory-approvals', require('./routes/inventoryApprovals'));
 app.use('/api/ads-text',   require('./routes/adsText'));
+app.use('/api/sites',      require('./routes/sitesHealth'));
 app.use('/api/clicks', require('./routes/clicks'));
 app.use('/api/s2s', require('./routes/s2s'));
 app.use('/api/reports', require('./routes/reports'));
@@ -154,6 +155,7 @@ app.use('/api/postbacks', (req, res, next) => {  // alias: GET /api/postbacks �
 app.use('/skan',                  require('./routes/skan'));
 app.use('/api/permissions',       require('./routes/permissions'));
 app.use('/api/audit-log',         require('./routes/auditLog'));
+app.use('/api/ai',                require('./routes/ai'));
 app.use('/api/discovery',         require('./routes/discovery'));
 
 // ── SDK static files ──────────────────────────────────────────────────────

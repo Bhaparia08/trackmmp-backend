@@ -40,6 +40,95 @@ function getOwnerId(req) {
 const VALID_STATUSES = ['pending', 'approved', 'rejected'];
 const ADMIN_ROLES    = ['admin', 'account_manager'];
 
+// ─── Pairing quality helpers ─────────────────────────────────────────────────
+// computePairWarnings:   non-blocking diagnostics returned to the UI on
+//                        create/auto-suggest so the admin sees mismatch issues
+//                        BEFORE clicking approve.
+// computePairScore:      0-100 quality score per pairing — surfaces how
+//                        confident we are this is a good match.
+//
+// Both are pure functions given the joined campaign + inventory rows.
+
+function computePairWarnings(c, i) {
+  const warnings = [];
+  const invGeo  = (i.geo || '').toUpperCase().trim();
+  const cGeos   = (c.allowed_countries || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  if (invGeo && cGeos.length > 0 && !cGeos.includes(invGeo)) {
+    warnings.push({
+      level: 'high',
+      code: 'geo_mismatch',
+      message: `Campaign targets [${cGeos.join(', ')}] but this site serves ${invGeo} visitors. Visitors won't see this offer.`,
+    });
+  }
+  const invVert = (i.vertical || '').toLowerCase().trim();
+  const cVert   = (c.vertical || '').toLowerCase().trim();
+  const cTags   = (',' + (c.tags || '').toLowerCase() + ',');
+  if (invVert && cVert && cVert !== invVert && !cTags.includes(',' + invVert + ',')) {
+    warnings.push({
+      level: 'medium',
+      code: 'vertical_mismatch',
+      message: `Campaign vertical "${cVert}" doesn't match site vertical "${invVert}". Conversion rate may be lower.`,
+    });
+  }
+  if (c.visibility === 'private') {
+    warnings.push({
+      level: 'high',
+      code: 'silent_fail_private',
+      message: `Campaign visibility is "private" — this offer won't serve via /api/v1/serve. Switch visibility to "open" to make it live.`,
+    });
+  }
+  // Creative presence check — handled by caller (needs a separate query).
+  // If c.active_creatives_count is provided, use it.
+  if (c.active_creatives_count != null && c.active_creatives_count === 0) {
+    warnings.push({
+      level: 'low',
+      code: 'no_creative',
+      message: `Campaign has no active creative. SDK will fall back to bare campaign name + payout instead of a rich offer card.`,
+    });
+  }
+  if (c.payout != null && Number(c.payout) === 0) {
+    warnings.push({
+      level: 'medium',
+      code: 'zero_payout',
+      message: `Campaign payout is $0. Conversions won't earn you anything.`,
+    });
+  }
+  return warnings;
+}
+
+function computePairScore(c, i) {
+  let score = 0;
+  const breakdown = {};
+
+  // Vertical match: exact 40, tag-match 25, neither 0
+  const invVert = (i.vertical || '').toLowerCase().trim();
+  const cVert   = (c.vertical || '').toLowerCase().trim();
+  const cTags   = (',' + (c.tags || '').toLowerCase() + ',');
+  if (invVert && cVert && cVert === invVert) { score += 40; breakdown.vertical = 'exact'; }
+  else if (invVert && cTags.includes(',' + invVert + ','))     { score += 25; breakdown.vertical = 'tag'; }
+  else                                                          { breakdown.vertical = 'none'; }
+
+  // GEO overlap: 30
+  const invGeo  = (i.geo || '').toUpperCase().trim();
+  const cGeos   = (c.allowed_countries || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  if (invGeo && cGeos.includes(invGeo))    { score += 30; breakdown.geo = 'match'; }
+  else if (!invGeo || cGeos.length === 0)  { score += 10; breakdown.geo = 'unknown'; }
+  else                                      { breakdown.geo = 'no-overlap'; }
+
+  // Active creative present: 15
+  if (c.active_creatives_count > 0)        { score += 15; breakdown.creative = 'present'; }
+  else                                      { breakdown.creative = 'missing'; }
+
+  // Payout tier: high $50+ 15, mid $5-50 10, low $0.01-5 5, zero 0
+  const p = Number(c.payout) || 0;
+  if (p >= 50)      { score += 15; breakdown.payout_tier = 'high'; }
+  else if (p >= 5)  { score += 10; breakdown.payout_tier = 'mid'; }
+  else if (p > 0)   { score += 5;  breakdown.payout_tier = 'low'; }
+  else              { breakdown.payout_tier = 'zero'; }
+
+  return { score, breakdown };
+}
+
 function writeAudit({ approvalId, campaignId, inventoryId, actorId, action, beforeState, afterState, reason }) {
   db.prepare(
     `INSERT INTO inventory_approval_audit
@@ -161,8 +250,14 @@ router.post('/auto-suggest', requireRole(...ADMIN_ROLES), (req, res, next) => {
       camParams.push(...req.body.campaign_ids.map(Number));
     }
     const campaigns = db.prepare(
-      `SELECT id, name, vertical, tags, allowed_countries FROM campaigns c WHERE ${camConds.join(' AND ')}`
+      `SELECT c.id, c.name, c.vertical, c.tags, c.allowed_countries, c.payout,
+              COALESCE(c.visibility, 'open') AS visibility,
+              (SELECT COUNT(*) FROM campaign_creatives cre
+               WHERE cre.campaign_id = c.id AND cre.status = 'active') AS active_creatives_count
+       FROM campaigns c WHERE ${camConds.join(' AND ')}`
     ).all(...camParams);
+
+    const minScore = Number(req.body?.min_score || 0);
 
     // Strict mode (default true): a campaign MUST have vertical AND
     // allowed_countries set or it's excluded.  Otherwise auto-suggest
@@ -209,9 +304,15 @@ router.post('/auto-suggest', requireRole(...ADMIN_ROLES), (req, res, next) => {
         }
         if (!geoOk) continue;
 
-        suggestions.push({ campaign_id: c.id, inventory_id: inv.id, campaign_name: c.name });
+        const { score, breakdown } = computePairScore(c, inv);
+        if (score < minScore) continue;
+        suggestions.push({
+          campaign_id: c.id, inventory_id: inv.id, campaign_name: c.name,
+          match_score: score, match_breakdown: breakdown,
+        });
       }
     }
+    suggestions.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
 
     if (dryRun) {
       return res.json({
@@ -268,10 +369,21 @@ router.post('/', requireRole(...ADMIN_ROLES), (req, res, next) => {
     }
 
     const ownerId = getOwnerId(req);
-    const c = db.prepare("SELECT id FROM campaigns WHERE id = ? AND user_id = ?").get(campaign_id, ownerId);
+    // Pull full campaign + inventory rows for warning + score computation
+    const c = db.prepare(`
+      SELECT c.id, c.name, c.vertical, c.allowed_countries, c.tags, c.payout,
+             COALESCE(c.visibility, 'open') AS visibility,
+             (SELECT COUNT(*) FROM campaign_creatives cre
+              WHERE cre.campaign_id = c.id AND cre.status = 'active') AS active_creatives_count
+      FROM campaigns c
+      WHERE c.id = ? AND c.user_id = ?
+    `).get(campaign_id, ownerId);
     if (!c) return res.status(404).json({ error: 'Campaign not found' });
-    const inv = db.prepare("SELECT id FROM owned_inventory WHERE id = ? AND user_id = ? AND status != 'deleted'").get(inventory_id, ownerId);
+    const inv = db.prepare("SELECT id, vertical, geo FROM owned_inventory WHERE id = ? AND user_id = ? AND status != 'deleted'").get(inventory_id, ownerId);
     if (!inv) return res.status(404).json({ error: 'Inventory not found' });
+
+    const warnings = computePairWarnings(c, inv);
+    const { score, breakdown } = computePairScore(c, inv);
 
     const isReviewed = status === 'approved' || status === 'rejected';
     try {
@@ -291,9 +403,9 @@ router.post('/', requireRole(...ADMIN_ROLES), (req, res, next) => {
         inventoryId: inventory_id,
         actorId:     req.user.id,
         action:      `create_${status}`,
-        afterState:  { status, priority, weight },
+        afterState:  { status, priority, weight, score, warnings: warnings.map(w => w.code) },
       });
-      res.status(201).json(created);
+      res.status(201).json({ ...created, warnings, match_score: score, match_breakdown: breakdown });
     } catch (e) {
       if (/UNIQUE/i.test(e.message)) {
         return res.status(409).json({ error: 'Approval already exists for this campaign+inventory pair' });

@@ -160,6 +160,126 @@ router.get('/placements', (req, res) => {
 //   os       — 'android' | 'ios' | 'windows' | 'macos' | 'linux' (optional)
 //   limit    — override placement.max_offers (capped at 50)
 //   nocache  — '1' to bypass the cache (debugging only)
+// ─── GET /api/v1/serve/dry-run ───────────────────────────────────────────────
+// Diagnostic endpoint — same shape as /serve but returns filter_trace[]
+// showing every campaign that was eligible (or rejected) and WHY.  Use this
+// when a placement seems empty and you want to know what's blocking offers.
+//
+// Same query params as /serve.  Requires same x-api-key.
+router.get('/serve/dry-run', async (req, res, next) => {
+  try {
+    const pubId = req.publisherId;
+    const { placement_slug, placement_id } = req.query;
+    if (!placement_slug && !placement_id) {
+      return res.status(400).json({ error: 'placement_slug or placement_id is required' });
+    }
+    const placement = placement_id
+      ? db.prepare(`
+          SELECT p.*, i.id AS inv_id, i.name AS inv_name, i.vertical AS inv_vertical,
+                 i.geo AS inv_geo, i.publisher_id AS inv_publisher_id, i.status AS inv_status
+          FROM placements p
+          JOIN owned_inventory i ON i.id = p.inventory_id
+          WHERE p.id = ? AND i.publisher_id = ?
+        `).get(Number(placement_id), pubId)
+      : db.prepare(`
+          SELECT p.*, i.id AS inv_id, i.name AS inv_name, i.vertical AS inv_vertical,
+                 i.geo AS inv_geo, i.publisher_id AS inv_publisher_id, i.status AS inv_status
+          FROM placements p
+          JOIN owned_inventory i ON i.id = p.inventory_id
+          WHERE p.slug = ? AND i.publisher_id = ?
+        `).get(placement_slug, pubId);
+
+    if (!placement) {
+      return res.status(404).json({
+        error: 'Placement not found or not authorized for this api key',
+        hint: 'Verify (a) the slug is exactly right, (b) the placement still exists, (c) your api key belongs to the publisher that owns this inventory.',
+      });
+    }
+
+    const placementChecks = [];
+    if (placement.status !== 'active') placementChecks.push({ ok: false, code: 'placement_inactive', detail: `placement.status = ${placement.status}` });
+    else placementChecks.push({ ok: true, code: 'placement_active' });
+    if (placement.inv_status !== 'active') placementChecks.push({ ok: false, code: 'inventory_inactive', detail: `inventory.status = ${placement.inv_status}` });
+    else placementChecks.push({ ok: true, code: 'inventory_active' });
+
+    const country = (req.query.country || '').toUpperCase().trim() || '(GeoIP)';
+    const device  = (req.query.device || '').toLowerCase().trim() || '(UA-parse)';
+    const visitorId = getVisitorId(req);
+    const consentRaw  = req.query.consent || '';
+    const consentState = normalizeConsent(consentRaw);
+
+    // Pull EVERY approval row (any status) so we can show what was rejected and why.
+    const all = db.prepare(`
+      SELECT cia.id AS approval_id, cia.status AS approval_status, cia.priority, cia.weight,
+             c.id AS campaign_id, c.name, c.status AS campaign_status,
+             COALESCE(c.visibility, 'open') AS visibility,
+             c.allowed_countries, c.allowed_devices,
+             COALESCE(c.freq_cap_per_user_per_day, 0)  AS cap_day,
+             COALESCE(c.freq_cap_per_user_per_hour, 0) AS cap_hour,
+             c.payout, c.payout_type,
+             (SELECT COUNT(*) FROM campaign_creatives cre
+              WHERE cre.campaign_id = c.id AND cre.status = 'active') AS active_creatives
+      FROM campaign_inventory_approvals cia
+      JOIN campaigns c ON c.id = cia.campaign_id
+      WHERE cia.inventory_id = ?
+    `).all(placement.inv_id);
+
+    const trace = [];
+    let wouldServe = 0;
+    for (const r of all) {
+      const reasons = [];
+      let blocked = false;
+      if (r.approval_status !== 'approved')                     { reasons.push(`approval_status = ${r.approval_status}`); blocked = true; }
+      if (r.campaign_status !== 'active')                       { reasons.push(`campaign_status = ${r.campaign_status}`); blocked = true; }
+      if (r.visibility === 'private')                           { reasons.push(`visibility = private — set to 'open' to serve`); blocked = true; }
+      if (country && r.allowed_countries && r.allowed_countries.trim() !== '') {
+        const allowed = r.allowed_countries.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        if (allowed.length > 0 && country !== '(GeoIP)' && !allowed.includes(country)) {
+          reasons.push(`country mismatch — visitor=${country} but campaign allows [${allowed.join(', ')}]`);
+          blocked = true;
+        }
+      }
+      if (r.cap_day > 0 || r.cap_hour > 0) {
+        const seen = db.prepare(`
+          SELECT COUNT(*) FILTER (WHERE created_at >= unixepoch()-86400) AS d24,
+                 COUNT(*) FILTER (WHERE created_at >= unixepoch()-3600)  AS h1
+          FROM impressions WHERE visitor_id = ? AND campaign_id = ?
+        `).get(visitorId, r.campaign_id);
+        if (r.cap_day  > 0 && seen.d24 >= r.cap_day)  { reasons.push(`freq cap reached: ${seen.d24}/${r.cap_day} per day`); blocked = true; }
+        if (r.cap_hour > 0 && seen.h1  >= r.cap_hour) { reasons.push(`freq cap reached: ${seen.h1}/${r.cap_hour} per hour`); blocked = true; }
+      }
+      if (r.active_creatives === 0) reasons.push('NOTE: no active creative — will render as bare name+payout');
+      if (!blocked) wouldServe++;
+      trace.push({
+        campaign_id: r.campaign_id,
+        campaign_name: r.name,
+        approval_id: r.approval_id,
+        approval_status: r.approval_status,
+        match_status: blocked ? 'rejected' : 'eligible',
+        reasons: reasons.length === 0 ? ['all checks passed'] : reasons,
+      });
+    }
+
+    res.json({
+      dry_run: true,
+      placement: {
+        id: placement.id, slug: placement.slug, type: placement.placement_type,
+        status: placement.status, max_offers: placement.max_offers,
+      },
+      inventory: {
+        id: placement.inv_id, name: placement.inv_name,
+        vertical: placement.inv_vertical, geo: placement.inv_geo,
+        status: placement.inv_status,
+      },
+      visitor: { country, device, visitor_id: visitorId, consent_state: consentState || '(none)' },
+      placement_checks: placementChecks,
+      total_approval_rows: all.length,
+      would_serve: wouldServe,
+      trace,
+    });
+  } catch (err) { next(err); }
+});
+
 router.get('/serve', async (req, res, next) => {
   try {
     const pubId = req.publisherId;
