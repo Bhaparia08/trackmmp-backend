@@ -963,4 +963,94 @@ router.post('/import', (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/* ─── POST /api/integrations/test-postback ──────────────────────────────────
+ * Phase 4a — Synthetic postback test for the one-click setup UX.
+ *
+ * Fires a self-call to /acquisition with a known test click_id + the
+ * advertiser's saved security_token, then reports step-by-step whether
+ * each validation passed. Lets non-technical users verify their integration
+ * works end-to-end without waiting for real traffic.
+ *
+ * Body: { advertiser_id, platform }
+ * Returns: { ok, steps: [{name, passed, detail}], summary }
+ */
+router.post('/test-postback', async (req, res, next) => {
+  try {
+    const { advertiser_id, platform } = req.body || {};
+    if (!advertiser_id) return res.status(400).json({ error: 'advertiser_id required' });
+    if (!platform) return res.status(400).json({ error: 'platform required' });
+
+    const steps = [];
+    const step = (name, passed, detail) => { steps.push({ name, passed, detail }); return passed; };
+
+    // Step 1 — verify advertiser exists + has a postback_token
+    const adv = db.prepare('SELECT id, name, email, postback_token FROM users WHERE id = ? AND role = ?')
+                  .get(advertiser_id, 'advertiser');
+    if (!step('Advertiser exists', !!adv, adv ? `id=${adv.id} · ${adv.name}` : 'not found in users table')) {
+      return res.json({ ok: false, steps, summary: 'advertiser not found' });
+    }
+    if (!step('Security token configured', !!adv.postback_token, adv.postback_token ? `${adv.postback_token.slice(0, 8)}…` : 'missing — regenerate from API Access')) {
+      return res.json({ ok: false, steps, summary: 'no security token' });
+    }
+
+    // Step 2 — synthesize a known test click in the DB
+    const testClickId = `test-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    // Find any active campaign bound to this advertiser (advertiser_id is the FK).
+    // user_id is the admin who CREATED the campaign — not the advertiser it's FOR.
+    const camp = db.prepare(`SELECT id, name, campaign_token FROM campaigns WHERE advertiser_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1`).get(advertiser_id);
+    if (!step('Test campaign available', !!camp, camp ? `using campaign #${camp.id} — ${camp.name}` : 'no active campaign for this advertiser; create one first')) {
+      return res.json({ ok: false, steps, summary: 'no active campaign to test against' });
+    }
+    try {
+      // user_id is the actor — the admin/AM whose session is running this test
+      db.prepare(`INSERT INTO clicks (click_id, campaign_id, user_id, status, created_at) VALUES (?, ?, ?, 'clicked', unixepoch())`)
+        .run(testClickId, camp.id, req.user?.id || 1);
+      step('Test click recorded', true, `click_id=${testClickId}`);
+    } catch (e) {
+      step('Test click recorded', false, e.message);
+      return res.json({ ok: false, steps, summary: 'failed to insert test click' });
+    }
+
+    // Step 3 — call /acquisition internally with test postback params
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const fetch = require('node-fetch');
+    const testPayout = 1.23;
+    const testPostbackUrl = `${baseUrl}/acquisition?clickid=${encodeURIComponent(testClickId)}&security_token=${encodeURIComponent(adv.postback_token)}&payout=${testPayout}&event=install`;
+    let postbackResult = {};
+    try {
+      const r = await fetch(testPostbackUrl, { method: 'GET', timeout: 5000 });
+      const txt = await r.text();
+      postbackResult = { http: r.status, body: txt.slice(0, 200) };
+    } catch (e) {
+      postbackResult = { http: 0, error: e.message };
+    }
+    const acqOk = postbackResult.http === 200;
+    step('Postback delivered', acqOk, acqOk ? `HTTP ${postbackResult.http}` : `HTTP ${postbackResult.http || 'fail'}: ${postbackResult.body || postbackResult.error}`);
+
+    // Step 4 — verify it landed in postbacks table (attributed status)
+    const pb = db.prepare(`SELECT id, status, payout FROM postbacks WHERE click_id = ? ORDER BY id DESC LIMIT 1`).get(testClickId);
+    const attributed = !!pb && pb.status === 'attributed';
+    step('Conversion attributed', attributed,
+      pb ? `postback #${pb.id} · status=${pb.status} · payout=$${pb.payout}` : 'no postback row found — security_token likely mismatched');
+
+    // Cleanup — remove test rows so they don't pollute reports
+    try {
+      if (pb) db.prepare('DELETE FROM postbacks WHERE id = ?').run(pb.id);
+      db.prepare('DELETE FROM clicks WHERE click_id = ?').run(testClickId);
+    } catch {}
+
+    const allOk = steps.every(s => s.passed);
+    res.json({
+      ok: allOk,
+      platform,
+      advertiser_id,
+      test_click_id: testClickId,
+      steps,
+      summary: allOk
+        ? `✓ End-to-end attribution worked. Integration is live.`
+        : `Stopped at: ${steps.find(s => !s.passed)?.name || 'unknown step'}`,
+    });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
