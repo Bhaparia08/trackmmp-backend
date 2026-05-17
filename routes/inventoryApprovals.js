@@ -164,38 +164,49 @@ router.post('/auto-suggest', requireRole(...ADMIN_ROLES), (req, res, next) => {
       `SELECT id, name, vertical, tags, allowed_countries FROM campaigns c WHERE ${camConds.join(' AND ')}`
     ).all(...camParams);
 
+    // Strict mode (default true): a campaign MUST have vertical AND
+    // allowed_countries set or it's excluded.  Otherwise auto-suggest
+    // pairs the campaign with every inventory (silent bug — was the
+    // 2026-05-17 root cause where DGMAX MX/BR campaigns landed on US
+    // insurance and MX finance sites incorrectly).
+    //
+    // Set { strict: false } in body to keep the old permissive behavior.
+    const strict = req.body?.strict !== false;
+
     const suggestions = [];
+    const skippedCampaigns = [];
+    for (const c of campaigns) {
+      const cVert = (c.vertical || '').trim();
+      const cGeos = (c.allowed_countries || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      if (strict) {
+        if (!cVert)          { skippedCampaigns.push({ id: c.id, name: c.name, reason: 'missing vertical' }); continue; }
+        if (cGeos.length === 0) { skippedCampaigns.push({ id: c.id, name: c.name, reason: 'missing allowed_countries' }); continue; }
+      }
+    }
+    const eligibleCampaigns = campaigns.filter(c =>
+      !skippedCampaigns.some(s => s.id === c.id)
+    );
+
     for (const inv of inventory) {
       const invVertical = (inv.vertical || '').toLowerCase().trim();
       const invGeo      = (inv.geo || '').toUpperCase().trim();
-      for (const c of campaigns) {
+      for (const c of eligibleCampaigns) {
         const cVert    = (c.vertical || '').toLowerCase().trim();
         const cTags    = (',' + (c.tags || '').toLowerCase() + ',');
         const cGeos    = (c.allowed_countries || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 
-        // Smart matching logic:
-        // 1. Both campaign + inventory have vertical → must match
-        // 2. Either side missing vertical → skip vertical check (match by geo only)
-        // 3. Both have geo → must match
-        // 4. Either side missing geo → skip geo check (match by vertical only)
-        // 5. Neither has vertical nor geo → match everything (admin reviews)
-
+        // In strict mode every campaign has both vertical + countries.
+        // Inventory side: vertical/geo may still be empty (legacy data).
         let verticalOk = true;
         if (invVertical && cVert) {
-          // Both have vertical — must match (also check tags)
           verticalOk = cVert === invVertical || cTags.includes(',' + invVertical + ',');
         }
-        // If either side has no vertical, skip check (verticalOk stays true)
-
         if (!verticalOk) continue;
 
         let geoOk = true;
         if (invGeo && cGeos.length > 0) {
-          // Both have geo — must match
           geoOk = cGeos.includes(invGeo);
         }
-        // If either side has no geo, skip check (geoOk stays true)
-
         if (!geoOk) continue;
 
         suggestions.push({ campaign_id: c.id, inventory_id: inv.id, campaign_name: c.name });
@@ -203,7 +214,13 @@ router.post('/auto-suggest', requireRole(...ADMIN_ROLES), (req, res, next) => {
     }
 
     if (dryRun) {
-      return res.json({ dry_run: true, would_insert: suggestions.length, suggestions });
+      return res.json({
+        dry_run: true,
+        would_insert: suggestions.length,
+        suggestions,
+        skipped_campaigns: skippedCampaigns,
+        strict_mode: strict,
+      });
     }
 
     const insert = db.prepare(
@@ -230,7 +247,14 @@ router.post('/auto-suggest', requireRole(...ADMIN_ROLES), (req, res, next) => {
       }
     });
     tx(suggestions);
-    res.json({ ok: true, evaluated: suggestions.length, inserted, skipped: suggestions.length - inserted });
+    res.json({
+      ok: true,
+      evaluated: suggestions.length,
+      inserted,
+      already_existed: suggestions.length - inserted,
+      skipped_campaigns: skippedCampaigns,
+      strict_mode: strict,
+    });
   } catch (err) { next(err); }
 });
 
@@ -494,5 +518,127 @@ router.get('/audit', requireRole(...ADMIN_ROLES), (req, res, next) => {
 });
 
 function safeJson(s) { try { return JSON.parse(s); } catch { return s; } }
+
+// ─── GET /api/inventory-approvals/audit-mismatches ───────────────────────────
+// Walks every existing approval row and flags pairings that look wrong:
+//   - GEO mismatch    (campaign.allowed_countries does NOT contain inventory.geo)
+//   - vertical mismatch (campaign.vertical != inventory.vertical AND not in tags)
+//   - visibility silent-fail (status=approved but campaign visibility=private →
+//       won't serve via /api/v1/serve)
+//   - no creative     (status=approved but campaign has 0 active creatives →
+//       offer renders as bare name + payout, not the rich card)
+// Returns a categorized list — admin can use these IDs with bulk reject/unblock.
+router.get('/audit-mismatches', requireRole(...ADMIN_ROLES), (req, res, next) => {
+  try {
+    const ownerId = getOwnerId(req);
+    const rows = db.prepare(`
+      SELECT cia.id, cia.campaign_id, cia.inventory_id, cia.status,
+             c.name AS campaign_name,
+             c.vertical AS campaign_vertical, c.allowed_countries, c.tags,
+             COALESCE(c.visibility, 'open') AS visibility,
+             i.name AS inventory_name, i.vertical AS inventory_vertical, i.geo AS inventory_geo,
+             (SELECT COUNT(*) FROM campaign_creatives cre
+              WHERE cre.campaign_id = c.id AND cre.status = 'active') AS active_creatives
+      FROM campaign_inventory_approvals cia
+      JOIN campaigns       c ON c.id = cia.campaign_id
+      JOIN owned_inventory i ON i.id = cia.inventory_id
+      WHERE cia.user_id = ? AND cia.status = 'approved'
+    `).all(ownerId);
+
+    const issues = {
+      geo_mismatch: [],
+      vertical_mismatch: [],
+      silent_fail_private: [],
+      no_creative: [],
+    };
+
+    for (const r of rows) {
+      const invGeo = (r.inventory_geo || '').toUpperCase().trim();
+      const cGeos  = (r.allowed_countries || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      if (invGeo && cGeos.length > 0 && !cGeos.includes(invGeo)) {
+        issues.geo_mismatch.push({
+          approval_id: r.id, campaign_id: r.campaign_id, campaign_name: r.campaign_name,
+          inventory_name: r.inventory_name,
+          campaign_geos: cGeos, inventory_geo: invGeo,
+        });
+      }
+
+      const invVert = (r.inventory_vertical || '').toLowerCase().trim();
+      const cVert   = (r.campaign_vertical   || '').toLowerCase().trim();
+      const cTags   = (',' + (r.tags || '').toLowerCase() + ',');
+      if (invVert && cVert && cVert !== invVert && !cTags.includes(',' + invVert + ',')) {
+        issues.vertical_mismatch.push({
+          approval_id: r.id, campaign_id: r.campaign_id, campaign_name: r.campaign_name,
+          inventory_name: r.inventory_name,
+          campaign_vertical: cVert, inventory_vertical: invVert,
+        });
+      }
+
+      if (r.visibility === 'private') {
+        issues.silent_fail_private.push({
+          approval_id: r.id, campaign_id: r.campaign_id, campaign_name: r.campaign_name,
+          inventory_name: r.inventory_name,
+          note: 'Approved but visibility=private — /api/v1/serve will NOT return this offer.',
+        });
+      }
+
+      if (r.active_creatives === 0) {
+        issues.no_creative.push({
+          approval_id: r.id, campaign_id: r.campaign_id, campaign_name: r.campaign_name,
+          inventory_name: r.inventory_name,
+          note: 'Approved but campaign has no active creatives — SDK falls back to bare name + payout.',
+        });
+      }
+    }
+
+    res.json({
+      audited: rows.length,
+      issues_found: Object.values(issues).reduce((s, a) => s + a.length, 0),
+      issues,
+    });
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/inventory-approvals/campaign-hygiene ───────────────────────────
+// Lists campaigns missing fields that cause auto-suggest to misfire or that
+// silently break the serve flow.  These are the upstream causes of most
+// bad approvals — fix the campaign and re-run auto-suggest.
+router.get('/campaign-hygiene', requireRole(...ADMIN_ROLES), (req, res, next) => {
+  try {
+    const ownerId = getOwnerId(req);
+    const rows = db.prepare(`
+      SELECT c.id, c.name, c.vertical, c.allowed_countries, c.payout, c.payout_type,
+             COALESCE(c.visibility, 'open') AS visibility,
+             c.status,
+             (SELECT COUNT(*) FROM campaign_creatives cre
+              WHERE cre.campaign_id = c.id AND cre.status = 'active') AS active_creatives
+      FROM campaigns c
+      WHERE c.user_id = ? AND c.status = 'active'
+    `).all(ownerId);
+
+    const issues = {
+      missing_vertical:    [],
+      missing_countries:   [],
+      zero_payout:         [],
+      no_active_creative:  [],
+      private_visibility:  [],   // surfaced separately — sometimes intentional
+    };
+
+    for (const c of rows) {
+      const base = { id: c.id, name: c.name };
+      if (!c.vertical || c.vertical.trim() === '')                    issues.missing_vertical.push(base);
+      if (!c.allowed_countries || c.allowed_countries.trim() === '')  issues.missing_countries.push(base);
+      if (!c.payout || Number(c.payout) === 0)                        issues.zero_payout.push({ ...base, payout: c.payout });
+      if (c.active_creatives === 0)                                   issues.no_active_creative.push(base);
+      if (c.visibility === 'private')                                 issues.private_visibility.push({ ...base, note: "won't serve via /api/v1/serve unless changed to 'open'" });
+    }
+
+    res.json({
+      total_active_campaigns: rows.length,
+      issues_found: Object.values(issues).reduce((s, a) => s + a.length, 0),
+      issues,
+    });
+  } catch (err) { next(err); }
+});
 
 module.exports = router;
