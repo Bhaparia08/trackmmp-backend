@@ -903,6 +903,9 @@ adminRouter.get('/stats', (_req, res) => {
       COUNT(*) AS candidates,
       SUM(CASE WHEN validation_status = 'valid' THEN 1 ELSE 0 END) AS valid_lp,
       SUM(CASE WHEN validation_status IN ('broken','parked','redirect_loop','timeout') THEN 1 ELSE 0 END) AS broken_or_parked,
+      -- 'no_url' is "we couldn't test", distinct from 'broken' which is "we tested and it failed".
+      -- Connectors that don't expose destination URLs in their basic feed land here.
+      SUM(CASE WHEN validation_status = 'no_url' THEN 1 ELSE 0 END) AS no_url,
       SUM(CASE WHEN import_status = 'imported' AND reviewed_at >= unixepoch('now','-7 days') THEN 1 ELSE 0 END) AS imported_7d,
       AVG(best_match_score) AS avg_match,
       MAX(last_seen_at) AS last_scan

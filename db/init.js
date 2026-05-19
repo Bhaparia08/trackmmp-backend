@@ -726,6 +726,14 @@ const migrations = [
   // Falls back to candidate.vertical when null. Used at import time.
   `ALTER TABLE campaign_candidates ADD COLUMN mapped_vertical TEXT`,
 
+  // Phase 4b backfill — reclassify "broken because no URL" to the new 'no_url' status.
+  // Pre-fix logic conflated "no data to test" with "tested and failed".
+  // Idempotent: only matches the specific note string the old validator wrote.
+  `UPDATE campaign_candidates
+      SET validation_status = 'no_url'
+    WHERE validation_status = 'broken'
+      AND validation_notes = 'no url'`,
+
   // Sync state tracking on advertiser_api_credentials — additive columns only
   `ALTER TABLE advertiser_api_credentials ADD COLUMN auto_sync          INTEGER DEFAULT 1`,
   `ALTER TABLE advertiser_api_credentials ADD COLUMN last_synced_at     INTEGER`,

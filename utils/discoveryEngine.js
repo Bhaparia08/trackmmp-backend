@@ -112,7 +112,11 @@ async function processValidationQueue(batch = 10) {
     const url = row.destination_url || row.tracking_url_template;
     if (!url) {
       db.prepare("UPDATE discovery_validation_queue SET status = 'done' WHERE id = ?").run(row.qid);
-      db.prepare(`UPDATE campaign_candidates SET validation_status = 'broken', validation_notes = 'no url', validation_checked_at = unixepoch() WHERE id = ?`).run(row.candidate_id);
+      // 'no_url' is distinct from 'broken' — we never tested anything.
+      // Connectors that don't expose destination URLs in their basic feed
+      // (e.g. Insparx CAKE OfferFeed) end up here. Operators see "uncheckable"
+      // instead of being misled into thinking 318 offers are dead.
+      db.prepare(`UPDATE campaign_candidates SET validation_status = 'no_url', validation_notes = 'no url in source feed — connector needs richer endpoint', validation_checked_at = unixepoch() WHERE id = ?`).run(row.candidate_id);
       continue;
     }
 
