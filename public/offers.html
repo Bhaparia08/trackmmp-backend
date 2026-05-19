@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Available Campaigns — Apogeemobi</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f0f1a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,sans-serif;line-height:1.6;min-height:100vh}
+a{color:#6366f1;text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Header */
+.header{background:#1a1a2e;border-bottom:1px solid #2d2d44;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header .brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;color:#fff}
+.header .brand span{color:#6366f1}
+.header nav a{color:#94a3b8;font-size:14px;margin-left:16px;transition:color .2s}
+.header nav a:hover{color:#fff;text-decoration:none}
+
+/* Container */
+.container{max-width:1200px;margin:0 auto;padding:24px 16px}
+h1{font-size:28px;font-weight:700;margin-bottom:4px}
+.subtitle{color:#94a3b8;margin-bottom:24px;font-size:15px}
+
+/* Filters */
+.filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:24px;align-items:center}
+.filter-group{display:flex;align-items:center;gap:6px}
+.filter-group label{font-size:13px;color:#94a3b8;white-space:nowrap}
+.filter-group select,.filter-group input{background:#1a1a2e;border:1px solid #2d2d44;color:#e2e8f0;padding:7px 12px;border-radius:6px;font-size:13px;outline:none}
+.filter-group select:focus,.filter-group input:focus{border-color:#6366f1}
+.pill-bar{display:flex;flex-wrap:wrap;gap:6px}
+.pill{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#1a1a2e;border:1px solid #2d2d44;color:#94a3b8;cursor:pointer;transition:all .2s}
+.pill:hover,.pill.active{background:#6366f1;color:#fff;border-color:#6366f1}
+
+/* Search */
+.search-box{flex:1;min-width:180px}
+.search-box input{width:100%;background:#1a1a2e;border:1px solid #2d2d44;color:#e2e8f0;padding:8px 14px;border-radius:6px;font-size:14px;outline:none}
+.search-box input:focus{border-color:#6366f1}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+
+/* Card */
+.card{background:#1a1a2e;border:1px solid #2d2d44;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;transition:border-color .2s,transform .15s}
+.card:hover{border-color:#6366f1;transform:translateY(-2px)}
+.card.featured{border-color:#6366f1;box-shadow:0 0 20px rgba(99,102,241,.15)}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.card-name{font-size:16px;font-weight:600;color:#fff;flex:1}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase}
+.badge-featured{background:rgba(99,102,241,.15);color:#818cf8}
+.badge-vertical{background:rgba(99,102,241,.08);color:#a5b4fc}
+.card-desc{font-size:13px;color:#94a3b8;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card-meta{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:#64748b}
+.card-meta .tag{background:#0f0f1a;padding:3px 8px;border-radius:4px}
+.card-payout{display:flex;align-items:baseline;gap:6px;margin-top:auto}
+.card-payout .amount{font-size:22px;font-weight:700;color:#22c55e}
+.card-payout .type{font-size:12px;color:#94a3b8;text-transform:uppercase}
+.card-stats{display:flex;gap:16px;font-size:12px;color:#64748b}
+.card-stats span{display:flex;align-items:center;gap:4px}
+.card-actions{display:flex;gap:8px;margin-top:4px}
+.btn-apply{flex:1;padding:10px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;text-align:center;transition:background .2s;background:#6366f1;color:#fff}
+.btn-apply:hover{background:#4f46e5;text-decoration:none}
+.btn-preview{padding:10px 16px;border:1px solid #2d2d44;border-radius:8px;background:transparent;color:#94a3b8;font-size:14px;cursor:pointer;transition:all .2s}
+.btn-preview:hover{border-color:#6366f1;color:#fff}
+
+/* Pagination */
+.pagination{display:flex;justify-content:center;gap:8px;margin-top:32px}
+.pagination button{background:#1a1a2e;border:1px solid #2d2d44;color:#94a3b8;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;transition:all .2s}
+.pagination button:hover:not(:disabled){border-color:#6366f1;color:#fff}
+.pagination button.active{background:#6366f1;color:#fff;border-color:#6366f1}
+.pagination button:disabled{opacity:.4;cursor:default}
+
+/* Loading & Empty */
+.loading,.empty{text-align:center;padding:60px 20px;color:#64748b;font-size:16px}
+.spinner{width:32px;height:32px;border:3px solid #2d2d44;border-top-color:#6366f1;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Sort select */
+.sort-group select{min-width:140px}
+
+/* Responsive */
+@media(max-width:640px){
+  .grid{grid-template-columns:1fr}
+  h1{font-size:22px}
+  .filters{flex-direction:column;align-items:stretch}
+  .filter-group{width:100%}
+  .filter-group select,.filter-group input,.search-box input{width:100%}
+  .pill-bar{justify-content:flex-start}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="14" fill="#6366f1"/><path d="M9 14l3 3 7-7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Apogeemobi</span>
+  </div>
+  <nav>
+    <a href="/publisher/signup">Publisher Signup</a>
+    <a href="/publisher/login">Login</a>
+  </nav>
+</div>
+
+<div class="container">
+  <h1>Available Campaigns</h1>
+  <p class="subtitle">Browse and apply to run high-converting campaigns across verticals.</p>
+
+  <!-- Vertical pills -->
+  <div class="pill-bar" id="verticalPills">
+    <button class="pill active" data-vertical="">All</button>
+    <button class="pill" data-vertical="betting">Betting</button>
+    <button class="pill" data-vertical="finance">Finance</button>
+    <button class="pill" data-vertical="insurance">Insurance</button>
+    <button class="pill" data-vertical="health">Health</button>
+    <button class="pill" data-vertical="ecommerce">Ecommerce</button>
+  </div>
+
+  <!-- Filters row -->
+  <div class="filters" style="margin-top:16px">
+    <div class="filter-group">
+      <label>Geo</label>
+      <input type="text" id="geoFilter" placeholder="e.g. US, IN, BR" maxlength="4" style="width:90px">
+    </div>
+    <div class="filter-group">
+      <label>Payout Type</label>
+      <select id="payoutTypeFilter">
+        <option value="">All</option>
+        <option value="cpi">CPI</option>
+        <option value="cpl">CPL</option>
+        <option value="cpa">CPA</option>
+        <option value="cps">CPS</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Min Payout</label>
+      <input type="number" id="minPayoutFilter" placeholder="$0" min="0" step="0.5" style="width:80px">
+    </div>
+    <div class="filter-group sort-group">
+      <label>Sort</label>
+      <select id="sortFilter">
+        <option value="featured">Featured</option>
+        <option value="payout_desc">Payout High→Low</option>
+        <option value="payout_asc">Payout Low→High</option>
+        <option value="newest">Newest</option>
+      </select>
+    </div>
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Search campaigns...">
+    </div>
+  </div>
+
+  <!-- Campaign grid -->
+  <div id="campaignGrid" class="grid"></div>
+
+  <!-- Pagination -->
+  <div id="pagination" class="pagination"></div>
+</div>
+
+<script>
+(function() {
+  const API_BASE = '/api/offer-wall';
+  let currentPage = 1;
+  let activeVertical = '';
+  let debounceTimer = null;
+
+  const grid = document.getElementById('campaignGrid');
+  const paginationEl = document.getElementById('pagination');
+
+  // -- Vertical pills --
+  document.getElementById('verticalPills').addEventListener('click', function(e) {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    document.querySelectorAll('#verticalPills .pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    activeVertical = pill.dataset.vertical || '';
+    currentPage = 1;
+    fetchCampaigns();
+  });
+
+  // -- Filter change listeners --
+  ['geoFilter','payoutTypeFilter','minPayoutFilter','sortFilter'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => { currentPage = 1; fetchCampaigns(); });
+  });
+
+  // -- Search with debounce --
+  document.getElementById('searchInput').addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => { currentPage = 1; fetchCampaigns(); }, 300);
+  });
+
+  function buildQuery() {
+    const params = new URLSearchParams();
+    if (activeVertical) params.set('vertical', activeVertical);
+    const geo = document.getElementById('geoFilter').value.trim();
+    if (geo) params.set('geo', geo);
+    const pt = document.getElementById('payoutTypeFilter').value;
+    if (pt) params.set('payout_type', pt);
+    const mp = document.getElementById('minPayoutFilter').value;
+    if (mp) params.set('min_payout', mp);
+    params.set('sort', document.getElementById('sortFilter').value);
+    const search = document.getElementById('searchInput').value.trim();
+    if (search) params.set('search', search);
+    params.set('page', currentPage);
+    params.set('limit', 20);
+    return params.toString();
+  }
+
+  async function fetchCampaigns() {
+    grid.innerHTML = '<div class="loading"><div class="spinner"></div>Loading campaigns...</div>';
+    paginationEl.innerHTML = '';
+
+    try {
+      const resp = await fetch(API_BASE + '?' + buildQuery());
+      if (!resp.ok) throw new Error('Failed to fetch');
+      const data = await resp.json();
+
+      if (!data.campaigns || data.campaigns.length === 0) {
+        grid.innerHTML = '<div class="empty">No campaigns match your filters.</div>';
+        return;
+      }
+
+      grid.innerHTML = data.campaigns.map(c => renderCard(c)).join('');
+      renderPagination(data.page, data.total_pages);
+    } catch (err) {
+      grid.innerHTML = '<div class="empty">Error loading campaigns. Please try again.</div>';
+      console.error(err);
+    }
+  }
+
+  function renderCard(c) {
+    const geos = c.allowed_countries ? c.allowed_countries.split(',').map(g => g.trim()).filter(Boolean).slice(0, 5) : [];
+    const geoExtra = c.allowed_countries ? c.allowed_countries.split(',').length - 5 : 0;
+    const tags = c.tags ? c.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+    const isFeatured = c.featured === 1;
+
+    return '<div class="card' + (isFeatured ? ' featured' : '') + '">' +
+      '<div class="card-top">' +
+        '<div class="card-name">' + esc(c.name) + '</div>' +
+        (isFeatured ? '<span class="badge badge-featured">Featured</span>' : '') +
+      '</div>' +
+      (c.vertical ? '<span class="badge badge-vertical">' + esc(c.vertical) + '</span>' : '') +
+      (c.description ? '<div class="card-desc">' + esc(c.description) + '</div>' : '') +
+      '<div class="card-meta">' +
+        geos.map(g => '<span class="tag">' + esc(g) + '</span>').join('') +
+        (geoExtra > 0 ? '<span class="tag">+' + geoExtra + ' more</span>' : '') +
+        tags.map(t => '<span class="tag">' + esc(t) + '</span>').join('') +
+      '</div>' +
+      '<div class="card-payout">' +
+        '<span class="amount">$' + Number(c.publisher_payout).toFixed(2) + '</span>' +
+        '<span class="type">' + esc(c.publisher_payout_type || 'cpi') + '</span>' +
+      '</div>' +
+      '<div class="card-stats">' +
+        '<span>' + fmtNum(c.total_clicks) + ' clicks</span>' +
+        '<span>' + fmtNum(c.total_installs) + ' installs</span>' +
+        '<span>' + c.active_publishers + ' publishers</span>' +
+      '</div>' +
+      '<div class="card-actions">' +
+        '<a class="btn-apply" href="/publisher/signup">Apply Now</a>' +
+        (c.preview_url ? '<a class="btn-preview" href="' + esc(c.preview_url) + '" target="_blank" rel="noopener">Preview</a>' : '') +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderPagination(current, totalPages) {
+    if (totalPages <= 1) { paginationEl.innerHTML = ''; return; }
+    let html = '';
+    html += '<button' + (current <= 1 ? ' disabled' : '') + ' onclick="window.__owGoPage(' + (current - 1) + ')">Prev</button>';
+    const start = Math.max(1, current - 2);
+    const end = Math.min(totalPages, current + 2);
+    for (let i = start; i <= end; i++) {
+      html += '<button class="' + (i === current ? 'active' : '') + '" onclick="window.__owGoPage(' + i + ')">' + i + '</button>';
+    }
+    html += '<button' + (current >= totalPages ? ' disabled' : '') + ' onclick="window.__owGoPage(' + (current + 1) + ')">Next</button>';
+    paginationEl.innerHTML = html;
+  }
+
+  window.__owGoPage = function(p) {
+    currentPage = p;
+    fetchCampaigns();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  function esc(str) {
+    if (!str) return '';
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function fmtNum(n) {
+    n = Number(n) || 0;
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return n.toString();
+  }
+
+  // Initial load
+  fetchCampaigns();
+})();
+</script>
+</body>
+</html>

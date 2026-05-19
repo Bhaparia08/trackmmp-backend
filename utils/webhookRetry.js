@@ -61,11 +61,30 @@ async function processWebhookQueue() {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
-      const resp = await fetch(item.url, {
+
+      // Detect JSON-encoded webhook subscription payloads (POST with body)
+      let fetchUrl = item.url;
+      let fetchOpts = {
         method: 'GET',
         signal: controller.signal,
         headers: { 'User-Agent': 'ApogeeMobiTrackMMP/1.0' },
-      });
+      };
+      try {
+        const parsed = JSON.parse(item.url);
+        if (parsed && parsed.__webhook) {
+          fetchUrl = parsed.url;
+          fetchOpts = {
+            method:  parsed.method || 'POST',
+            signal:  controller.signal,
+            headers: parsed.headers || { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(parsed.body),
+          };
+        }
+      } catch (_jsonErr) {
+        // Not JSON — treat as plain GET URL (existing behaviour)
+      }
+
+      const resp = await fetch(fetchUrl, fetchOpts);
       clearTimeout(timeout);
 
       if (resp.ok || (resp.status >= 200 && resp.status < 300)) {

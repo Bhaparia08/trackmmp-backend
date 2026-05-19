@@ -92,4 +92,85 @@ router.get('/summary', requireAdmin, (req, res) => {
   res.json(summary);
 });
 
+// ── CTIT (Click-to-Install Time) Analysis ───────────────────────────────────
+
+router.get('/ctit-analysis', requireAdmin, (req, res) => {
+  try {
+    const { from, to, campaign_id } = req.query;
+    const conditions = ["pb.status = 'attributed'", 'pb.ctit_seconds IS NOT NULL'];
+    const values = [];
+
+    if (from) { conditions.push("date(pb.created_at,'unixepoch') >= ?"); values.push(from); }
+    if (to)   { conditions.push("date(pb.created_at,'unixepoch') <= ?"); values.push(to); }
+    if (campaign_id) { conditions.push('pb.campaign_id = ?'); values.push(+campaign_id); }
+
+    const where = conditions.join(' AND ');
+
+    // Average CTIT per campaign
+    const byCampaign = db.prepare(`
+      SELECT pb.campaign_id, c.name AS campaign_name,
+             ROUND(AVG(pb.ctit_seconds), 1) AS avg_ctit,
+             MIN(pb.ctit_seconds) AS min_ctit,
+             MAX(pb.ctit_seconds) AS max_ctit,
+             COUNT(*) AS total,
+             SUM(CASE WHEN pb.ctit_seconds < 10 THEN 1 ELSE 0 END) AS click_injection_count,
+             SUM(CASE WHEN pb.ctit_seconds > 604800 THEN 1 ELSE 0 END) AS organic_leak_count
+      FROM postbacks pb
+      LEFT JOIN campaigns c ON c.id = pb.campaign_id
+      WHERE ${where}
+      GROUP BY pb.campaign_id
+      ORDER BY avg_ctit ASC
+    `).all(...values);
+
+    // Average CTIT per publisher
+    const byPublisher = db.prepare(`
+      SELECT cl.publisher_id, p.name AS publisher_name,
+             ROUND(AVG(pb.ctit_seconds), 1) AS avg_ctit,
+             MIN(pb.ctit_seconds) AS min_ctit,
+             MAX(pb.ctit_seconds) AS max_ctit,
+             COUNT(*) AS total,
+             SUM(CASE WHEN pb.ctit_seconds < 10 THEN 1 ELSE 0 END) AS click_injection_count,
+             SUM(CASE WHEN pb.ctit_seconds > 604800 THEN 1 ELSE 0 END) AS organic_leak_count
+      FROM postbacks pb
+      JOIN clicks cl ON cl.click_id = pb.click_id
+      LEFT JOIN publishers p ON p.id = cl.publisher_id
+      WHERE ${where} AND cl.publisher_id IS NOT NULL
+      GROUP BY cl.publisher_id
+      ORDER BY avg_ctit ASC
+    `).all(...values);
+
+    // Overall suspicious counts
+    const suspicious = db.prepare(`
+      SELECT
+        SUM(CASE WHEN pb.ctit_seconds < 10 THEN 1 ELSE 0 END) AS click_injection_count,
+        SUM(CASE WHEN pb.ctit_seconds > 604800 THEN 1 ELSE 0 END) AS organic_leak_count,
+        COUNT(*) AS total_attributed
+      FROM postbacks pb
+      WHERE ${where}
+    `).get(...values);
+
+    // CTIT distribution buckets (for histogram)
+    const distribution = db.prepare(`
+      SELECT
+        CASE
+          WHEN pb.ctit_seconds < 10       THEN '0-10s (suspicious)'
+          WHEN pb.ctit_seconds < 60       THEN '10-60s'
+          WHEN pb.ctit_seconds < 3600     THEN '1-60min'
+          WHEN pb.ctit_seconds < 86400    THEN '1-24hr'
+          WHEN pb.ctit_seconds < 604800   THEN '1-7d'
+          ELSE '7d+ (suspicious)'
+        END AS bucket,
+        COUNT(*) AS count
+      FROM postbacks pb
+      WHERE ${where}
+      GROUP BY bucket
+      ORDER BY MIN(pb.ctit_seconds) ASC
+    `).all(...values);
+
+    res.json({ by_campaign: byCampaign, by_publisher: byPublisher, suspicious, distribution });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

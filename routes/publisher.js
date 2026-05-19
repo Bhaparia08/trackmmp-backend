@@ -193,4 +193,20 @@ router.put('/settings', (req, res) => {
   res.json({ ok: true, global_postback_url: global_postback_url || '' });
 });
 
+// GET /api/publisher/payouts — publisher sees their own payout records
+router.get('/payouts', (req, res) => {
+  const pub = db.prepare('SELECT id FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
+  if (!pub) return res.json([]);
+
+  const rows = db.prepare(`
+    SELECT id, period_from, period_to, amount, currency, status, payment_method, payment_ref, notes, created_at, paid_at
+    FROM publisher_payouts
+    WHERE publisher_id = ?
+    ORDER BY created_at DESC
+    LIMIT 200
+  `).all(pub.id);
+
+  res.json(rows);
+});
+
 module.exports = router;

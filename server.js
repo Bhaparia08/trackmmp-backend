@@ -84,6 +84,7 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/apps', require('./routes/apps'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/publishers', require('./routes/publishers'));
+app.use('/api/publisher-payouts', require('./routes/publisherPayouts'));
 app.use('/api/inventory',  require('./routes/inventory'));
 app.use('/api/placements', require('./routes/placements'));
 app.use('/api/inventory-approvals', require('./routes/inventoryApprovals'));
@@ -92,6 +93,7 @@ app.use('/api/sites',      require('./routes/sitesHealth'));
 app.use('/api/clicks', require('./routes/clicks'));
 app.use('/api/s2s', require('./routes/s2s'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/scheduled-reports', require('./routes/scheduledReports'));
 app.use('/api/fraud', require('./routes/fraud'));
 app.use('/api/campaigns/:campaign_id/goals',          require('./routes/goals'));
 app.use('/api/campaigns/:campaign_id/publisher-caps', require('./routes/publisherCaps'));
@@ -102,6 +104,8 @@ app.use('/api/publisher', require('./routes/publisher'));
 app.use('/api/am', require('./routes/am'));
 app.use('/api/attendance', require('./routes/attendance'));
 app.use('/api/apikeys', require('./routes/apikeys'));
+app.use('/api/webhooks', require('./routes/webhooks'));
+app.use('/api/currency', require('./routes/currency'));
 
 // ── OpenAPI spec + Swagger UI ─────────────────────────────────────────────
 // Mounted BEFORE /api/v1 so the spec endpoints don't go through requireApiKey.
@@ -157,6 +161,10 @@ app.use('/api/permissions',       require('./routes/permissions'));
 app.use('/api/audit-log',         require('./routes/auditLog'));
 app.use('/api/ai',                require('./routes/ai'));
 app.use('/api/discovery',         require('./routes/discovery'));
+app.use('/api/conversions',       require('./routes/conversionHold'));
+
+// Offer Wall / Campaign Marketplace (public — no auth for GET routes)
+app.use('/api/offer-wall', require('./routes/offerWall'));
 
 // ── SDK static files ──────────────────────────────────────────────────────
 // Serves backend/sdk/ at /sdk/. This is OUTSIDE backend/public/ so Vite's
@@ -221,6 +229,13 @@ if (discoveryEngine.isEnabled()) {
   console.log('[DiscoveryHub] disabled via DISCOVERY_HUB_ENABLED=false');
 }
 
+// ── Exchange Rate Refresh — runs once on boot + every 24 hours ──────────────
+const { refreshRates } = require('./utils/currencyConverter');
+refreshRates().catch(e => console.error('[CurrencyRefresh]', e.message));
+setInterval(() => {
+  refreshRates().catch(e => console.error('[CurrencyRefresh]', e.message));
+}, 24 * 60 * 60 * 1000);
+
 // ── In production, serve the built React frontend from Express ────────────────
 // Checks multiple candidate paths in priority order:
 //   1. backend/public          (our standard build target)
@@ -251,6 +266,9 @@ if (frontendDist) {
   });
   app.get('/domain-integration-guide.html', (req, res) => {
     res.sendFile(path.join(frontendDist, 'domain-integration-guide.html'));
+  });
+  app.get('/offers', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'offers.html'));
   });
 
   // All unmatched routes → React SPA (client-side routing)

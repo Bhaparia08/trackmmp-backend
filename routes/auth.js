@@ -3,6 +3,14 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { customAlphabet } = require('nanoid');
 const nodemailer = require('nodemailer');
+const otplib = require('otplib');
+const QRCode = require('qrcode');
+// otplib v4+ has flat exports — wrap for authenticator-style API
+const authenticator = {
+  generateSecret: () => otplib.generateSecret(),
+  keyuri: (email, issuer, secret) => `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(email)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`,
+  verify: ({ token, secret }) => otplib.verifySync({ token, secret }),
+};
 const db = require('../db/init');
 const { requireAuth } = require('../middleware/auth');
 const audit = require('../utils/auditLog');
@@ -200,7 +208,7 @@ router.post('/register/publisher', async (req, res, next) => {
 // POST /api/auth/login
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, totp_token } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
 
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
@@ -221,7 +229,20 @@ router.post('/login', async (req, res, next) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const { password: _p, ...safeUser } = user;
+    // 2FA check: if TOTP is enabled for this user
+    if (user.totp_enabled === 1 && user.totp_secret) {
+      if (!totp_token) {
+        // Password correct but 2FA code not provided — prompt frontend
+        return res.json({ requires_2fa: true, email: user.email });
+      }
+      // Verify the TOTP token
+      const isValid = authenticator.verify({ token: totp_token, secret: user.totp_secret });
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid 2FA code' });
+      }
+    }
+
+    const { password: _p, totp_secret: _ts, ...safeUser } = user;
     audit.log(req, 'login', 'user', user.id, user.email, { role: user.role });
     res.json({ token: signToken(safeUser), user: safeUser });
   } catch (err) { next(err); }
@@ -430,6 +451,69 @@ router.get('/me', requireAuth, (req, res) => {
     WHERE u.id = ?`).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(user);
+});
+
+// ───── Two-Factor Authentication (TOTP) routes ─────
+
+// GET /api/auth/2fa/status — check if 2FA is enabled for the logged-in user
+router.get('/2fa/status', requireAuth, (req, res) => {
+  const user = db.prepare('SELECT totp_enabled FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json({ enabled: user.totp_enabled === 1 });
+});
+
+// POST /api/auth/2fa/setup — generate a new TOTP secret + QR code data URL
+router.post('/2fa/setup', requireAuth, async (req, res, next) => {
+  try {
+    const user = db.prepare('SELECT id, email, totp_enabled FROM users WHERE id = ?').get(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.totp_enabled === 1) return res.status(400).json({ error: '2FA is already enabled' });
+
+    const secret = authenticator.generateSecret();
+    const otpauth = authenticator.keyuri(user.email, 'TrackMMP', secret);
+    const qr_url = await QRCode.toDataURL(otpauth);
+
+    // Store secret temporarily — it only becomes active after verify step
+    db.prepare('UPDATE users SET totp_secret = ? WHERE id = ?').run(secret, user.id);
+
+    res.json({ secret, qr_url });
+  } catch (err) { next(err); }
+});
+
+// POST /api/auth/2fa/verify — verify 6-digit code and enable 2FA
+router.post('/2fa/verify', requireAuth, (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'token (6-digit code) is required' });
+
+  const user = db.prepare('SELECT id, email, totp_secret, totp_enabled FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.totp_enabled === 1) return res.status(400).json({ error: '2FA is already enabled' });
+  if (!user.totp_secret) return res.status(400).json({ error: 'Call /2fa/setup first to generate a secret' });
+
+  const isValid = authenticator.verify({ token, secret: user.totp_secret });
+  if (!isValid) return res.status(401).json({ error: 'Invalid 2FA code — please try again' });
+
+  db.prepare('UPDATE users SET totp_enabled = 1 WHERE id = ?').run(user.id);
+  try { audit.log(req, '2fa_enable', 'user', user.id, user.email, {}); } catch {}
+  res.json({ success: true, message: '2FA has been enabled' });
+});
+
+// POST /api/auth/2fa/disable — verify code and disable 2FA
+router.post('/2fa/disable', requireAuth, (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'token (6-digit code) is required' });
+
+  const user = db.prepare('SELECT id, email, totp_secret, totp_enabled FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.totp_enabled !== 1) return res.status(400).json({ error: '2FA is not enabled' });
+  if (!user.totp_secret) return res.status(400).json({ error: '2FA secret not found' });
+
+  const isValid = authenticator.verify({ token, secret: user.totp_secret });
+  if (!isValid) return res.status(401).json({ error: 'Invalid 2FA code' });
+
+  db.prepare('UPDATE users SET totp_enabled = 0, totp_secret = \'\' WHERE id = ?').run(user.id);
+  try { audit.log(req, '2fa_disable', 'user', user.id, user.email, {}); } catch {}
+  res.json({ success: true, message: '2FA has been disabled' });
 });
 
 module.exports = router;

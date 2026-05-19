@@ -830,6 +830,88 @@ const migrations = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_dba_candidate ON discovery_bulk_audit(candidate_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_dba_rule      ON discovery_bulk_audit(rule_id, created_at)`,
+
+  // CTIT (Click-to-Install Time) fraud analysis
+  `ALTER TABLE postbacks ADD COLUMN ctit_seconds INTEGER`,
+  `CREATE INDEX IF NOT EXISTS idx_postbacks_ctit ON postbacks(ctit_seconds)`,
+
+  // Two-Factor Authentication (TOTP)
+  `ALTER TABLE users ADD COLUMN totp_secret TEXT DEFAULT ''`,
+  `ALTER TABLE users ADD COLUMN totp_enabled INTEGER DEFAULT 0`,
+
+  // Publisher Payouts
+  `CREATE TABLE IF NOT EXISTS publisher_payouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    publisher_id INTEGER NOT NULL REFERENCES publishers(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    period_from TEXT NOT NULL,
+    period_to TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    status TEXT NOT NULL DEFAULT 'pending',
+    payment_method TEXT DEFAULT '',
+    payment_ref TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    paid_at INTEGER
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_publisher_payouts_publisher ON publisher_payouts(publisher_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_publisher_payouts_status ON publisher_payouts(status)`,
+
+  // ── Scheduled Reports ─────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS scheduled_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    report_type TEXT NOT NULL DEFAULT 'summary',
+    frequency TEXT NOT NULL DEFAULT 'daily',
+    filters TEXT NOT NULL DEFAULT '{}',
+    recipients TEXT NOT NULL DEFAULT '',
+    format TEXT NOT NULL DEFAULT 'csv',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    last_sent_at INTEGER,
+    next_run_at INTEGER,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_scheduled_reports_user ON scheduled_reports(user_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_scheduled_reports_enabled ON scheduled_reports(enabled, next_run_at)`,
+
+  // ── Conversion Hold & Approval ────────────────────────────────────────────
+  `ALTER TABLE postbacks ADD COLUMN hold_until INTEGER`,
+  `ALTER TABLE postbacks ADD COLUMN hold_status TEXT DEFAULT ''`,
+
+  // ── Webhook Subscriptions ─────────────────────────────────────────────────
+  // User-configured outbound webhooks for events (conversion, cap_reached, etc.)
+  `CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           INTEGER NOT NULL REFERENCES users(id),
+    name              TEXT    NOT NULL DEFAULT '',
+    url               TEXT    NOT NULL,
+    events            TEXT    NOT NULL DEFAULT 'conversion',
+    secret            TEXT    NOT NULL DEFAULT '',
+    status            TEXT    NOT NULL DEFAULT 'active',
+    last_triggered_at INTEGER,
+    trigger_count     INTEGER NOT NULL DEFAULT 0,
+    created_at        INTEGER NOT NULL DEFAULT (unixepoch()),
+    updated_at        INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_webhook_subs_user   ON webhook_subscriptions(user_id, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_webhook_subs_status ON webhook_subscriptions(status)`,
+
+  // ── Multi-Currency Support ────────────────────────────────────────────────
+  `ALTER TABLE users ADD COLUMN preferred_currency TEXT DEFAULT 'USD'`,
+
+  `CREATE TABLE IF NOT EXISTS exchange_rates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    base_currency TEXT NOT NULL DEFAULT 'USD',
+    target_currency TEXT NOT NULL,
+    rate REAL NOT NULL,
+    date TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(base_currency, target_currency, date)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_exchange_rates_target_date ON exchange_rates(target_currency, date)`,
 ];
 
 const IGNORABLE = [

@@ -368,6 +368,34 @@ function handlePostback(params, ip, io) {
          JSON.stringify(params), ip,
          matchedGoal?.id||null, matchedGoal?.name||null, isViewThrough ? 1 : 0);
 
+  // ── Conversion Hold check ───────────────────────────────────────────────
+  // If campaign has conversion_hold_days > 0, put the postback on hold
+  // instead of immediately attributing it. It stays 'held' until an admin
+  // confirms or rejects it (or auto-confirms after hold_until).
+  const holdDays = campaign?.conversion_hold_days || 0;
+  if (holdDays > 0) {
+    const holdUntil = Math.floor(Date.now() / 1000) + (holdDays * 86400);
+    db.prepare('UPDATE postbacks SET status = ?, hold_status = ?, hold_until = ? WHERE id = ?')
+      .run('held', 'held', holdUntil, pbResult.lastInsertRowid);
+  }
+
+  // ── CTIT (Click-to-Install Time) calculation ────────────────────────────
+  const ctitSeconds = Math.floor(Date.now() / 1000) - click.created_at;
+  try {
+    db.prepare('UPDATE postbacks SET ctit_seconds = ? WHERE id = ?')
+      .run(ctitSeconds, pbResult.lastInsertRowid);
+    // Flag suspicious CTIT: < 10s = click injection, > 7 days = organic leak
+    if (!isViewThrough && ctitSeconds < 10) {
+      logFraud(click, 'ctit_click_injection', {
+        ctit_seconds: ctitSeconds, click_id: click.click_id, threshold: '< 10s'
+      });
+    } else if (ctitSeconds > 604800) {
+      logFraud(click, 'ctit_organic_leak', {
+        ctit_seconds: ctitSeconds, click_id: click.click_id, threshold: '> 7 days'
+      });
+    }
+  } catch {}
+
   // Update click status
   const newStatus = finalEventType === 'install' ? 'installed' : 'converted';
   db.prepare("UPDATE clicks SET status = ? WHERE click_id = ?").run(newStatus, click.click_id);
