@@ -753,4 +753,32 @@ router.get('/campaign-hygiene', requireRole(...ADMIN_ROLES), (req, res, next) =>
   } catch (err) { next(err); }
 });
 
+// ─── eCPM auction — recompute endpoints ──────────────────────────────────────
+const { computeEcpm, recomputeForOwner } = require('../utils/ecpmCalculator');
+
+// POST /api/inventory-approvals/recompute-ecpm — recompute every approval the owner has
+router.post('/recompute-ecpm', requireRole(...ADMIN_ROLES), (req, res, next) => {
+  try {
+    const ownerId = getOwnerId(req);
+    const result = recomputeForOwner(ownerId);
+    res.json({ ok: true, ...result });
+  } catch (err) { next(err); }
+});
+
+// POST /api/inventory-approvals/:id/recompute-ecpm — recompute one
+router.post('/:id/recompute-ecpm', requireRole(...ADMIN_ROLES), (req, res, next) => {
+  try {
+    const ownerId = getOwnerId(req);
+    const row = db.prepare('SELECT id, campaign_id, inventory_id FROM campaign_inventory_approvals WHERE id = ? AND user_id = ?').get(req.params.id, ownerId);
+    if (!row) return res.status(404).json({ error: 'Approval not found' });
+    const e = computeEcpm({ campaign_id: row.campaign_id, inventory_id: row.inventory_id });
+    db.prepare(`
+      UPDATE campaign_inventory_approvals
+      SET ecpm_estimate = ?, ecpm_sample_size = ?, ecpm_computed_at = unixepoch()
+      WHERE id = ?
+    `).run(e.ecpm, e.sample_size, row.id);
+    res.json({ ok: true, approval_id: row.id, ...e });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

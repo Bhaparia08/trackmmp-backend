@@ -207,6 +207,18 @@ setInterval(() => {
   try { runAlertChecks(io); } catch (e) { console.error('[AlertEngine]', e.message); }
 }, 2 * 60 * 1000);
 
+// ── eCPM auction recompute — nightly (every 24h) ─────────────────────────
+// Recomputes ecpm_estimate on every approval row from the prior 30 days of
+// clicks/impressions/conversions data.  /api/v1/serve uses these scores
+// to pick the highest-yielding offer for each impression.
+const { recomputeForOwner: recomputeEcpm } = require('./utils/ecpmCalculator');
+setInterval(() => {
+  try {
+    const r = recomputeEcpm(null);  // null = recompute for ALL owners
+    console.log(`[EcpmRecompute] updated ${r.updated}/${r.evaluated} approval eCPMs`);
+  } catch (e) { console.error('[EcpmRecompute]', e.message); }
+}, 24 * 60 * 60 * 1000);
+
 // ── Discovery Hub — scan every 6h, process validation queue every 60s ─────
 // Kill switch: set DISCOVERY_HUB_ENABLED=false to disable.
 const discoveryEngine = require('./utils/discoveryEngine');

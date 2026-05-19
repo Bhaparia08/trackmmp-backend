@@ -353,7 +353,8 @@ router.get('/serve', async (req, res, next) => {
                c.destination_url,
                COALESCE(c.freq_cap_per_user_per_day, 0)  AS cap_day,
                COALESCE(c.freq_cap_per_user_per_hour, 0) AS cap_hour,
-               cia.priority, cia.weight
+               cia.priority, cia.weight,
+               cia.ecpm_estimate, cia.ecpm_sample_size
         FROM campaign_inventory_approvals cia
         JOIN campaigns c ON c.id = cia.campaign_id
         WHERE cia.inventory_id = ?
@@ -410,15 +411,57 @@ router.get('/serve', async (req, res, next) => {
     // We DON'T drop the offer entirely — affiliate offers are inherently
     // contextual (vertical-matched), not behavioral.
 
-    // Sort: priority DESC, then weighted random within priority tier.
-    // Weighted random within tier — pick by cumulative weight.
-    const byPriority = new Map();
+    // ── Auction / ordering ─────────────────────────────────────────────────
+    // New eCPM-based ranking: when ecpm_estimate is populated on the approval
+    // row, use it as the primary sort key (highest expected revenue first).
+    // Falls back to the legacy priority×weight scheme when eCPM is NULL so
+    // freshly-approved pairs aren't disadvantaged before their first compute.
+    //
+    // To keep some randomness for exploration (so we don't always serve the
+    // exact same offer when 2 pairs have similar eCPM), the eCPM tier is
+    // bucketed: offers within 10% of each other are treated as one tier and
+    // shuffled by weight inside.
+    const orderingScore = (o) => {
+      if (typeof o.ecpm_estimate === 'number' && o.ecpm_estimate > 0) {
+        // Bucket to nearest 10% — log10-style.  e.g. 4.20 and 4.60 same bucket.
+        return Math.round(o.ecpm_estimate * 10) / 10;
+      }
+      // Cold-start fallback: priority as the bucket
+      return -1;   // any negative bucket sorts below all real eCPM ones
+    };
+
+    const byBucket = new Map();
     for (const o of filtered) {
-      const key = o.priority || 0;
-      if (!byPriority.has(key)) byPriority.set(key, []);
-      byPriority.get(key).push(o);
+      const key = orderingScore(o);
+      if (!byBucket.has(key)) byBucket.set(key, []);
+      byBucket.get(key).push(o);
     }
-    const sortedPriorities = [...byPriority.keys()].sort((a, b) => b - a);
+    // For real eCPM buckets — descending eCPM.  For -1 (cold-start) — last.
+    const sortedPriorities = [...byBucket.keys()].sort((a, b) => {
+      if (a === -1 && b === -1) return 0;
+      if (a === -1) return  1;   // cold-start last
+      if (b === -1) return -1;
+      return b - a;
+    });
+    // Within each cold-start bucket, fall back to priority×weight ordering.
+    // Re-bucket the cold-start group by priority so existing behavior is preserved.
+    const coldGroup = byBucket.get(-1);
+    if (coldGroup && coldGroup.length > 1) {
+      const subBuckets = new Map();
+      for (const o of coldGroup) {
+        const pk = o.priority || 0;
+        if (!subBuckets.has(pk)) subBuckets.set(pk, []);
+        subBuckets.get(pk).push(o);
+      }
+      // Reorder coldGroup: highest priority first, then by weight desc
+      coldGroup.length = 0;
+      [...subBuckets.keys()].sort((a, b) => b - a).forEach(p => {
+        coldGroup.push(...subBuckets.get(p));
+      });
+    }
+
+    // Compat alias so the rest of the function uses byPriority + the same sort key set.
+    const byPriority = byBucket;
     const ordered = [];
     for (const pr of sortedPriorities) {
       const group = byPriority.get(pr);

@@ -831,6 +831,16 @@ const migrations = [
   `CREATE INDEX IF NOT EXISTS idx_dba_candidate ON discovery_bulk_audit(candidate_id, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_dba_rule      ON discovery_bulk_audit(rule_id, created_at)`,
 
+  // ── Phase 4: eCPM auction ─────────────────────────────────────────────────
+  // Each approval row carries an estimated revenue-per-1000-impressions
+  // figure that /api/v1/serve uses to pick the highest-yielding offer when
+  // multiple campaigns compete for the same impression.  NULL = no data yet,
+  // fall back to priority/weight ordering.
+  `ALTER TABLE campaign_inventory_approvals ADD COLUMN ecpm_estimate    REAL`,
+  `ALTER TABLE campaign_inventory_approvals ADD COLUMN ecpm_computed_at INTEGER`,
+  `ALTER TABLE campaign_inventory_approvals ADD COLUMN ecpm_sample_size INTEGER`,
+  `CREATE INDEX IF NOT EXISTS idx_cia_ecpm ON campaign_inventory_approvals(inventory_id, ecpm_estimate DESC)`,
+
   // CTIT (Click-to-Install Time) fraud analysis
   `ALTER TABLE postbacks ADD COLUMN ctit_seconds INTEGER`,
   `CREATE INDEX IF NOT EXISTS idx_postbacks_ctit ON postbacks(ctit_seconds)`,
