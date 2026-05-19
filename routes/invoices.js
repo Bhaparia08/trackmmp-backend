@@ -153,10 +153,8 @@ router.get('/next-number', requireRole('admin'), (req, res) => {
   res.json({ invoice_number: nextInvoiceNumber() });
 });
 
-// ── GET /api/invoices/historical — restricted to integration@apogeemobi.com only ──
+// ── GET /api/invoices/historical — list manual/historical invoices ──
 router.get('/historical', requireRole('admin'), (req, res) => {
-  if (req.user.email !== 'integration@apogeemobi.com')
-    return res.status(403).json({ error: 'Access denied' });
   const { status, currency, from, to, search } = req.query;
   const conditions = [];
   const values = [];
@@ -177,10 +175,40 @@ router.get('/historical', requireRole('admin'), (req, res) => {
   res.json(rows);
 });
 
-// ── PUT /api/invoices/historical/:id — restricted to integration@apogeemobi.com only ──
+// ── POST /api/invoices/historical — add a manually created invoice ──
+router.post('/historical', requireRole('admin'), (req, res, next) => {
+  try {
+    const { invoice_number, client_name, entity, issue_date, payment_date, amount, currency, status, notes } = req.body;
+    if (!invoice_number || !client_name) return res.status(400).json({ error: 'invoice_number and client_name are required' });
+
+    const existing = db.prepare('SELECT id FROM historical_invoices WHERE invoice_number = ?').get(invoice_number);
+    if (existing) return res.status(409).json({ error: 'Invoice number already exists' });
+
+    const result = db.prepare(`
+      INSERT INTO historical_invoices (invoice_number, client_name, entity, issue_date, payment_date, amount, currency, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      invoice_number, client_name, entity || 'sg',
+      issue_date || new Date().toISOString().slice(0, 10),
+      payment_date || null, amount || 0, currency || 'USD',
+      status || 'pending', notes || ''
+    );
+
+    const created = db.prepare('SELECT * FROM historical_invoices WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json(created);
+  } catch (err) { next(err); }
+});
+
+// ── DELETE /api/invoices/historical/:id — delete a manual invoice ──
+router.delete('/historical/:id', requireRole('admin'), (req, res) => {
+  const row = db.prepare('SELECT * FROM historical_invoices WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  db.prepare('DELETE FROM historical_invoices WHERE id = ?').run(row.id);
+  res.json({ success: true });
+});
+
+// ── PUT /api/invoices/historical/:id — update manual invoice ──
 router.put('/historical/:id', requireRole('admin'), (req, res) => {
-  if (req.user.email !== 'integration@apogeemobi.com')
-    return res.status(403).json({ error: 'Access denied' });
   const { status, notes } = req.body;
   const row = db.prepare('SELECT * FROM historical_invoices WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
