@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>My Sites — simplified preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .topbar { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .topbar a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px; }
+    .pagehdr { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; }
+    .pagehdr h2 { margin: 0; font-size: 24px; }
+    .pagehdr .totals { text-align: right; }
+    .pagehdr .totals .big { font-size: 22px; font-weight: 700; color: #10b981; }
+    .pagehdr .totals .lbl { font-size: 12px; color: #94a3b8; }
+
+    .summary-row { display: flex; gap: 14px; margin-bottom: 28px; flex-wrap: wrap; }
+    .summary { flex: 1; min-width: 180px; background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 10px; padding: 14px 16px; }
+    .summary .lbl { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+    .summary .val { font-size: 22px; font-weight: 700; color: #fff; margin-top: 4px; }
+    .summary.bad .val { color: #fca5a5; }
+    .summary.warn .val { color: #fcd34d; }
+    .summary.good .val { color: #6ee7b7; }
+
+    .site-card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; margin-bottom: 16px; }
+    .site-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .site-hdr .left { display: flex; align-items: center; gap: 12px; }
+    .site-hdr .flag { font-size: 22px; }
+    .site-hdr h3 { margin: 0; font-size: 16px; font-weight: 600; }
+    .site-hdr .sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .earnings { text-align: right; }
+    .earnings .amt { font-size: 18px; font-weight: 700; color: #10b981; }
+    .earnings .amt.zero { color: #94a3b8; }
+    .earnings .label { font-size: 11px; color: #94a3b8; }
+
+    .checks { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 10px; }
+    .check { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 4px 0; }
+    .check .icon { font-size: 16px; width: 22px; }
+    .check.ok    { color: #cbd5e1; }
+    .check.bad   { color: #fca5a5; }
+    .check.warn  { color: #fcd34d; }
+    .check .extra { color: #94a3b8; margin-left: auto; font-size: 12px; }
+    .check .fix-btn { padding: 4px 12px; font-size: 11px; background: #6366f1; color: #fff; border: 0; border-radius: 5px; font-weight: 600; cursor: pointer; margin-left: 8px; }
+
+    .stats-row { display: flex; gap: 18px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #ffffff14; font-size: 13px; }
+    .stats-row .stat .num { font-weight: 700; color: #fff; }
+    .stats-row .stat .lbl { color: #94a3b8; font-size: 11px; }
+
+    .demo-banner { background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: #c7d2fe; }
+    .demo-banner strong { color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>Preview: My Sites health</h1>
+</div>
+
+<div class="wrap">
+
+<div class="demo-banner">
+  <strong>This is a brand-new page</strong> — doesn't exist today. Numbers shown are illustrative. The check-marks would be backed by real status (script installed? ads.txt deployed? offers serving? clicks earned?).
+</div>
+
+<div class="pagehdr">
+  <div>
+    <h2>My Sites</h2>
+    <p style="margin:4px 0 0;color:#94a3b8;font-size:13px">18 owned sites · health snapshot · earnings today</p>
+  </div>
+  <div class="totals">
+    <div class="big">$12.45</div>
+    <div class="lbl">earned today across all sites</div>
+  </div>
+</div>
+
+<div class="summary-row">
+  <div class="summary good">
+    <div class="lbl">Live + earning</div>
+    <div class="val">1</div>
+  </div>
+  <div class="summary warn">
+    <div class="lbl">Ready, no traffic</div>
+    <div class="val">3</div>
+  </div>
+  <div class="summary bad">
+    <div class="lbl">Needs setup</div>
+    <div class="val">14</div>
+  </div>
+</div>
+
+<!-- Site 1 — LIVE -->
+<div class="site-card">
+  <div class="site-hdr">
+    <div class="left">
+      <span class="flag">🇺🇸</span>
+      <div>
+        <h3>top10betting.us</h3>
+        <div class="sub">US Betting · 2 placements</div>
+      </div>
+    </div>
+    <div class="earnings">
+      <div class="amt">$12.45</div>
+      <div class="label">today</div>
+    </div>
+  </div>
+  <div class="checks">
+    <div class="check ok"><span class="icon">✅</span>Site code installed <span class="extra">last seen 3 min ago</span></div>
+    <div class="check ok"><span class="icon">✅</span>ads.txt deployed <span class="extra">last verified yesterday</span></div>
+    <div class="check ok"><span class="icon">✅</span>4 offers serving <span class="extra">BetMGM, DraftKings, FanDuel, Caesars</span></div>
+  </div>
+  <div class="stats-row">
+    <div class="stat"><div class="num">142</div><div class="lbl">clicks today</div></div>
+    <div class="stat"><div class="num">2</div><div class="lbl">sign-ups</div></div>
+    <div class="stat"><div class="num">1.4%</div><div class="lbl">conv rate</div></div>
+    <div class="stat"><div class="num">$12.45</div><div class="lbl">earned</div></div>
+  </div>
+</div>
+
+<!-- Site 2 — needs setup -->
+<div class="site-card">
+  <div class="site-hdr">
+    <div class="left">
+      <span class="flag">🇺🇸</span>
+      <div>
+        <h3>zerointerestshop.us</h3>
+        <div class="sub">US Finance · 1 placement</div>
+      </div>
+    </div>
+    <div class="earnings">
+      <div class="amt zero">$0</div>
+      <div class="label">not earning</div>
+    </div>
+  </div>
+  <div class="checks">
+    <div class="check bad">
+      <span class="icon">❌</span>Site code NOT installed yet
+      <button class="fix-btn" onclick="alert('Demo: would open a step-by-step wizard showing the 2-line snippet to paste into your site')">Show me how →</button>
+    </div>
+    <div class="check bad">
+      <span class="icon">❌</span>ads.txt missing
+      <button class="fix-btn" onclick="alert('Demo: would copy the ads.txt line and show paste instructions for your site root')">Copy + how to add →</button>
+    </div>
+    <div class="check warn"><span class="icon">⚠</span>3 offers ready but visitors aren't seeing them <span class="extra">install site code to start serving</span></div>
+  </div>
+</div>
+
+<!-- Site 3 — ready, no offers -->
+<div class="site-card">
+  <div class="site-hdr">
+    <div class="left">
+      <span class="flag">🇧🇷</span>
+      <div>
+        <h3>quizfinanceiro.com</h3>
+        <div class="sub">Brazil Finance · 1 placement</div>
+      </div>
+    </div>
+    <div class="earnings">
+      <div class="amt zero">$0</div>
+      <div class="label">waiting for offers</div>
+    </div>
+  </div>
+  <div class="checks">
+    <div class="check ok"><span class="icon">✅</span>Site code installed <span class="extra">last seen 2 hours ago</span></div>
+    <div class="check ok"><span class="icon">✅</span>ads.txt deployed</div>
+    <div class="check warn">
+      <span class="icon">⚠</span>0 offers approved — site is ready but has nothing to show
+      <button class="fix-btn" onclick="window.location='approvals.html'">Find offers →</button>
+    </div>
+  </div>
+  <div class="stats-row">
+    <div class="stat"><div class="num">487</div><div class="lbl">visitors today</div></div>
+    <div class="stat"><div class="num">—</div><div class="lbl">no offers served</div></div>
+    <div class="stat" style="color:#fca5a5"><div class="num">$0</div><div class="lbl">missed revenue est. $24</div></div>
+  </div>
+</div>
+
+<!-- Site 4 — collapsed for demo -->
+<div class="site-card" style="opacity:.7">
+  <div class="site-hdr">
+    <div class="left">
+      <span class="flag">🇲🇽</span>
+      <div>
+        <h3>tusicuro.com</h3>
+        <div class="sub">Mexico Finance · 1 placement</div>
+      </div>
+    </div>
+    <div class="earnings">
+      <div class="amt zero">$0</div>
+      <div class="label">needs setup</div>
+    </div>
+  </div>
+  <div style="margin-top:8px;font-size:12px;color:#94a3b8">3 checks not passing · 11 offers waiting for review</div>
+  <button class="fix-btn" style="margin-top:10px">Show details →</button>
+</div>
+
+<div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px;font-style:italic">
+  …14 more sites — most need site-code install. <a href="#" style="color:#818cf8;text-decoration:none">Bulk install guide →</a>
+</div>
+
+<p style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #ffffff14; color: #64748b; font-size: 12px;">
+  <a href="approvals.html" style="color:#818cf8;text-decoration:none">← Approval Queue preview</a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="discovery.html" style="color:#818cf8;text-decoration:none">Discovery Hub preview</a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="index.html" style="color:#818cf8;text-decoration:none">back to index</a>
+</p>
+
+</div>
+</body>
+</html>

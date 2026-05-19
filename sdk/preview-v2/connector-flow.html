@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Connector flow — preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .top { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .top a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .top h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px 80px; }
+    h2 { font-size: 22px; margin: 40px 0 6px; }
+    .lede { color: #94a3b8; margin: 0 0 20px; font-size: 14px; }
+
+    .step-card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+    .step-card h3 { margin: 0 0 12px; font-size: 16px; }
+    .step-num { display: inline-block; width: 28px; height: 28px; line-height: 28px; text-align: center; background: #6366f1; color: #fff; border-radius: 50%; font-weight: 700; font-size: 13px; margin-right: 10px; }
+
+    /* connector grid */
+    .conn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 14px; }
+    .conn { background: #0a0a14; border: 1px solid #ffffff14; border-radius: 8px; padding: 12px 14px; font-size: 13px; }
+    .conn .name { font-weight: 600; }
+    .conn .badge { display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 10px; margin-top: 4px; }
+    .conn.ready    { border-left: 3px solid #10b981; }
+    .conn.ready    .badge { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .conn.live     { border-left: 3px solid #6366f1; }
+    .conn.live     .badge { background: rgba(99,102,241,.15); color: #c7d2fe; }
+    .conn.stub     { border-left: 3px solid #64748b; opacity: .65; }
+    .conn.stub     .badge { background: rgba(100,116,139,.15); color: #94a3b8; }
+
+    /* form */
+    label { display: block; font-size: 11px; color: #94a3b8; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+    input { background: #0a0a14; border: 1px solid #ffffff20; border-radius: 6px; padding: 8px 12px; color: #e2e8f0; font: inherit; font-size: 13px; width: 100%; }
+    .form-help { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+    button { padding: 9px 16px; background: #6366f1; color: #fff; border: 0; border-radius: 6px; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; margin-top: 14px; }
+    button:hover { background: #4f46e5; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* log output */
+    .log { background: #0a0a14; border-radius: 6px; padding: 14px; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; line-height: 1.55; color: #a5f3fc; min-height: 200px; overflow-y: auto; max-height: 280px; }
+    .log .stamp { color: #64748b; }
+    .log .ok    { color: #6ee7b7; }
+    .log .err   { color: #fca5a5; }
+    .log .info  { color: #a5f3fc; }
+
+    /* offer table */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid #ffffff10; text-align: left; }
+    th { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+    .pill-green { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .pill-yellow{ background: rgba(245,158,11,.15); color: #fcd34d; }
+    .pill-red   { background: rgba(239,68,68,.15);  color: #fca5a5; }
+
+    /* SDK preview */
+    .render-area { background: #fff; color: #1a1a2e; padding: 22px; border-radius: 10px; margin-top: 14px; }
+    .render-area h4 { color: #0f172a; font-size: 20px; margin: 0 0 6px; font-family: Georgia, serif; }
+    .render-area .meta { color: #6b7280; font-size: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 12px; margin-bottom: 14px; }
+    .render-area .ad-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .render-area .ad-table th { background: #f9fafb; color: #6b7280; font-size: 11px; padding: 10px; text-align: left; border: 0; }
+    .render-area .ad-table td { padding: 14px 10px; border-bottom: 1px solid #e5e7eb; }
+    .render-area .rank { font-weight: 700; color: #6366f1; font-size: 18px; }
+    .render-area .brand { font-weight: 700; color: #111827; font-size: 14px; }
+    .render-area .bonus { font-weight: 700; color: #0f172a; }
+    .render-area .cta { display: inline-block; padding: 8px 16px; background: #6366f1; color: #fff; border-radius: 5px; font-weight: 700; font-size: 12px; text-decoration: none; }
+
+    .demo-banner { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: #fde68a; }
+    .demo-banner strong { color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="top">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>Preview: how the new connector flow works</h1>
+</div>
+
+<div class="wrap">
+
+<div class="demo-banner">
+  <strong>This is a mockup of the new connector code we built locally.</strong>
+  Buttons simulate the real flow but use canned data so you can see it without hooking up real CJ/MaxBounty/Awin accounts.  Once you say "deploy yes" + provide real credentials, the same buttons will hit real APIs.
+</div>
+
+<!-- ─── STEP 1 ─── -->
+<div class="step-card">
+  <h3><span class="step-num">1</span> Open the platform's connector registry</h3>
+  <p class="lede">15 networks are now wired in.  Green = working code ready for credentials.  Blue = already has credentials and pulling offers.  Grey = stub (real implementation coming when you sign up).</p>
+
+  <div class="conn-grid">
+    <div class="conn live">
+      <div class="name">Insparx (CAKE)</div>
+      <span class="badge">LIVE · 318 offers</span>
+    </div>
+    <div class="conn ready"><div class="name">Everflow</div><span class="badge">READY · needs creds</span></div>
+    <div class="conn ready"><div class="name">TUNE / HasOffers</div><span class="badge">READY · needs creds</span></div>
+    <div class="conn ready"><div class="name">Impact</div><span class="badge">READY · re-auth needed</span></div>
+    <div class="conn ready"><div class="name">CJ Affiliate</div><span class="badge">NEW · needs creds</span></div>
+    <div class="conn ready"><div class="name">MaxBounty</div><span class="badge">NEW · needs creds</span></div>
+    <div class="conn ready"><div class="name">Awin</div><span class="badge">NEW · needs creds</span></div>
+    <div class="conn ready"><div class="name">CityAds</div><span class="badge">READY · needs creds</span></div>
+    <div class="conn ready"><div class="name">Rakuten</div><span class="badge">READY · needs creds</span></div>
+    <div class="conn stub"><div class="name">ClickBank</div><span class="badge">STUB · docs in API</span></div>
+    <div class="conn stub"><div class="name">Lomadee (BR)</div><span class="badge">STUB · docs in API</span></div>
+    <div class="conn stub"><div class="name">ShareASale</div><span class="badge">STUB · docs in API</span></div>
+    <div class="conn stub"><div class="name">Adjust (MMP)</div><span class="badge">POSTBACK ONLY</span></div>
+    <div class="conn stub"><div class="name">Branch (MMP)</div><span class="badge">POSTBACK ONLY</span></div>
+    <div class="conn stub"><div class="name">Custom (webhook)</div><span class="badge">ALWAYS-ON</span></div>
+  </div>
+</div>
+
+<!-- ─── STEP 2 ─── -->
+<div class="step-card">
+  <h3><span class="step-num">2</span> Click a network, paste its credentials</h3>
+  <p class="lede">For MaxBounty as an example.  The form auto-detects what fields the network needs from the connector's <code>credentialHints</code>.</p>
+
+  <div style="background:#0a0a14;padding:14px 18px;border-radius:8px;border:1px solid #ffffff14">
+    <div style="font-weight:600;font-size:15px;margin-bottom:10px">Add credentials — MaxBounty</div>
+    <label>API Token</label>
+    <input id="mb-key" type="text" placeholder="mb_live_..." value="mb_demo_xxxx_replace_with_real" />
+    <div class="form-help">Get from MaxBounty Account → API → Generate Token</div>
+
+    <label>Affiliate ID</label>
+    <input id="mb-id" type="text" placeholder="123456" value="DEMO-12345" />
+    <div class="form-help">Your numeric MaxBounty affiliate ID — top-right corner of dashboard</div>
+
+    <label>Label (for your reference)</label>
+    <input id="mb-label" type="text" placeholder="MaxBounty US" value="MaxBounty US" />
+
+    <button id="connect-btn" onclick="simulateConnect()">Connect + Test</button>
+    <span id="connect-result" style="margin-left:12px;font-size:12px"></span>
+  </div>
+</div>
+
+<!-- ─── STEP 3 ─── -->
+<div class="step-card">
+  <h3><span class="step-num">3</span> Trigger first scan — watch offers arrive</h3>
+  <p class="lede">Either click "Scan now" below or wait for the 6-hour automatic scan.  Output appears in the log.</p>
+
+  <button onclick="simulateScan()">Scan now (simulate)</button>
+  <div class="log" id="scan-log" style="margin-top:14px"></div>
+</div>
+
+<!-- ─── STEP 4 ─── -->
+<div class="step-card">
+  <h3><span class="step-num">4</span> Auto-import rule routes good offers to matching sites</h3>
+  <p class="lede">The auto-import rule we built earlier picks high-quality matches.  Watch what the system decides for the 12 offers MaxBounty just sent us.</p>
+
+  <button onclick="simulateAutoImport()">Run auto-import rule</button>
+
+  <table id="auto-import-table" style="display:none">
+    <thead><tr>
+      <th>Offer</th><th>Vertical</th><th>Match score</th><th>Decision</th>
+    </tr></thead>
+    <tbody id="auto-import-body"></tbody>
+  </table>
+</div>
+
+<!-- ─── STEP 5 ─── -->
+<div class="step-card">
+  <h3><span class="step-num">5</span> Sarah visits cashonnow.us → SDK serves the best-eCPM offer</h3>
+  <p class="lede">2 offers competing now (Chime $75 CPA + Acorns $25 CPA).  eCPM auction picks Chime for this visitor.</p>
+
+  <button onclick="simulateServe()">Show me what Sarah sees</button>
+
+  <div class="render-area" id="render-area" style="display:none">
+    <h4>Top 5 Cash-Advance Apps in 2026</h4>
+    <div class="meta">Updated May 2026 · Editor's Pick</div>
+    <p style="font-family:system-ui;font-size:13px">Lorem ipsum article content reviewing the best cash advance services for US borrowers. The comparison table below shows our top picks based on payout speed, credit requirements, and fees.</p>
+
+    <table class="ad-table">
+      <thead><tr>
+        <th>#</th><th>Brand</th><th>Bonus</th><th></th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="rank">1</td>
+          <td>
+            <div class="brand">Chime Banking</div>
+            <div style="font-size:12px;color:#374151;margin-top:3px">Up to $500 SpotMe + $100 sign-up bonus</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:3px">★★★★★ 4.7 · 12,453 reviews</div>
+          </td>
+          <td class="bonus">$100<div style="font-size:11px;color:#6b7280;font-weight:400">sign-up bonus</div></td>
+          <td><a class="cta" href="#" onclick="return false">Get Started</a></td>
+        </tr>
+        <tr>
+          <td class="rank">2</td>
+          <td>
+            <div class="brand">Acorns Earn</div>
+            <div style="font-size:12px;color:#374151;margin-top:3px">$20 + automatic investing</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:3px">★★★★☆ 4.4 · 8,103 reviews</div>
+          </td>
+          <td class="bonus">$20<div style="font-size:11px;color:#6b7280;font-weight:400">welcome</div></td>
+          <td><a class="cta" href="#" onclick="return false">Open Account</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="font-size:11px;color:#9ca3af;margin-top:14px;font-family:system-ui">Disclosure: This page contains affiliate links. We may earn a commission when you sign up via the buttons above.</p>
+  </div>
+</div>
+
+<!-- ─── footer ─── -->
+<div class="step-card">
+  <h3>That's the whole loop</h3>
+  <ul style="margin:6px 0 0;padding-left:20px;line-height:1.9;color:#cbd5e1">
+    <li>Step 1–2 happens once per network (~3 min each)</li>
+    <li>Step 3 runs automatically every 6 hours after</li>
+    <li>Step 4 fires automatically on every scan if you've set up auto-import rules</li>
+    <li>Step 5 happens for every real visitor on the site — fully automatic, no admin action needed</li>
+  </ul>
+  <p style="margin-top:18px;font-size:13px;color:#94a3b8">
+    The only manual work is Step 1–2 once per network.  After that the system fills your sites with offers, picks the highest-yielding offer per visitor, and counts the conversions.
+  </p>
+</div>
+
+</div>
+
+<script>
+function nowStamp() {
+  const d = new Date();
+  return `[${d.toTimeString().slice(0,8)}]`;
+}
+function logLine(text, cls='info') {
+  const el = document.getElementById('scan-log');
+  const line = document.createElement('div');
+  line.innerHTML = `<span class="stamp">${nowStamp()}</span> <span class="${cls}">${text}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function simulateConnect() {
+  const btn = document.getElementById('connect-btn');
+  const res = document.getElementById('connect-result');
+  btn.disabled = true; btn.textContent = 'Testing…';
+  res.textContent = '';
+  setTimeout(() => {
+    btn.textContent = '✓ Connected';
+    btn.style.background = '#10b981';
+    res.innerHTML = '<span style="color:#6ee7b7">credentials saved · auth check OK · 1 cred listed in Discovery → Connectors</span>';
+  }, 1200);
+}
+
+function simulateScan() {
+  const log = document.getElementById('scan-log');
+  log.innerHTML = '';
+  const lines = [
+    ['Connector registry → look up "maxbounty"',  'info'],
+    ['MaxBounty.authenticate(creds) → 200 OK',     'ok'],
+    ['MaxBounty.listOffers(creds) → fetching…',     'info'],
+    ['API returned 12 active offers (US-finance, US-insurance, US-betting)', 'ok'],
+    ['Upserting candidates into campaign_candidates…', 'info'],
+    ['12 new candidate rows created', 'ok'],
+    ['Enqueueing landing-page validation for 12 offers', 'info'],
+    ['LP validator → 11 valid, 1 broken', 'ok'],
+    ['Scoring 11 against owned-inventory…',     'info'],
+    ['Match scores: 7 strong (≥70), 3 medium (40-69), 1 weak (<40)', 'ok'],
+    ['Scan complete · 11 candidates ready for auto-import', 'ok'],
+  ];
+  let i = 0;
+  function tick() {
+    if (i >= lines.length) return;
+    logLine(lines[i][0], lines[i][1]);
+    i++;
+    setTimeout(tick, 300);
+  }
+  tick();
+}
+
+function simulateAutoImport() {
+  const rows = [
+    { offer: 'Chime Banking',          vert: 'us-finance',   score: 95, decision: '✓ IMPORT → cashonnow.us, zerointerestshop.us' },
+    { offer: 'Acorns Earn',            vert: 'us-finance',   score: 88, decision: '✓ IMPORT → cashonnow.us' },
+    { offer: 'The Zebra Auto Quote',   vert: 'us-insurance', score: 92, decision: '✓ IMPORT → insurancepick.us, autoinsuranceguide.us, carinsuranceguide.us' },
+    { offer: 'Geico Auto Quote',       vert: 'us-insurance', score: 90, decision: '✓ IMPORT → insurancepick.us' },
+    { offer: 'BetMGM Sportsbook',      vert: 'us-betting',   score: 95, decision: '— skipped (already approved on betting sites)' },
+    { offer: 'DraftKings Sportsbook',  vert: 'us-betting',   score: 92, decision: '✓ IMPORT → top10betting.us, top20betting.us' },
+    { offer: 'SoFi Personal Loan',     vert: 'us-finance',   score: 85, decision: '✓ IMPORT → cashonnow.us' },
+    { offer: 'CareCredit (US-health)', vert: 'us-health',    score: 35, decision: '⚠ HOLD — no us-health site in inventory' },
+    { offer: 'World of Tanks ME',      vert: 'gaming',       score: 12, decision: '⚠ HOLD — vertical mismatch' },
+    { offer: 'Survey Junkie',          vert: 'us-survey',    score: 28, decision: '⚠ HOLD — vertical mismatch' },
+    { offer: 'Nubank (incoming)',      vert: 'br-finance',   score: 78, decision: '✓ IMPORT → quizfinanceiro.com, quantorendeinvestimento.com' },
+  ];
+  const tbody = document.getElementById('auto-import-body');
+  tbody.innerHTML = '';
+  rows.forEach((r, i) => {
+    setTimeout(() => {
+      const tr = document.createElement('tr');
+      const pill = r.score >= 70 ? 'pill-green' : (r.score >= 40 ? 'pill-yellow' : 'pill-red');
+      tr.innerHTML = `
+        <td>${r.offer}</td>
+        <td><span style="font-size:11px;color:#94a3b8">${r.vert}</span></td>
+        <td><span class="pill ${pill}">${r.score}</span></td>
+        <td style="font-size:12px;color:${r.decision.startsWith('✓')?'#6ee7b7':'#fcd34d'}">${r.decision}</td>
+      `;
+      tbody.appendChild(tr);
+      document.getElementById('auto-import-table').style.display = '';
+    }, i * 150);
+  });
+}
+
+function simulateServe() {
+  document.getElementById('render-area').style.display = '';
+}
+</script>
+
+</body>
+</html>

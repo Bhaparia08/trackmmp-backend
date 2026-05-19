@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Discovery Hub — simplified preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .topbar { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .topbar a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px; }
+    .pagehdr h2 { margin: 0; font-size: 24px; }
+    .pagehdr p { margin: 4px 0 22px; color: #94a3b8; font-size: 13px; }
+
+    .bucket { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; margin-bottom: 18px; }
+    .bucket-hdr { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .bucket-hdr h3 { margin: 0; font-size: 18px; font-weight: 600; flex: 1; }
+    .bucket-hdr .count { font-size: 12px; color: #94a3b8; }
+    .bucket.ready    { border-left: 4px solid #10b981; }
+    .bucket.unfit    { border-left: 4px solid #f59e0b; }
+    .bucket.broken   { border-left: 4px solid #ef4444; }
+    .icon { font-size: 22px; }
+
+    .offer { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #ffffff10; font-size: 13px; }
+    .offer:last-child { border-bottom: 0; }
+    .offer .name { flex: 1; }
+    .offer .name strong { color: #fff; }
+    .offer .name .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
+    .offer .name .pill-vertical { background: rgba(99,102,241,.15); color: #818cf8; }
+    .offer .name .pill-site { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .offer .payout { color: #10b981; font-weight: 600; font-size: 12px; min-width: 90px; text-align: right; }
+    .btn { padding: 6px 14px; border-radius: 6px; border: 0; font: inherit; font-weight: 600; font-size: 12px; cursor: pointer; }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #475569; }
+    .btn-ghost:hover { color: #fff; border-color: #94a3b8; }
+    .btn-danger { background: rgba(239,68,68,.15); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
+    .btn-danger:hover { background: #ef4444; color: #fff; }
+
+    .one-click { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 14px; border-top: 1px solid #ffffff14; }
+    .one-click .desc { font-size: 12px; color: #94a3b8; }
+
+    .empty-state { text-align: center; padding: 20px; color: #94a3b8; font-style: italic; font-size: 13px; }
+
+    .demo-banner { background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: #c7d2fe; }
+    .demo-banner strong { color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>Preview: Discovery Hub (simplified)</h1>
+</div>
+
+<div class="wrap">
+
+<div class="demo-banner">
+  <strong>This is a mockup.</strong> The numbers here are illustrative — your real prod state is 4 ready, 314 don't fit, 0 broken (after recent cleanup).
+</div>
+
+<div class="pagehdr">
+  <h2>New offers from your networks</h2>
+  <p>Auto-imported from Everflow, TUNE, Impact, Insparx · last scan 12 minutes ago · <a href="#" style="color:#818cf8;text-decoration:none">scan now</a></p>
+</div>
+
+<!-- Ready bucket -->
+<div class="bucket ready">
+  <div class="bucket-hdr">
+    <span class="icon">✅</span>
+    <h3>Ready to use</h3>
+    <span class="count">4 offers · all checks passed · matched to your sites</span>
+  </div>
+
+  <div class="offer">
+    <div class="name">
+      <strong>Chime Banking</strong>
+      <span class="pill pill-vertical">US Finance</span>
+      <span class="pill pill-site">→ cashonnow.us</span>
+    </div>
+    <div class="payout">$75 CPA</div>
+    <button class="btn btn-primary" onclick="this.textContent='✓ Added';this.disabled=true">Add to site</button>
+  </div>
+
+  <div class="offer">
+    <div class="name">
+      <strong>Nubank Brasil</strong>
+      <span class="pill pill-vertical">BR Finance</span>
+      <span class="pill pill-site">→ quizfinanceiro.com</span>
+    </div>
+    <div class="payout">R$30 CPA</div>
+    <button class="btn btn-primary" onclick="this.textContent='✓ Added';this.disabled=true">Add to site</button>
+  </div>
+
+  <div class="offer">
+    <div class="name">
+      <strong>The Zebra Auto Quote</strong>
+      <span class="pill pill-vertical">US Insurance</span>
+      <span class="pill pill-site">→ insurancepick.us</span>
+    </div>
+    <div class="payout">$45 CPA</div>
+    <button class="btn btn-primary" onclick="this.textContent='✓ Added';this.disabled=true">Add to site</button>
+  </div>
+
+  <div class="offer">
+    <div class="name">
+      <strong>Practo Plus</strong>
+      <span class="pill pill-vertical">IN Health</span>
+      <span class="pill pill-site">→ doctorreviews.in</span>
+    </div>
+    <div class="payout">₹100 CPA</div>
+    <button class="btn btn-primary" onclick="this.textContent='✓ Added';this.disabled=true">Add to site</button>
+  </div>
+
+  <div class="one-click">
+    <div class="desc">Don't want to click each one? <strong style="color:#fff">Approve all 4 to their matched sites in one go.</strong></div>
+    <button class="btn btn-primary" onclick="alert('Demo: 4 campaigns approved + auto-deployed to inventory in one API call.\\nReal endpoint: POST /api/discovery/candidates/bulk\\nbody: { action: \&quot;import\&quot;, ids: [...], auto_deploy: true }')">Add all 4 →</button>
+  </div>
+</div>
+
+<!-- Don't fit bucket -->
+<div class="bucket unfit">
+  <div class="bucket-hdr">
+    <span class="icon">⚠</span>
+    <h3>Don't fit your sites</h3>
+    <span class="count">314 offers · vertical mismatch with your portfolio</span>
+  </div>
+
+  <div class="offer">
+    <div class="name">
+      <strong>314 dating offers from Insparx</strong>
+      <span class="pill" style="background:rgba(245,158,11,.15);color:#fcd34d">Matchmaking · Casual Dating</span>
+    </div>
+    <div class="payout">avg $7</div>
+  </div>
+
+  <p style="font-size:13px;color:#94a3b8;margin:8px 0 0;padding:0 14px">
+    You don't have a dating site in your inventory. These will keep showing up on every scan unless you reject them or set up a vertical alias.
+  </p>
+
+  <div class="one-click">
+    <div class="desc">Bulk decision — what do you want to do with all 314?</div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-danger" onclick="alert('Demo: 314 rejected in one API call.\\nReal endpoint: POST /api/discovery/candidates/bulk { action: \&quot;reject\&quot; }')">Reject all 314</button>
+      <button class="btn btn-ghost">Keep — I'll decide later</button>
+    </div>
+  </div>
+</div>
+
+<!-- Broken bucket -->
+<div class="bucket broken">
+  <div class="bucket-hdr">
+    <span class="icon">🚫</span>
+    <h3>Broken landing pages</h3>
+    <span class="count">0 offers</span>
+  </div>
+  <div class="empty-state">All clear — no broken landing pages from your last scan.</div>
+</div>
+
+<p style="margin-top: 40px; padding-top: 18px; border-top: 1px solid #ffffff14; color: #64748b; font-size: 12px;">
+  <a href="approvals.html" style="color:#818cf8;text-decoration:none">← Previous preview: Approval Queue</a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="my-sites.html" style="color:#818cf8;text-decoration:none">→ Next: My Sites health dashboard</a>
+</p>
+
+</div>
+</body>
+</html>

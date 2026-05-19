@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TrackMMP — Simplified UX preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.6 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px; }
+    h1 { font-size: 32px; margin: 0 0 6px; font-weight: 700; }
+    .lede { font-size: 16px; color: #cbd5e1; margin: 0 0 32px; }
+    .card-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+    @media (min-width: 720px) { .card-grid { grid-template-columns: 1fr 1fr 1fr; } }
+    .card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; text-decoration: none; color: inherit; transition: transform .15s, border-color .15s; }
+    .card:hover { border-color: #6366f1; transform: translateY(-2px); }
+    .card h3 { font-size: 16px; margin: 0 0 6px; color: #fff; }
+    .card p { font-size: 13px; color: #94a3b8; margin: 0 0 14px; line-height: 1.5; }
+    .card .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 10px; background: rgba(99,102,241,.15); color: #818cf8; text-transform: uppercase; letter-spacing: .04em; }
+    .card .num { font-size: 28px; font-weight: 700; color: #818cf8; margin-bottom: 10px; }
+    .note { background: rgba(245,158,11,.08); border-left: 3px solid #f59e0b; padding: 12px 16px; margin: 28px 0; font-size: 13px; color: #fde68a; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Simplified UX preview</h1>
+<p class="lede">Three mockup pages showing what the programmatic platform could look like for a non-technical operator. Click any card to open.</p>
+
+<div class="card-grid">
+  <a class="card" href="approvals.html">
+    <div class="num">1</div>
+    <span class="badge">Approval queue</span>
+    <h3 style="margin-top:10px">Site-first matching</h3>
+    <p>Instead of 200+ rows in a flat table, group by site. Each site shows offers waiting and we suggest which to approve or reject based on vertical/GEO match.</p>
+  </a>
+
+  <a class="card" href="discovery.html">
+    <div class="num">2</div>
+    <span class="badge">Discovery hub</span>
+    <h3 style="margin-top:10px">Auto-triaged tiles</h3>
+    <p>3 buckets — "Ready to use" / "Don't fit" / "Broken" — instead of a 318-row table. Each ready offer is pre-matched to your site. One click approves a whole bucket.</p>
+  </a>
+
+  <a class="card" href="my-sites.html">
+    <div class="num">3</div>
+    <span class="badge">New page</span>
+    <h3 style="margin-top:10px">My Sites health</h3>
+    <p>One card per site. At-a-glance status: code installed? ads.txt deployed? offers serving? earning today? Every problem has a "fix this" button.</p>
+  </a>
+
+  <a class="card" href="connector-flow.html" style="border-color:#10b981">
+    <div class="num">4</div>
+    <span class="badge" style="background:rgba(16,185,129,.15);color:#6ee7b7">New — May 20</span>
+    <h3 style="margin-top:10px">Connector flow</h3>
+    <p>Walks through the full 5-step loop: add a network's credentials → first scan pulls offers → auto-import rule routes them to matching sites → SDK serves the best one to each visitor.</p>
+  </a>
+</div>
+
+<div class="note">
+  <strong>This is a clickable mockup.</strong> Buttons and toggles work locally to demo the flow but don't talk to the real platform. The look matches the existing TrackMMP dark theme so you can imagine it dropped in.
+</div>
+
+<p style="margin-top:40px;font-size:12px;color:#64748b;text-align:center">Generated 2026-05-17 · static preview, no backend required</p>
+
+</div>
+</body>
+</html>

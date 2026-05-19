@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Approval Queue — simplified preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .topbar { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .topbar a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px; }
+    .pagehdr { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 22px; }
+    .pagehdr h2 { margin: 0; font-size: 24px; }
+    .pagehdr p { margin: 4px 0 0; color: #94a3b8; font-size: 13px; }
+    .filters { display: flex; gap: 10px; flex-wrap: wrap; }
+    select { background: #1a1a2e; color: #e2e8f0; border: 1px solid #ffffff20; padding: 7px 12px; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
+
+    .site-card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; margin-bottom: 20px; }
+    .site-hdr { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+    .site-hdr .flag { font-size: 24px; }
+    .site-hdr h3 { margin: 0; font-size: 17px; font-weight: 600; }
+    .site-meta { color: #94a3b8; font-size: 12px; margin-bottom: 16px; padding-left: 38px; }
+    .site-meta strong { color: #fcd34d; font-weight: 600; }
+
+    .offer-group { background: #0a0a14; border: 1px solid #ffffff14; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: flex-start; gap: 14px; }
+    .offer-group.suggest-yes { border-left: 3px solid #10b981; }
+    .offer-group.suggest-no  { border-left: 3px solid #ef4444; }
+    .offer-group.suggest-batch { border-left: 3px solid #f59e0b; }
+    .offer-group .icon { font-size: 22px; line-height: 1; margin-top: 2px; }
+    .offer-group .body { flex: 1; min-width: 0; }
+    .offer-group .title { font-weight: 600; font-size: 14px; color: #fff; }
+    .offer-group .meta { font-size: 12px; color: #94a3b8; margin-top: 3px; }
+    .offer-group .meta .advertiser { color: #a5f3fc; font-weight: 500; }
+    .offer-group .meta .payout { color: #10b981; font-weight: 600; }
+    .offer-group .actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+    .btn { padding: 7px 14px; border-radius: 6px; border: 0; font: inherit; font-weight: 600; font-size: 12px; cursor: pointer; }
+    .btn-primary  { background: #6366f1; color: #fff; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-success  { background: #10b981; color: #fff; }
+    .btn-danger   { background: #ef4444; color: #fff; }
+    .btn-ghost    { background: transparent; color: #94a3b8; border: 1px solid #475569; }
+    .btn-ghost:hover { color: #fff; border-color: #94a3b8; }
+
+    .batch-msg { color: #fde68a; font-size: 13px; margin-bottom: 8px; }
+    .ai-hint { color: #cbd5e1; font-style: italic; font-size: 12px; margin-top: 4px; }
+    .ai-hint.good { color: #6ee7b7; }
+    .ai-hint.bad  { color: #fca5a5; }
+
+    .collapsed { display: none; }
+    .show-link { color: #818cf8; cursor: pointer; font-size: 13px; padding-left: 38px; display: inline-block; margin-top: 4px; }
+
+    .demo-banner { background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: #c7d2fe; }
+    .demo-banner strong { color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>Preview: Approval Queue (simplified)</h1>
+</div>
+
+<div class="wrap">
+
+<div class="demo-banner">
+  <strong>This is a mockup</strong> — buttons toggle states for demo only. Compare with the real page at /approvals to see the difference in cognitive load.
+</div>
+
+<div class="pagehdr">
+  <div>
+    <h2>Match offers to your sites</h2>
+    <p>3 sites have offers waiting · 17 decisions to make</p>
+  </div>
+  <div class="filters">
+    <select>
+      <option>All sites</option>
+      <option>top10betting.us</option>
+      <option>cashonnow.us</option>
+    </select>
+    <select>
+      <option>Show all</option>
+      <option>Hide perfect matches (auto-approve them)</option>
+      <option>Hide bad matches (auto-reject them)</option>
+    </select>
+  </div>
+</div>
+
+<!-- Site 1 — top10betting.us -->
+<div class="site-card">
+  <div class="site-hdr">
+    <span class="flag">🇺🇸</span>
+    <h3>top10betting.us</h3>
+  </div>
+  <div class="site-meta">US Betting site · <strong>4 offers waiting</strong> · 1 strong match, 3 we suggest you check</div>
+
+  <div class="offer-group suggest-yes">
+    <span class="icon">✓</span>
+    <div class="body">
+      <div class="title">BetMGM Sportsbook</div>
+      <div class="meta">from <span class="advertiser">BetMGM</span> · <span class="payout">$250 per signup</span> · US betting offer</div>
+      <div class="ai-hint good">Strong match: same vertical (betting), same country (US), high payout.</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-success" onclick="this.textContent='✓ Approved';this.disabled=true">Approve</button>
+      <button class="btn btn-ghost">Skip</button>
+    </div>
+  </div>
+
+  <div class="offer-group suggest-yes">
+    <span class="icon">✓</span>
+    <div class="body">
+      <div class="title">DraftKings Sportsbook</div>
+      <div class="meta">from <span class="advertiser">DraftKings</span> · <span class="payout">$200 per signup</span> · US betting offer</div>
+      <div class="ai-hint good">Strong match: same vertical, same country.</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-success" onclick="this.textContent='✓ Approved';this.disabled=true">Approve</button>
+      <button class="btn btn-ghost">Skip</button>
+    </div>
+  </div>
+
+  <div class="offer-group suggest-no">
+    <span class="icon">✗</span>
+    <div class="body">
+      <div class="title">World of Tanks</div>
+      <div class="meta">from <span class="advertiser">Wargaming</span> · <span class="payout">$10 per install</span> · gaming offer · worldwide</div>
+      <div class="ai-hint bad">Doesn't fit: gaming offer on a betting site. We suggest rejecting unless your site reviews gaming products.</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-danger" onclick="this.textContent='✗ Rejected';this.disabled=true">Reject</button>
+      <button class="btn btn-ghost">Approve anyway</button>
+    </div>
+  </div>
+
+  <div class="offer-group suggest-batch">
+    <span class="icon">⚠</span>
+    <div class="body">
+      <div class="title">8 offers from xlWin Media</div>
+      <div class="batch-msg">All 8 are similar low-payout SOI offers ($0.05–$2 CPI). Same advertiser, different country/language. Batch-approve them as a group?</div>
+      <div class="meta">Includes: SG xlwin SOI · MY xlwin SOI · TH xlwin SOI · ID xlwin SOI · 4 more</div>
+    </div>
+    <div class="actions" style="flex-direction:column;align-items:flex-end">
+      <button class="btn btn-primary" onclick="alert('Demo: would approve 8 rows in one API call');return false">Approve all 8</button>
+      <button class="btn btn-ghost">Review one by one</button>
+    </div>
+  </div>
+</div>
+
+<!-- Site 2 — cashonnow.us -->
+<div class="site-card">
+  <div class="site-hdr">
+    <span class="flag">🇺🇸</span>
+    <h3>cashonnow.us</h3>
+  </div>
+  <div class="site-meta">US Finance site · <strong>6 offers waiting</strong> · 4 strong matches</div>
+
+  <div class="offer-group suggest-yes">
+    <span class="icon">✓</span>
+    <div class="body">
+      <div class="title">Chime Banking</div>
+      <div class="meta">from <span class="advertiser">Chime</span> · <span class="payout">$75 per signup</span> · US finance offer</div>
+      <div class="ai-hint good">Strong match: same vertical, same country, high CTR on similar sites.</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-success" onclick="this.textContent='✓ Approved';this.disabled=true">Approve</button>
+      <button class="btn btn-ghost">Skip</button>
+    </div>
+  </div>
+
+  <div onclick="this.parentElement.querySelectorAll('.collapsed').forEach(e=>e.classList.remove('collapsed'));this.remove()" class="show-link">Show 5 more offers for this site →</div>
+
+  <div class="offer-group suggest-yes collapsed">
+    <span class="icon">✓</span>
+    <div class="body">
+      <div class="title">SoFi Personal Loan</div>
+      <div class="meta">from <span class="advertiser">SoFi</span> · <span class="payout">$50 per application</span> · US finance offer</div>
+      <div class="ai-hint good">Strong match.</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-success">Approve</button>
+      <button class="btn btn-ghost">Skip</button>
+    </div>
+  </div>
+</div>
+
+<!-- Site 3 — quizfinanceiro.com -->
+<div class="site-card">
+  <div class="site-hdr">
+    <span class="flag">🇧🇷</span>
+    <h3>quizfinanceiro.com</h3>
+  </div>
+  <div class="site-meta">Brazil Finance site · <strong>6 offers waiting</strong> · 0 strong matches yet</div>
+
+  <div class="offer-group suggest-batch">
+    <span class="icon">⚠</span>
+    <div class="body">
+      <div class="title">No campaigns with vertical "br-finance" available yet</div>
+      <div class="batch-msg">Connect a Brazilian finance affiliate network (Lomadee, Awin BR, Hotmart) to start seeing offers here, OR set up an alias to map a similar vertical.</div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary">Set up vertical alias</button>
+      <button class="btn btn-ghost">Connect a network</button>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top: 40px; padding-top: 18px; border-top: 1px solid #ffffff14; color: #64748b; font-size: 12px;">
+  <a href="discovery.html" style="color:#818cf8;text-decoration:none">→ Next preview: Discovery Hub (auto-triaged tiles)</a>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <a href="my-sites.html" style="color:#818cf8;text-decoration:none">My Sites health dashboard</a>
+</p>
+
+</div>
+</body>
+</html>
