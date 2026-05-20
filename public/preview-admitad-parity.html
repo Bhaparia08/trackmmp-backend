@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admitad — Full Platform Parity · Proposal</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f1f5f9; font-size: 14px; line-height: 1.55; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 22px 80px; }
+  .hdr { margin-bottom: 28px; padding-bottom: 18px; border-bottom: 1px solid #1e293b; }
+  .pill-tag { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; background: rgba(239,68,68,.15); color: #f87171; }
+  .pill-pending { background: rgba(251,191,36,.18); color: #fbbf24; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .sub { color: #94a3b8; font-size: 13px; }
+  .section { margin-top: 32px; }
+  .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #6366f1; font-weight: 700; margin-bottom: 12px; }
+  .panel { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 18px; margin-bottom: 10px; }
+  .panel.before { border-color: #4b1d1d; background: #1f1212; }
+  .panel.after  { border-color: #1d4b2c; background: #0f1a14; }
+  .panel.alert  { border-color: #5b3030; background: #1f1414; }
+  .panel-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 12px; }
+  .panel.before .panel-label { color: #ef4444; }
+  .panel.after  .panel-label { color: #10b981; }
+  .panel.alert  .panel-label { color: #fbbf24; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; padding: 9px 10px; color: #94a3b8; font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; }
+  td { padding: 9px 10px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code, p code { background: #0f172a; padding: 1px 6px; border-radius: 4px; font-size: 11.5px; color: #a5b4fc; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 10px; font-weight: 700; }
+  .pill-ok    { background: rgba(16,185,129,.18); color: #10b981; }
+  .pill-gap   { background: rgba(239,68,68,.18);  color: #ef4444; }
+
+  .callout { background: rgba(99,102,241,.08); border-left: 3px solid #6366f1; padding: 14px 16px; border-radius: 4px; margin: 12px 0; font-size: 13px; color: #cbd5e1; }
+  .callout-warn { background: rgba(251,191,36,.08); border-left-color: #f59e0b; }
+  .callout-alert { background: rgba(239,68,68,.08); border-left-color: #ef4444; }
+  .callout-ok { background: rgba(16,185,129,.08); border-left-color: #10b981; }
+  .callout strong { color: #fff; }
+
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0; }
+  .ba .panel { margin-bottom: 0; }
+
+  /* Tile mockup (matches /integration look) */
+  .tile-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 10px 0; }
+  .tile { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; }
+  .tile.new { border-color: #ef4444; background: rgba(239,68,68,.04); position: relative; }
+  .tile.new::after { content: 'NEW'; position: absolute; top: 6px; right: 8px; font-size: 9px; font-weight: 700; color: #f87171; letter-spacing: 1px; }
+  .tile-icon { font-size: 22px; margin-bottom: 6px; }
+  .tile-name { font-size: 13px; font-weight: 700; color: #f1f5f9; margin-bottom: 2px; }
+  .tile-desc { font-size: 11px; color: #94a3b8; }
+
+  .form-field { background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 9px 12px; margin-bottom: 8px; }
+  .form-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }
+  .form-value { font-size: 13px; color: #e2e8f0; font-family: 'SF Mono', monospace; }
+  .form-value.empty { color: #475569; font-style: italic; }
+  .form-value.bad { color: #ef4444; background: rgba(239,68,68,.1); padding: 2px 6px; border-radius: 4px; }
+  .form-value.good { color: #10b981; }
+
+  ul.steps { padding-left: 22px; margin: 8px 0; }
+  ul.steps li { padding: 4px 0; font-size: 12.5px; color: #cbd5e1; }
+  ul.steps li strong { color: #fff; }
+
+  ul.bare { list-style: none; padding-left: 0; }
+  ul.bare li { padding: 5px 0 5px 20px; position: relative; font-size: 12.5px; color: #cbd5e1; }
+  ul.bare li::before { content: '+'; color: #10b981; position: absolute; left: 0; font-weight: 700; }
+  ul.bare li.warn::before { content: '⚠'; color: #f59e0b; }
+  ul.bare li.fix::before { content: '🔧'; }
+  ul.bare li.risk::before { content: '✗'; color: #ef4444; }
+
+  .code-block { background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 10px 14px; font-family: 'SF Mono', monospace; font-size: 11.5px; color: #cbd5e1; overflow-x: auto; line-height: 1.7; }
+  .code-block .green { color: #10b981; }
+  .code-block .red   { color: #ef4444; }
+  .code-block .blue  { color: #818cf8; }
+  .code-block .mute  { color: #64748b; }
+
+  @media (max-width: 800px) { .ba, .tile-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <span class="pill-tag">Admitad parity · 3 changes · NOT BUILT YET</span>
+    <span class="pill-tag pill-pending">⏸ Awaiting deploy consent</span>
+    <h1>Bring Admitad to full parity with the other 8 platforms</h1>
+    <p class="sub">You said: "i need it also be like same as other platform works". Audit done. Proposing 3 surgical changes + 1 security fix.</p>
+  </div>
+
+  <!-- ───── Today's gap ───── -->
+  <div class="section">
+    <div class="section-title">1 · Current gap vs the other 8 platforms</div>
+    <div class="panel">
+      <table>
+        <thead><tr><th>UI Touchpoint</th><th>Other 8 platforms</th><th>Admitad TODAY</th><th>After fix</th></tr></thead>
+        <tbody>
+          <tr><td>/integration page tile (postback wizard)</td><td><span class="pill pill-ok">✓ all 8</span></td><td><span class="pill pill-gap">✗ missing</span></td><td><span class="pill pill-ok">✓ added</span></td></tr>
+          <tr><td>/api-access dropdown (credential save)</td><td><span class="pill pill-ok">✓ all 8</span></td><td><span class="pill pill-gap">✗ missing</span></td><td><span class="pill pill-ok">✓ added</span></td></tr>
+          <tr><td>/offer-import tile (already exists)</td><td><span class="pill pill-ok">✓ all 8</span></td><td><span class="pill pill-ok">✓ exists</span></td><td><span class="pill pill-ok">✓ kept</span></td></tr>
+          <tr><td>Discovery Hub scan (auto)</td><td><span class="pill pill-ok">✓ all 8</span></td><td><span class="pill pill-ok">✓ via bridge</span></td><td><span class="pill pill-ok">✓ kept</span></td></tr>
+          <tr><td>Backend postback macros</td><td><span class="pill pill-ok">✓ all 8</span></td><td><span class="pill pill-ok">✓ subid</span></td><td><span class="pill pill-ok">✓ kept</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ───── Security issue ───── -->
+  <div class="section">
+    <div class="section-title">2 · 🔴 Security finding to fix at the same time</div>
+    <div class="panel alert">
+      <p style="margin-bottom: 10px;">In <code>frontend/src/pages/OfferImport.jsx</code> the Admitad tile has <strong style="color:#fbbf24;">real-looking OAuth2 credentials hard-coded as form defaults</strong>:</p>
+      <div class="code-block"><span class="mute">// Today — shipped in the public JS bundle to every visitor:</span>
+<span class="red">defaultValue: 'foJ7UvNKRSSLGQOq0b4ZRrep8nexqH'</span>  <span class="mute">// Client ID</span>
+<span class="red">defaultValue: 'jvy7IO2V5yJ1UTMR8LHYGPSZSAApat'</span>  <span class="mute">// Client Secret</span>
+
+<span class="mute">// Proposed:</span>
+<span class="green">defaultValue: ''</span>
+<span class="green">defaultValue: ''</span></div>
+      <p style="margin-top: 10px;">Two operators in two browsers could accidentally both hit the Admitad API as the same account by not editing the prefilled values.</p>
+    </div>
+    <div class="callout callout-alert"><strong>Recommend:</strong> rotate the exposed OAuth2 client at <code>cabinet.admitad.com → Profile → API Keys</code> if you own this account, AND remove the defaults in the code change. The rotation needs to happen on Admitad's side — I can do the code part.</div>
+  </div>
+
+  <!-- ───── Tile mockup ───── -->
+  <div class="section">
+    <div class="section-title">3 · How Admitad will look on /integration page</div>
+    <div class="panel after">
+      <div class="panel-label">After — full PLATFORMS tile, same style as Swaarm/Insparx</div>
+      <div class="tile-grid">
+        <div class="tile"><div class="tile-icon">⚡</div><div class="tile-name">Everflow</div><div class="tile-desc">CPA networks</div></div>
+        <div class="tile"><div class="tile-icon">♯</div><div class="tile-name">TUNE / HasOffers</div><div class="tile-desc">go2cloud.org networks</div></div>
+        <div class="tile"><div class="tile-icon">◉</div><div class="tile-name">Impact Radius</div><div class="tile-desc">Partnership automation</div></div>
+        <div class="tile new" style="color:#ef4444;"><div class="tile-icon">◈</div><div class="tile-name">Admitad</div><div class="tile-desc">Global CPA network</div></div>
+        <div class="tile"><div class="tile-icon">⬡</div><div class="tile-name">Swaarm</div><div class="tile-desc">Pokkt, Mobavenue, etc.</div></div>
+        <div class="tile"><div class="tile-icon">✦</div><div class="tile-name">Insparx (CAKE)</div><div class="tile-desc">CAKE platform networks</div></div>
+        <div class="tile"><div class="tile-icon">◆</div><div class="tile-name">CityAds</div><div class="tile-desc">CPA network</div></div>
+        <div class="tile"><div class="tile-icon">⚙</div><div class="tile-name">Custom / Other</div><div class="tile-desc">Manual macro config</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── PLATFORMS entry ───── -->
+  <div class="section">
+    <div class="section-title">4 · The new PLATFORMS entry (AdvertiserIntegration.jsx)</div>
+    <div class="panel">
+      <div class="code-block"><span class="blue">admitad</span>: {
+  name: <span class="green">'Admitad'</span>,
+  icon: <span class="green">'◈'</span>,
+  color: <span class="green">'#ef4444'</span>,
+  description: <span class="green">'Admitad — global CPA affiliate network (publishers + merchants)'</span>,
+  macros: {
+    click_id:   <span class="green">'{subid}'</span>,        <span class="mute">// Admitad echoes our click_id back as subid</span>
+    gaid:       <span class="green">'{gaid}'</span>,
+    idfa:       <span class="green">'{idfa}'</span>,
+    goal_value: <span class="green">'{action_id}'</span>,
+    payout:     <span class="green">'{payment_sum}'</span>,
+    revenue:    <span class="green">'{order_sum}'</span>,
+    sub1:       <span class="green">'{subid1}'</span>,
+    sub2:       <span class="green">'{subid2}'</span>,
+  },
+  credFields: [
+    { key: <span class="green">'api_key'</span>,    label: <span class="green">'Client ID'</span>,
+      placeholder: <span class="green">'cabinet.admitad.com → Profile → API Keys → OAuth2 client_id'</span> },
+    { key: <span class="green">'api_secret'</span>, label: <span class="green">'Client Secret'</span>,
+      placeholder: <span class="green">'cabinet.admitad.com → Profile → API Keys → OAuth2 client_secret'</span> },
+    { key: <span class="green">'website_id'</span>, label: <span class="green">'Website ID'</span>,
+      placeholder: <span class="green">'Your Admitad publisher Website ID (optional)'</span>, optional: <span class="blue">true</span> },
+  ],
+  steps: [
+    { title: <span class="green">'Log in to Admitad cabinet'</span>,
+      body: <span class="green">'Go to cabinet.admitad.com and sign in as a publisher.'</span> },
+    { title: <span class="green">'Generate OAuth2 credentials'</span>,
+      body: <span class="green">'Profile → API Keys → Create new credentials. Save the client_id and client_secret.'</span> },
+    { title: <span class="green">'Set Global Postback URL'</span>,
+      body: <span class="green">'Account → Postback Settings. Paste the Install Postback URL below. Admitad fires it per conversion.'</span> },
+    { title: <span class="green">'Pass our click ID as subid'</span>,
+      body: <span class="green">'In your campaign deeplinks add &subid={your_click_id}. Admitad echoes this back as {subid} in postbacks.'</span> },
+    { title: <span class="green">'Map sub IDs (optional)'</span>,
+      body: <span class="green">'Use &subid1=, &subid2=, &subid3= for extra params. Admitad returns them as-is in postbacks.'</span> },
+    { title: <span class="green">'Pull offers automatically'</span>,
+      body: <span class="green">'Discovery Hub → Connectors → Admitad → Sync. We pull the full advcampaigns catalog and surface for one-click import.'</span> },
+    { title: <span class="green">'Test'</span>,
+      body: <span class="green">'Fire a test click. Check Postbacks page within seconds for an "attributed" entry.'</span> },
+  ],
+  docUrl: <span class="green">'https://developers.admitad.com/'</span>,
+},</div>
+    </div>
+  </div>
+
+  <!-- ───── ApiAccess form change ───── -->
+  <div class="section">
+    <div class="section-title">5 · One-line addition to /api-access dropdown</div>
+    <div class="ba">
+      <div class="panel before">
+        <div class="panel-label">Today</div>
+        <div class="code-block">PLATFORM_OPTIONS = [
+  { value: <span class="green">'everflow'</span>,   label: <span class="green">'Everflow'</span> },
+  { value: <span class="green">'tune'</span>,       label: <span class="green">'TUNE / HasOffers'</span> },
+  { value: <span class="green">'impact'</span>,     label: <span class="green">'Impact'</span> },
+  { value: <span class="green">'insparx'</span>,    label: <span class="green">'Insparx (CAKE)'</span> },
+  { value: <span class="green">'cityads'</span>,    label: <span class="green">'CityAds'</span> },
+  <span class="red">{ value: 'rakuten',    label: 'Rakuten' },</span>
+  <span class="red">{ value: 'adjust',     label: 'Adjust' },</span>
+  <span class="red">{ value: 'branch',     label: 'Branch' },</span>
+  { value: <span class="green">'custom'</span>,     label: <span class="green">'Custom / Other'</span> },
+];</div>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">After</div>
+        <div class="code-block">PLATFORM_OPTIONS = [
+  { value: <span class="green">'everflow'</span>,   label: <span class="green">'Everflow'</span> },
+  { value: <span class="green">'tune'</span>,       label: <span class="green">'TUNE / HasOffers'</span> },
+  { value: <span class="green">'impact'</span>,     label: <span class="green">'Impact'</span> },
+  { value: <span class="green">'insparx'</span>,    label: <span class="green">'Insparx (CAKE)'</span> },
+  { value: <span class="green">'cityads'</span>,    label: <span class="green">'CityAds'</span> },
+  <span class="blue">{ value: 'admitad',    label: 'Admitad' },     // NEW</span>
+  { value: <span class="green">'rakuten'</span>,    label: <span class="green">'Rakuten'</span> },
+  { value: <span class="green">'adjust'</span>,     label: <span class="green">'Adjust'</span> },
+  { value: <span class="green">'branch'</span>,     label: <span class="green">'Branch'</span> },
+  { value: <span class="green">'custom'</span>,     label: <span class="green">'Custom / Other'</span> },
+];</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── Files changed ───── -->
+  <div class="section">
+    <div class="section-title">6 · Files changed</div>
+    <div class="panel">
+      <table>
+        <thead><tr><th>File</th><th>Change</th><th>Risk</th></tr></thead>
+        <tbody>
+          <tr><td><code>frontend/src/pages/AdvertiserIntegration.jsx</code></td><td>Add Admitad to <code>PLATFORMS</code> object (~50 lines)</td><td><span class="pill pill-ok">low</span></td></tr>
+          <tr><td><code>frontend/src/pages/ApiAccess.jsx</code></td><td>Add 1 entry to <code>PLATFORM_OPTIONS</code></td><td><span class="pill pill-ok">low</span></td></tr>
+          <tr><td><code>frontend/src/pages/OfferImport.jsx</code></td><td>🔴 Empty out the 2 <code>defaultValue</code> strings (security)</td><td><span class="pill pill-ok">low</span></td></tr>
+          <tr><td><strong>Frontend bundle rebuild</strong></td><td>npm run build → new <code>index-XXXX.js</code></td><td><span class="pill pill-ok">low</span></td></tr>
+          <tr><td>Backend</td><td><strong>No changes</strong> — postback macros + adapter already exist</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-ok"><strong>Why low risk:</strong> additive changes only. Existing Admitad credentials in DB keep working. The bridge keeps fetching offers. Discovery Hub keeps showing them. Just unlocks 2 more UI entry points and removes a security wart.</div>
+  </div>
+
+  <!-- ───── Deploy plan ───── -->
+  <div class="section">
+    <div class="section-title">7 · Deploy plan (when you say go)</div>
+    <div class="panel">
+      <ul class="steps">
+        <li>1. Edit the 3 frontend source files</li>
+        <li>2. <code>npm run build</code> in /frontend → new bundle</li>
+        <li>3. Restore wiped preview HTMLs from git (pitfall #2)</li>
+        <li>4. Stage: 3 frontend source files won't be in backend repo, only the new bundle <code>index.html</code> and <code>index-XXXX.js</code></li>
+        <li>5. Commit + push to main → Render auto-deploys</li>
+        <li>6. Watch for new bundle hash to land on prod (~3-4 min)</li>
+        <li>7. Verify: /integration page renders Admitad tile, /api-access dropdown lists Admitad, /offer-import shows empty defaults</li>
+      </ul>
+    </div>
+
+    <div class="callout callout-warn"><strong>Per standing rule:</strong> nothing happens until you reply. Say <strong style="color:#fbbf24;">"deploy Admitad parity"</strong> and I'll do steps 1–7. Say <strong>"tweak X"</strong> and I'll update the design first.</div>
+  </div>
+
+  <div class="section" style="text-align:center;color:#475569;font-size:11px;margin-top:50px;">
+    Proposal only · 0 code changes · 0 commits · Awaiting consent
+  </div>
+
+</div>
+</body>
+</html>
