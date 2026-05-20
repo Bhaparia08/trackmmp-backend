@@ -734,6 +734,16 @@ const migrations = [
     WHERE validation_status = 'broken'
       AND validation_notes = 'no url'`,
 
+  // Currency Phase 1: store USD-converted payout alongside the original currency.
+  // payout_usd     — computed at scan time using utils/currencyConverter
+  // fx_rate_used   — rate snapshot at conversion time, so historical reports stay accurate
+  //                  even after exchange_rates table is refreshed
+  // Both NULL when currency is unsupported (e.g. RUB) — frontend gracefully falls back
+  // to original-currency display.
+  `ALTER TABLE campaign_candidates ADD COLUMN payout_usd   REAL`,
+  `ALTER TABLE campaign_candidates ADD COLUMN fx_rate_used REAL`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_payout_usd ON campaign_candidates(payout_usd DESC)`,
+
   // Sync state tracking on advertiser_api_credentials — additive columns only
   `ALTER TABLE advertiser_api_credentials ADD COLUMN auto_sync          INTEGER DEFAULT 1`,
   `ALTER TABLE advertiser_api_credentials ADD COLUMN last_synced_at     INTEGER`,

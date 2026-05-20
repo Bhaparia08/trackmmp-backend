@@ -11,6 +11,23 @@ const db = require('./../db/init');
 const registry = require('./connectors');
 const validator = require('./landingPageValidator');
 const matcher = require('./inventoryMatcher');
+const currencyConverter = require('./currencyConverter');
+
+// Currency Phase 1: compute USD equivalent for any payout in any supported
+// currency. Returns { payout_usd, fx_rate_used } or nulls if conversion fails
+// (e.g. RUB — not in the supported list yet). Never throws.
+function toUsd(payout, currency) {
+  const amount = Number(payout) || 0;
+  const fromCcy = String(currency || 'USD').toUpperCase();
+  if (amount === 0) return { payout_usd: 0, fx_rate_used: 1 };
+  if (fromCcy === 'USD') return { payout_usd: amount, fx_rate_used: 1 };
+  try {
+    const rate = currencyConverter.getRate(fromCcy, 'USD');
+    return { payout_usd: Math.round(amount * rate * 100) / 100, fx_rate_used: rate };
+  } catch {
+    return { payout_usd: null, fx_rate_used: null };
+  }
+}
 
 // Default: 5 minutes. Override with DISCOVERY_SCAN_INTERVAL_SEC env var (in seconds).
 // Production guidance: keep ≥ 300 (5 min) to avoid hammering external network APIs.
@@ -80,10 +97,15 @@ function upsertCandidate(normalized, credentialId) {
   const devicesJSON   = JSON.stringify(normalized.allowed_devices || []);
   const osJSON        = JSON.stringify(normalized.allowed_os || []);
 
+  // Currency Phase 1: compute USD equivalent at upsert time so /candidates can
+  // sort + display in a comparable unit regardless of source currency.
+  const { payout_usd, fx_rate_used } = toUsd(normalized.payout || 0, normalized.payout_currency);
+
   if (existing) {
     db.prepare(`
       UPDATE campaign_candidates SET
         name = ?, vertical = ?, payout = ?, payout_type = ?, payout_currency = ?,
+        payout_usd = ?, fx_rate_used = ?,
         allowed_countries = ?, allowed_devices = ?, allowed_os = ?,
         destination_url = ?, tracking_url_template = ?, preview_url = ?,
         normalized_payload = ?, raw_payload = ?,
@@ -94,6 +116,7 @@ function upsertCandidate(normalized, credentialId) {
     `).run(
       normalized.name, normalized.vertical || null, normalized.payout || 0,
       normalized.payout_type || null, normalized.payout_currency || 'USD',
+      payout_usd, fx_rate_used,
       countriesJSON, devicesJSON, osJSON,
       normalized.destination_url || null, normalized.tracking_url_template || null, normalized.preview_url || null,
       blob, raw,
@@ -108,16 +131,18 @@ function upsertCandidate(normalized, credentialId) {
     INSERT INTO campaign_candidates (
       source_credential_id, source_platform, source_offer_id, source_advertiser_id, source_advertiser_name,
       name, vertical, payout, payout_type, payout_currency,
+      payout_usd, fx_rate_used,
       allowed_countries, allowed_devices, allowed_os,
       destination_url, tracking_url_template, preview_url,
       normalized_payload, raw_payload
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?)
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?)
   `).run(
     credentialId || null,
     normalized.source_platform, normalized.source_offer_id,
     normalized.source_advertiser_id || null, normalized.advertiser_name || null,
     normalized.name, normalized.vertical || null, normalized.payout || 0,
     normalized.payout_type || null, normalized.payout_currency || 'USD',
+    payout_usd, fx_rate_used,
     countriesJSON, devicesJSON, osJSON,
     normalized.destination_url || null, normalized.tracking_url_template || null, normalized.preview_url || null,
     blob, raw,

@@ -92,6 +92,7 @@ adminRouter.get('/candidates', (req, res) => {
   const rows = db.prepare(`
     SELECT id, source_platform, source_offer_id, source_advertiser_id, source_advertiser_name,
            name, vertical, payout, payout_type, payout_currency,
+           payout_usd, fx_rate_used,
            allowed_countries, allowed_devices,
            destination_url, preview_url,
            validation_status, validation_checked_at, validation_final_url, validation_http_code, validation_notes,
@@ -908,7 +909,12 @@ adminRouter.get('/stats', (_req, res) => {
       SUM(CASE WHEN validation_status = 'no_url' THEN 1 ELSE 0 END) AS no_url,
       SUM(CASE WHEN import_status = 'imported' AND reviewed_at >= unixepoch('now','-7 days') THEN 1 ELSE 0 END) AS imported_7d,
       AVG(best_match_score) AS avg_match,
-      MAX(last_seen_at) AS last_scan
+      MAX(last_seen_at) AS last_scan,
+      -- Currency Phase 1: total pipeline value in USD across active candidates.
+      -- Excludes rejected/archived and rows where currency couldn't be converted
+      -- (payout_usd IS NULL means the converter didn't recognize the currency).
+      ROUND(SUM(CASE WHEN import_status IN ('new','reviewing') AND payout_usd IS NOT NULL THEN payout_usd ELSE 0 END), 2) AS total_pipeline_usd,
+      SUM(CASE WHEN payout_usd IS NULL AND payout > 0 THEN 1 ELSE 0 END) AS unconvertible_count
     FROM campaign_candidates
   `).get();
   res.json(totals || {});
