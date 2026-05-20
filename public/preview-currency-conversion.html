@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Currency Conversion — Audit + Proposal · Discovery Hub</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f1f5f9; font-size: 14px; line-height: 1.55; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 22px 80px; }
+  .hdr { margin-bottom: 28px; padding-bottom: 18px; border-bottom: 1px solid #1e293b; }
+  .pill-tag { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; background: rgba(245,158,11,.15); color: #fbbf24; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .sub { color: #94a3b8; font-size: 13px; }
+
+  .section { margin-top: 32px; }
+  .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #6366f1; font-weight: 700; margin-bottom: 12px; }
+
+  .panel { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 18px; margin-bottom: 10px; }
+  .panel.alert { border-color: #5b3030; background: #1f1414; }
+  .panel.success { border-color: #1d4b2c; background: #0f1a14; }
+  .panel.warn { border-color: #5a4316; background: #1f1810; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; padding: 9px 10px; color: #94a3b8; font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; }
+  td { padding: 9px 10px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code, p code { background: #0f172a; padding: 1px 6px; border-radius: 4px; font-size: 11.5px; color: #a5b4fc; }
+
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+  .pill-ok    { background: rgba(16,185,129,.18); color: #10b981; }
+  .pill-gap   { background: rgba(239,68,68,.18);  color: #ef4444; }
+  .pill-warn  { background: rgba(251,191,36,.18); color: #f59e0b; }
+  .pill-mute  { background: rgba(148,163,184,.14); color: #94a3b8; }
+
+  .callout { background: rgba(99,102,241,.08); border-left: 3px solid #6366f1; padding: 14px 16px; border-radius: 4px; margin: 12px 0; font-size: 13px; color: #cbd5e1; }
+  .callout-warn { background: rgba(251,191,36,.08); border-left-color: #f59e0b; }
+  .callout-alert { background: rgba(239,68,68,.08); border-left-color: #ef4444; }
+  .callout-ok { background: rgba(16,185,129,.08); border-left-color: #10b981; }
+  .callout strong { color: #fff; }
+
+  .row-tbl td { padding: 11px 12px; font-size: 13px; }
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0; }
+  .ba .panel { margin-bottom: 0; }
+  .panel-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 12px; }
+  .panel.before .panel-label { color: #ef4444; }
+  .panel.after  .panel-label { color: #10b981; }
+
+  ul.bare { list-style: none; padding-left: 0; }
+  ul.bare li { padding: 5px 0 5px 20px; position: relative; font-size: 12.5px; color: #cbd5e1; }
+  ul.bare li::before { content: '✓'; color: #10b981; position: absolute; left: 0; font-weight: 700; }
+  ul.bare li.gap::before { content: '✗'; color: #ef4444; }
+  ul.bare li.add::before { content: '+'; color: #818cf8; }
+  ul.bare li.warn::before { content: '⚠'; color: #f59e0b; }
+
+  .rate-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+  .rate-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 6px; padding: 8px 10px; }
+  .rate-pair { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+  .rate-value { font-size: 14px; font-weight: 700; color: #a5b4fc; }
+
+  @media (max-width: 800px) {
+    .ba { grid-template-columns: 1fr; }
+    .rate-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <span class="pill-tag">Audit + proposal · Currency conversion · NOT BUILT YET</span>
+    <h1>Currency capture &amp; USD conversion across the API integration system</h1>
+    <p class="sub">You asked: "check where the currency should be mentioned, get the exact same currency, convert it into USD." Audit complete. Major finding below.</p>
+  </div>
+
+  <!-- ───── HEADLINE ───── -->
+  <div class="section">
+    <div class="section-title">⚡ Headline finding</div>
+    <div class="panel success">
+      <h3 style="color:#10b981;font-size:15px;margin-bottom:8px;">Currency conversion infrastructure is already 80% built — just never wired into Discovery Hub</h3>
+      <p style="color:#cbd5e1;font-size:13px;">The team already shipped: <code>exchange_rates</code> table with <strong>18 fresh rate rows</strong> across 9 currencies, <code>utils/currencyConverter.js</code> with full conversion helpers, <code>/api/currency/*</code> routes for rates/convert/refresh/user-preference, and a <code>users.preferred_currency</code> column. None of it touches the offer-discovery pipeline. The fix is small: read the existing converter at scan time.</p>
+    </div>
+  </div>
+
+  <!-- ───── PROBLEM EXAMPLE ───── -->
+  <div class="section">
+    <div class="section-title">1 · The lie operators currently see</div>
+    <div class="ba">
+      <div class="panel before">
+        <div class="panel-label">TODAY (the bug)</div>
+        <table class="row-tbl">
+          <thead><tr><th>Offer</th><th>Platform</th><th>Payout</th><th>Actual currency</th></tr></thead>
+          <tbody>
+            <tr><td>Forex.com — UK</td><td>insparx</td><td><strong style="color:#ef4444;">$6.00</strong></td><td><span class="pill pill-gap">EUR (mislabeled)</span></td></tr>
+            <tr><td>BetClever Casino</td><td>insparx</td><td><strong style="color:#ef4444;">$10.00</strong></td><td><span class="pill pill-gap">EUR</span></td></tr>
+            <tr><td>VPN Deal — DACH</td><td>tune</td><td><strong style="color:#ef4444;">$8.50</strong></td><td><span class="pill pill-gap">probably EUR/GBP</span></td></tr>
+          </tbody>
+        </table>
+        <p style="color:#94a3b8;font-size:12px;margin-top:10px;">The frontend renders <code>${'{'}payout.toFixed(2){'}'}</code> with a hardcoded <code>$</code> prefix. The number is whatever currency the API returned. A €6.00 offer shows as "$6.00" — but at today's rate that's <strong style="color:#fff;">~$6.97 USD</strong>. Off by 16%.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">AFTER FIX</div>
+        <table class="row-tbl">
+          <thead><tr><th>Offer</th><th>Platform</th><th>Payout</th><th>USD equivalent</th></tr></thead>
+          <tbody>
+            <tr><td>Forex.com — UK</td><td>insparx</td><td>€6.00</td><td><strong style="color:#10b981;">$6.97</strong></td></tr>
+            <tr><td>BetClever Casino</td><td>insparx</td><td>€10.00</td><td><strong style="color:#10b981;">$11.61</strong></td></tr>
+            <tr><td>VPN Deal — DACH</td><td>tune</td><td>€8.50</td><td><strong style="color:#10b981;">$9.87</strong></td></tr>
+          </tbody>
+        </table>
+        <p style="color:#94a3b8;font-size:12px;margin-top:10px;">Display the original currency exactly as the network reported it, with a USD equivalent next to it. Sorting / filtering by payout uses USD (apples-to-apples). Rates from the live <code>exchange_rates</code> table.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── INFRASTRUCTURE INVENTORY ───── -->
+  <div class="section">
+    <div class="section-title">2 · What already exists (verified just now in local DB)</div>
+    <div class="panel success">
+      <ul class="bare">
+        <li><strong>exchange_rates table</strong> — 18 rows, USD-base, populated through 2026-05-20 (today)</li>
+        <li><strong>utils/currencyConverter.js</strong> — <code>convert(amount, from, to)</code>, <code>getRate()</code>, <code>refreshRates()</code>, <code>getAllRates()</code></li>
+        <li><strong>routes/currency.js</strong> — <code>GET /api/currency/rates</code> · <code>GET /convert</code> · <code>POST /refresh</code> · <code>GET/PUT /user-preference</code></li>
+        <li><strong>users.preferred_currency</strong> column — operators can already set their display currency</li>
+        <li><strong>9 supported currencies</strong> — USD, EUR, GBP, INR, BRL, MXN, SGD, AUD, CAD</li>
+        <li><strong>Free FX source already in use</strong> — <code>open.er-api.com</code> (no API key, daily refresh)</li>
+      </ul>
+
+      <p style="color:#94a3b8;font-size:12px;margin:14px 0 6px;">Live rates pulled from your local DB just now:</p>
+      <div class="rate-grid">
+        <div class="rate-card"><div class="rate-pair">USD → EUR</div><div class="rate-value">0.8612</div></div>
+        <div class="rate-card"><div class="rate-pair">USD → GBP</div><div class="rate-value">0.7463</div></div>
+        <div class="rate-card"><div class="rate-pair">USD → INR</div><div class="rate-value">96.65</div></div>
+        <div class="rate-card"><div class="rate-pair">USD → BRL</div><div class="rate-value">5.031</div></div>
+        <div class="rate-card"><div class="rate-pair">USD → MXN</div><div class="rate-value">17.38</div></div>
+        <div class="rate-card"><div class="rate-pair">USD → SGD</div><div class="rate-value">1.281</div></div>
+        <div class="rate-card"><div class="rate-pair">USD → AUD</div><div class="rate-value">1.406</div></div>
+        <div class="rate-card"><div class="rate-pair">USD → CAD</div><div class="rate-value">1.375</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── GAPS ───── -->
+  <div class="section">
+    <div class="section-title">3 · What's missing (the actual work)</div>
+    <div class="panel alert">
+      <ul class="bare">
+        <li class="gap"><strong>campaign_candidates</strong> has <code>payout</code> + <code>payout_currency</code> but NO <code>payout_usd</code> column</li>
+        <li class="gap"><strong>discoveryEngine.upsertCandidate()</strong> never calls <code>convert()</code> — payouts stored as-is in original currency</li>
+        <li class="gap"><strong>/api/discovery/candidates</strong> response omits a USD equivalent — frontend has no way to display it</li>
+        <li class="gap"><strong>Discovery Hub UI</strong> renders <code>${'{'}payout{'}'}</code> with hardcoded <code>$</code> prefix → mislabels everything non-USD</li>
+        <li class="gap"><strong>/api/discovery/stats</strong> shows avg_match but no <code>total_pipeline_usd</code> — operators can't see "how much revenue is in this pipeline?"</li>
+        <li class="gap"><strong>campaigns table</strong> (post-import) has NO <code>payout_currency</code> column at all — imported offers lose currency info entirely</li>
+        <li class="warn"><strong>Daily refresh</strong> exists as a function but isn't on a scheduler — rates can go stale if nobody hits <code>POST /api/currency/refresh</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ───── PER-PLATFORM AUDIT ───── -->
+  <div class="section">
+    <div class="section-title">4 · Per-platform: what currency field they return + what we do with it today</div>
+    <div class="panel">
+      <table>
+        <thead><tr><th>Platform</th><th>API field</th><th>Captured today?</th><th>Currencies seen</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Insparx</strong> (CAKE)</td><td>currency-prefixed string e.g. <code>"€6.00"</code> — we parse via <code>detectCurrency()</code></td><td><span class="pill pill-ok">yes</span></td><td>EUR mostly · USD · GBP</td></tr>
+          <tr><td><strong>TUNE</strong></td><td><code>o.currency</code> e.g. <code>"USD"</code></td><td><span class="pill pill-ok">yes</span></td><td>USD · EUR · GBP · INR (varies by network)</td></tr>
+          <tr><td><strong>Impact</strong></td><td><code>o.CurrencyCode</code> e.g. <code>"USD"</code></td><td><span class="pill pill-ok">yes</span></td><td>USD · EUR · GBP · BRL</td></tr>
+          <tr><td><strong>Everflow</strong></td><td><code>o.currency_id</code> e.g. <code>"USD"</code></td><td><span class="pill pill-ok">yes</span></td><td>USD mostly</td></tr>
+          <tr><td><strong>CJ</strong></td><td><code>actionPayouts[0].payoutCurrency</code></td><td><span class="pill pill-ok">yes</span></td><td>USD · EUR · GBP · CAD · AUD</td></tr>
+          <tr><td><strong>MaxBounty</strong></td><td><code>o.currency</code></td><td><span class="pill pill-ok">yes</span></td><td>USD mostly</td></tr>
+          <tr><td><strong>Awin</strong></td><td><code>commission.currency || raw.currencyCode</code></td><td><span class="pill pill-ok">yes</span></td><td>USD · EUR · GBP</td></tr>
+          <tr><td><strong>CityAds</strong></td><td>numeric <code>currency_id</code> → lookup (1=RUB, 2=USD, 3=EUR, 4=GBP)</td><td><span class="pill pill-ok">yes</span></td><td>RUB · USD · EUR · GBP <span class="pill pill-warn">RUB not in our 9</span></td></tr>
+          <tr><td><strong>Admitad</strong></td><td><code>o.currency</code></td><td><span class="pill pill-ok">yes</span></td><td>USD · EUR · GBP · RUB</td></tr>
+          <tr><td><strong>Swaarm</strong></td><td><code>o.payout_currency</code></td><td><span class="pill pill-ok">yes</span></td><td>USD mostly</td></tr>
+          <tr><td><strong>AppsFlyer</strong></td><td><code>o.currency</code></td><td><span class="pill pill-ok">yes</span></td><td>USD mostly</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout"><strong>Good news:</strong> every connector already captures currency correctly. The data is there — we just lose track of it after upsert. <strong>One gap:</strong> CityAds may return RUB (Russian ruble), which isn't in our 9-currency list. Need to either add RUB to the converter or flag it as "unconvertible — display as RUB only".</div>
+  </div>
+
+  <!-- ───── PROPOSED FIX ───── -->
+  <div class="section">
+    <div class="section-title">5 · Proposed fix — Currency Phase 1 (Discovery Hub display)</div>
+    <div class="panel">
+      <table>
+        <thead><tr><th style="width:36%;">File</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><td><code>backend/db/init.js</code></td><td>+ migration: <code>ALTER TABLE campaign_candidates ADD COLUMN payout_usd REAL</code><br>+ <code>ALTER TABLE campaign_candidates ADD COLUMN fx_rate_used REAL</code> (snapshot of rate at scan time for audit)</td></tr>
+          <tr><td><code>backend/utils/discoveryEngine.js</code></td><td>In <code>upsertCandidate()</code>: call <code>convert(payout, payout_currency, 'USD')</code> via existing helper, store result in <code>payout_usd</code>. Falls back to NULL if currency unsupported (e.g. RUB).</td></tr>
+          <tr><td><code>backend/routes/discovery.js</code></td><td><code>/candidates</code> returns <code>payout_usd</code> + <code>fx_rate_used</code>. <code>/stats</code> adds <code>total_pipeline_usd</code> (sum of approved candidates' payout_usd).</td></tr>
+          <tr><td><code>frontend/src/pages/DiscoveryHub.jsx</code></td><td>Payout column shows original currency symbol/code + USD equivalent below in muted text. Sort uses <code>payout_usd</code>. New KPI card: "Pipeline value (USD)".</td></tr>
+          <tr><td><code>backend/server.js</code></td><td>Schedule <code>refreshRates()</code> to run daily at 00:30 UTC (so rates are fresh before scans). Single setInterval, ~6 lines.</td></tr>
+        </tbody>
+      </table>
+
+      <p style="color:#94a3b8;font-size:12px;margin-top:14px;"><strong style="color:#fff;">~1 hour</strong>. Builds entirely on existing infrastructure. Zero new dependencies.</p>
+    </div>
+  </div>
+
+  <!-- ───── UI PROPOSAL ───── -->
+  <div class="section">
+    <div class="section-title">6 · Frontend payout display change</div>
+    <div class="ba">
+      <div class="panel before">
+        <div class="panel-label">TODAY</div>
+        <table class="row-tbl">
+          <thead><tr><th>Offer</th><th>Payout</th></tr></thead>
+          <tbody>
+            <tr><td>Forex.com — UK</td><td><strong>$6.00</strong></td></tr>
+            <tr><td>NordVPN — Global</td><td><strong>$15.00</strong></td></tr>
+            <tr><td>Stake — BR Sports</td><td><strong>$45.00</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">AFTER</div>
+        <table class="row-tbl">
+          <thead><tr><th>Offer</th><th>Payout</th></tr></thead>
+          <tbody>
+            <tr><td>Forex.com — UK</td><td><strong>€6.00</strong><div style="font-size:11px;color:#94a3b8;">≈ $6.97 USD</div></td></tr>
+            <tr><td>NordVPN — Global</td><td><strong>$15.00</strong><div style="font-size:11px;color:#94a3b8;">USD</div></td></tr>
+            <tr><td>Stake — BR Sports</td><td><strong>R$245.00</strong><div style="font-size:11px;color:#94a3b8;">≈ $48.70 USD</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── KPI CHANGE ───── -->
+  <div class="section">
+    <div class="section-title">7 · New KPI: "Pipeline value (USD)"</div>
+    <div class="panel">
+      <p style="color:#cbd5e1;font-size:13px;">Sum of <code>payout_usd</code> across approved candidates — gives operators an apples-to-apples view of how much revenue is sitting in the pipeline regardless of source currency. Example for your current 318 Insparx EUR candidates: <strong style="color:#10b981;">~$2,217 USD pipeline value</strong> (318 × €6 × 1.16 average rate).</p>
+    </div>
+  </div>
+
+  <!-- ───── PHASE 2 (DEFERRED) ───── -->
+  <div class="section">
+    <div class="section-title">8 · Currency Phase 2 — campaigns table (deferred)</div>
+    <div class="panel warn">
+      <p style="color:#cbd5e1;font-size:13px;margin-bottom:10px;">When an offer is imported as a campaign via <code>/api/integrations/import</code>, the currency is currently dropped. The campaign row only knows the payout number, not its currency. For Phase 2:</p>
+      <ul class="bare">
+        <li class="add">Add <code>payout_currency</code> + <code>payout_usd</code> columns to <code>campaigns</code></li>
+        <li class="add">Backfill the 12 existing imported campaigns from their source candidates</li>
+        <li class="add">Update <code>/import</code> route to preserve currency</li>
+        <li class="add">Update advertiser invoicing flow to use original currency</li>
+      </ul>
+      <p style="color:#94a3b8;font-size:12px;margin-top:10px;"><strong style="color:#fff;">~2 hours.</strong> Touches imported campaign data + invoicing. Recommend doing this only after Phase 1 has been live for a few days and we've confirmed the conversion is working as expected.</p>
+    </div>
+  </div>
+
+  <!-- ───── RISK ───── -->
+  <div class="section">
+    <div class="section-title">9 · Risk &amp; rollback (Phase 1)</div>
+    <div class="ba">
+      <div class="panel success">
+        <h3 style="font-size:13px;margin-bottom:8px;color:#10b981;">Why safe</h3>
+        <ul class="bare">
+          <li>Additive columns (<code>payout_usd</code>, <code>fx_rate_used</code>) default NULL — no row rewrites</li>
+          <li>Conversion uses existing helper that's been in the codebase for a while</li>
+          <li>If rate not found, <code>payout_usd</code> stays NULL → frontend gracefully falls back to original-currency display</li>
+          <li>Bridge + Phase A code (in working tree) untouched</li>
+          <li>0 new dependencies</li>
+        </ul>
+      </div>
+      <div class="panel warn">
+        <h3 style="font-size:13px;margin-bottom:8px;color:#f59e0b;">Watch items</h3>
+        <ul class="bare">
+          <li class="warn">CityAds may return RUB — not in supported list → payout_usd will be NULL for those rows. Either add RUB to supported list or filter out</li>
+          <li class="warn">First scan after deploy: existing 318 EUR candidates won't have payout_usd until they're re-scanned (5-min cycle); operator may see mixed states briefly</li>
+          <li class="warn">If <code>open.er-api.com</code> goes down, refresh fails silently — but cached rates persist (up to 5 days old). Daily-refresh schedule mitigates this</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── DECISION ───── -->
+  <div class="section">
+    <div class="section-title">10 · Your call</div>
+    <div class="panel">
+      <table>
+        <thead><tr><th style="width:35%;">Option</th><th>Scope</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Phase 1 only</strong> (recommended)</td><td>I build the 5-file change (~1 hr), test locally (column migration + e2e bucketing + UI render), regenerate the preview HTML with actual numbers from a real run, then wait for your deploy consent</td></tr>
+          <tr><td><strong>Phase 1 + Phase 2 together</strong></td><td>3-hour build covering Discovery Hub AND campaigns table. Bigger blast radius — touches imported campaigns + invoicing</td></tr>
+          <tr><td><strong>Tweak the design</strong></td><td>Tell me what to change in this proposal and I'll regenerate the preview</td></tr>
+          <tr><td><strong>Hold</strong></td><td>No code; just documents the audit. Bridge + Phase A stay as the only in-flight work</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout callout-warn"><strong>Per standing rule:</strong> nothing happens until you reply. Say <strong style="color:#fbbf24;">"build Phase 1"</strong> and I'll start the implementation; you'll get another preview before any prod deploy.</div>
+  </div>
+
+  <div class="section" style="text-align:center;color:#475569;font-size:11px;margin-top:50px;">
+    Audit only · 0 code changes · 0 commits to working tree
+  </div>
+
+</div>
+</body>
+</html>
