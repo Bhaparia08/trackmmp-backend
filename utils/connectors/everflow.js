@@ -6,7 +6,7 @@
  * Base URL: https://api.eflow.team/v1/networks/<network_id>/...
  */
 const fetch = require('node-fetch');
-const { BaseConnector, normApprovalStatus } = require('./base');
+const { BaseConnector, normApprovalStatus, normCurrency } = require('./base');
 
 const BASE = 'https://api.eflow.team/v1';
 
@@ -91,7 +91,7 @@ class EverflowConnector extends BaseConnector {
 
       payout: Number(raw.payout) || 0,
       payout_type: payoutTypeFromEverflow(raw.payout_type),
-      payout_currency: raw.currency_id || 'USD',
+      payout_currency: normCurrency(raw.currency_id),
       revenue: Number(raw.revenue) || null,
       revenue_type: raw.revenue_type || null,
 

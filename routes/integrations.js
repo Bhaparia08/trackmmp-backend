@@ -9,6 +9,7 @@ const fetch   = require('node-fetch');
 const db      = require('../db/init');
 const { requireAuth } = require('../middleware/auth');
 const { customAlphabet } = require('nanoid');
+const { normCurrency } = require('../utils/connectors/base');
 
 const nanoid12  = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', 12);
 const nanoid20hex = customAlphabet('0123456789abcdef', 20);
@@ -232,7 +233,7 @@ async function fetchEverflow(cred) {
       description:       o.description || o.offer_description || '',
       payout:            parseFloat(o.default_payout || o.payout || o.revenue_type?.payout || 0),
       payout_type:       normPayoutType(o.payout_type || o.revenue_type?.type || 'cpi'),
-      currency:          o.currency || 'USD',
+      currency:          normCurrency(o.currency),
       status:            o.status === 1 || o.status === 'active' ? 'active' : 'paused',
       tracking_url:      toOurMacros(rawTracking, 'everflow', { affiliate_id: efAffiliateId }),
       preview_url:       o.preview_url || '',
@@ -323,7 +324,7 @@ async function fetchTune(cred) {
       description:       o.description || '',
       payout:            parseFloat(o.default_payout || o.payout || 0),
       payout_type:       normPayoutType(o.payout_type || o.revenue_type || 'cpa'),
-      currency:          o.currency || 'USD',
+      currency:          normCurrency(o.currency),
       status:            o.status === 'active' ? 'active' : 'paused',
       tracking_url:      toOurMacros(rawTracking, 'tune', { affiliate_id: affiliateId }),
       preview_url:       previewUrl,
@@ -352,7 +353,7 @@ async function fetchCityAds(cred) {
 
   return offers.map(o => {
     const cd = o.commission_data || {};
-    const currency = CURRENCY[cd.currency_id] || 'USD';
+    const currency = normCurrency(CURRENCY[cd.currency_id]);
 
     let payout_type = 'cpa', payout = 0;
     if (cd.percent && (parseFloat(cd.percent.min) > 0 || parseFloat(cd.percent.max) > 0)) {
@@ -413,7 +414,7 @@ async function fetchImpact(cred) {
       description:       o.Description || o.description || '',
       payout:            parseFloat(o.DefaultPayout || o.Payout || o.payout || 0),
       payout_type:       normPayoutType(o.PayoutType || o.payout_type || 'cpa'),
-      currency:          o.CurrencyCode || o.currency || 'USD',
+      currency:          normCurrency(o.CurrencyCode, o.currency),
       status:            String(o.Status || o.CampaignStatus || o.status || '').toLowerCase() === 'active' ? 'active' : 'paused',
       tracking_url:      toOurMacros(rawTracking, 'impact'),
       preview_url:       o.LandingPageUrl || o.preview_url || '',
@@ -445,7 +446,7 @@ async function fetchAppsFlyer(cred) {
       description:       o.description || '',
       payout:            parseFloat(o.payout || 0),
       payout_type:       normPayoutType(o.payout_type || 'cpi'),
-      currency:          o.currency || 'USD',
+      currency:          normCurrency(o.currency),
       status:            'active',
       tracking_url:      toOurMacros(rawTracking, 'appsflyer'),
       preview_url:       o.store_url || o.preview_url || '',
@@ -525,7 +526,7 @@ async function fetchSwaarm(cred) {
       description:       o.description || o.app_description || '',
       payout:            parseFloat(o.payout || 0),
       payout_type:       payType,
-      currency:          o.payout_currency || 'USD',
+      currency:          normCurrency(o.payout_currency),
       status:            'active',   // feed only returns available (active) ads
       tracking_url:      rawTracking,
       preview_url:       o.preview_url || '',
@@ -591,8 +592,11 @@ async function fetchAdmitad(cred) {
   return allOffers.map(o => {
     // ── Payout: pick the highest-value action from the actions[] array ──────
     // payment_size can be: "1.50" (fixed), "9.34-15.60%" (revshare range), "10%" (revshare)
-    let payout      = 0;
-    let payout_type = 'cpa';
+    // Action-level currency wins over campaign-level (Admitad campaigns often
+    // default to USD even when individual actions are in EUR/GBP/etc.)
+    let payout          = 0;
+    let payout_type     = 'cpa';
+    let payout_currency = null;
     const actions   = Array.isArray(o.actions) ? o.actions : [];
     for (const act of actions) {
       const raw = String(act.payment_size || act.payout || '0');
@@ -602,8 +606,9 @@ async function fetchAdmitad(cred) {
       const amount = parseFloat(parts[parts.length - 1] || parts[0] || '0') || 0;
       const type   = isPercent ? 'revshare' : normPayoutType(act.type || 'cpa');
       if (amount > payout) {
-        payout      = amount;
-        payout_type = type;
+        payout          = amount;
+        payout_type     = type;
+        payout_currency = act.currency || act.payment_currency || null;
       }
     }
 
@@ -644,7 +649,8 @@ async function fetchAdmitad(cred) {
       description:       o.description || o.short_description || '',
       payout,
       payout_type,
-      currency:          o.currency || 'USD',
+      // Action-level currency wins; falls back to campaign-level then USD.
+      currency:          normCurrency(payout_currency, o.currency),
       status,
       tracking_url,
       preview_url:       o.site_url || '',
@@ -686,7 +692,7 @@ async function fetchInsparx(cred) {
       description:       norm.description || '',
       payout:            norm.payout || 0,
       payout_type:       norm.payout_type || 'cpa',
-      currency:          norm.payout_currency || 'USD',
+      currency:          normCurrency(norm.payout_currency),
       status:            (norm.status === 'active' || norm.status === 'public') ? 'active' : 'paused',
       tracking_url:      norm.tracking_url_template || '',
       preview_url:       norm.preview_url || norm.destination_url || '',

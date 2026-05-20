@@ -120,4 +120,24 @@ function normApprovalStatus(value, customMap = {}) {
   return 'unknown';
 }
 
-module.exports = { BaseConnector, normApprovalStatus };
+/**
+ * normCurrency — fold whatever a platform returns into an ISO 4217 3-letter code.
+ *
+ * Pass candidates from most-specific to least-specific (e.g. action.currency,
+ * then offer.currency, then null). First valid 3-letter code wins.
+ * Falls through to 'USD' to keep downstream code safe.
+ *
+ * Used by every connector + bridge so the rest of the pipeline (payout_usd
+ * conversion, frontend display) sees a normalized value regardless of how
+ * each platform's API formats currency.
+ */
+function normCurrency(...candidates) {
+  for (const c of candidates) {
+    if (c == null || c === '') continue;
+    const code = String(c).trim().toUpperCase();
+    if (/^[A-Z]{3}$/.test(code)) return code;
+  }
+  return 'USD';
+}
+
+module.exports = { BaseConnector, normApprovalStatus, normCurrency };

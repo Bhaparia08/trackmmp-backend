@@ -11,7 +11,7 @@
  *   api_secret:  (unused)
  */
 const fetch = require('node-fetch');
-const { BaseConnector, normApprovalStatus } = require('./base');
+const { BaseConnector, normApprovalStatus, normCurrency } = require('./base');
 
 const BASE = 'https://api.awin.com';
 
@@ -78,7 +78,7 @@ class AwinConnector extends BaseConnector {
       description:           raw.description || raw.programmeDescription || null,
       vertical:              raw.primarySector?.name || raw.sector || raw.category || null,
       payout, payout_type: ptype,
-      payout_currency:       comm.currency || raw.currencyCode || 'USD',
+      payout_currency:       normCurrency(comm.currency, raw.currencyCode),
       revenue: null, revenue_type: null,
       allowed_countries:     countries,
       allowed_devices:       ['mobile','desktop'],

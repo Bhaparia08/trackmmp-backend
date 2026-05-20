@@ -6,7 +6,7 @@
  * Base URL: https://<network_id>.api.hasoffers.com/Apiv3/json
  */
 const fetch = require('node-fetch');
-const { BaseConnector, normApprovalStatus } = require('./base');
+const { BaseConnector, normApprovalStatus, normCurrency } = require('./base');
 
 function payoutTypeFromTune(t) {
   const v = String(t || '').toLowerCase();
@@ -77,7 +77,7 @@ class TuneConnector extends BaseConnector {
 
       payout: Number(raw.default_payout) || 0,
       payout_type: payoutTypeFromTune(raw.payout_type),
-      payout_currency: raw.currency || 'USD',
+      payout_currency: normCurrency(raw.currency),
       revenue: Number(raw.revenue) || null,
 
       allowed_countries: [],     // TUNE exposes via separate Country endpoint

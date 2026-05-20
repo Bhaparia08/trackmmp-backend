@@ -39,7 +39,7 @@
  *   import; we can iterate to add URLs in a follow-up.
  */
 const fetch = require('node-fetch');
-const { BaseConnector, normApprovalStatus } = require('./base');
+const { BaseConnector, normApprovalStatus, normCurrency } = require('./base');
 
 const DEFAULT_BASE = 'https://affiliates.insparx.com/affiliates/api/1';
 
@@ -177,7 +177,7 @@ class InsparxConnector extends BaseConnector {
 
       payout: payoutNum,
       payout_type: payoutTypeFromCake(raw.price_format),
-      payout_currency: detectCurrency(raw.payout),
+      payout_currency: normCurrency(detectCurrency(raw.payout)),
       revenue: null,
 
       allowed_countries: [],          // Not in basic feed

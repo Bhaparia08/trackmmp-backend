@@ -15,7 +15,7 @@
  *   api_secret:  (unused)
  */
 const fetch = require('node-fetch');
-const { BaseConnector, normApprovalStatus } = require('./base');
+const { BaseConnector, normApprovalStatus, normCurrency } = require('./base');
 
 const GRAPHQL_URL = 'https://ads.api.cj.com/query';
 
@@ -84,7 +84,7 @@ class CJConnector extends BaseConnector {
       advertiser_name:        advName,
       name:                   advName,
       vertical:               raw.primaryCategory?.name || null,
-      payout, payout_type: ptype, payout_currency: primary.payoutCurrency || 'USD',
+      payout, payout_type: ptype, payout_currency: normCurrency(primary.payoutCurrency),
       allowed_countries:      [],          // CJ programs aren't strictly geo-restricted at the listing level
       allowed_devices:        raw.mobileSupported ? ['mobile','desktop'] : ['desktop'],
       allowed_os:             [],

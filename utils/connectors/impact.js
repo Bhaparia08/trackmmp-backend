@@ -10,7 +10,7 @@
  * default rate card.
  */
 const fetch = require('node-fetch');
-const { BaseConnector, normApprovalStatus } = require('./base');
+const { BaseConnector, normApprovalStatus, normCurrency } = require('./base');
 
 function basicAuth(creds) {
   const user = creds.network_id || creds.account_sid;
@@ -82,7 +82,7 @@ class ImpactConnector extends BaseConnector {
 
       payout: Number(raw.DefaultPayout || raw.Payout) || 0,
       payout_type: 'cpa',          // Impact is mostly CPA/CPS
-      payout_currency: raw.CurrencyCode || 'USD',
+      payout_currency: normCurrency(raw.CurrencyCode),
       revenue: null,
 
       allowed_countries: countries,

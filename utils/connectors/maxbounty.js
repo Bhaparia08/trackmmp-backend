@@ -11,7 +11,7 @@
  *   api_secret:  (unused)
  */
 const fetch = require('node-fetch');
-const { BaseConnector, normApprovalStatus } = require('./base');
+const { BaseConnector, normApprovalStatus, normCurrency } = require('./base');
 
 const BASE = 'https://api.maxbounty.com/v1';
 
@@ -70,7 +70,7 @@ class MaxBountyConnector extends BaseConnector {
       vertical:              raw.vertical || raw.category || null,
       payout:                Number(raw.payout) || Number(raw.amount) || 0,
       payout_type:           (raw.payout_type || raw.model || 'cpa').toLowerCase(),
-      payout_currency:       raw.currency || 'USD',
+      payout_currency:       normCurrency(raw.currency),
       revenue:               null, revenue_type: null,
       allowed_countries:     countries,
       allowed_devices:       devices.length ? devices : ['mobile','desktop'],
