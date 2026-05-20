@@ -97,4 +97,74 @@ class CustomConnector extends BaseConnector {
   }
 }
 
-module.exports = { AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector };
+// ── Affiliate networks — stubs ready for credentials ─────────────────────────
+// Each returns empty list until the user provides credentials.  Once a real
+// implementation lands (or the network exposes a usable API), swap the body.
+
+class ClickBankConnector extends BaseConnector {
+  static platform = 'clickbank';
+  static label = 'ClickBank';
+  static capabilities = {
+    list_offers: false,   // Marketplace data needs scraping or affiliate API
+    get_offer: false, get_creatives: false, get_caps: false,
+    get_payouts: true, get_performance: false,
+    push_postback: false, webhook_inbound: false,
+  };
+  static credentialHints = {
+    api_key:    'ClickBank developer key (32-char hex, from CB Account → My Account → Developer)',
+    api_secret: 'ClickBank clerk key (8-char from Account → Settings → My Site → Clerk API)',
+    network_id: 'Your CB account nickname (lowercase, 5-10 chars)',
+  };
+  static async listOffers(_c) { return []; }
+  static normalizeOffer(raw) {
+    return { source_platform:'clickbank', source_offer_id: String(raw.id || raw.sku || ''),
+             name: raw.title || raw.name || 'ClickBank offer', raw };
+  }
+}
+
+class LomadeeConnector extends BaseConnector {
+  static platform = 'lomadee';
+  static label = 'Lomadee (Brazil)';
+  static capabilities = {
+    list_offers: false,
+    get_offer: false, get_creatives: false, get_caps: false,
+    get_payouts: true, get_performance: false,
+    push_postback: false, webhook_inbound: false,
+  };
+  static credentialHints = {
+    api_key:    'Lomadee app token (from developer.lomadee.com → Apps)',
+    api_secret: '(unused)',
+    network_id: 'Lomadee source ID (numeric)',
+  };
+  static async listOffers(_c) { return []; }
+  static normalizeOffer(raw) {
+    return { source_platform:'lomadee', source_offer_id: String(raw.id || ''),
+             name: raw.name || 'Lomadee offer', raw };
+  }
+}
+
+class ShareASaleConnector extends BaseConnector {
+  static platform = 'shareasale';
+  static label = 'ShareASale';
+  static capabilities = {
+    list_offers: false,
+    get_offer: false, get_creatives: false, get_caps: false,
+    get_payouts: true, get_performance: false,
+    push_postback: false, webhook_inbound: false,
+  };
+  static credentialHints = {
+    api_key:    'ShareASale token (from Tools → Merchant Tools → API → Tokens)',
+    api_secret: 'ShareASale secret key',
+    network_id: 'ShareASale affiliate ID (numeric)',
+  };
+  static async listOffers(_c) { return []; }
+  static normalizeOffer(raw) {
+    return { source_platform:'shareasale', source_offer_id: String(raw.merchantid || raw.id || ''),
+             name: raw.merchantname || raw.name || 'ShareASale merchant', raw };
+  }
+}
+
+module.exports = {
+  AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector,
+  ClickBankConnector, LomadeeConnector, ShareASaleConnector,
+};

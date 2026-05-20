@@ -5,22 +5,34 @@
  *   const offers = await c.listOffers(creds);
  *   const norm = c.normalizeOffer(offers[0], creds);
  */
-const Everflow = require('./everflow');
-const TUNE     = require('./tune');
-const Impact   = require('./impact');
-const Insparx  = require('./insparx');
-const { AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector } = require('./stubs');
+const Everflow   = require('./everflow');
+const TUNE       = require('./tune');
+const Impact     = require('./impact');
+const Insparx    = require('./insparx');
+const CJ         = require('./cj');
+const MaxBounty  = require('./maxbounty');
+const Awin       = require('./awin');
+const {
+  AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector,
+  ClickBankConnector, LomadeeConnector, ShareASaleConnector,
+} = require('./stubs');
 
 const connectors = {
-  everflow: Everflow,
-  tune:     TUNE,
-  impact:   Impact,
-  insparx:  Insparx,
-  adjust:   AdjustConnector,
-  branch:   BranchConnector,
-  cityads:  CityAdsConnector,
-  rakuten:  RakutenConnector,
-  custom:   CustomConnector,
+  everflow:   Everflow,
+  tune:       TUNE,
+  impact:     Impact,
+  insparx:    Insparx,
+  cj:         CJ,
+  maxbounty:  MaxBounty,
+  awin:       Awin,
+  clickbank:  ClickBankConnector,
+  lomadee:    LomadeeConnector,
+  shareasale: ShareASaleConnector,
+  adjust:     AdjustConnector,
+  branch:     BranchConnector,
+  cityads:    CityAdsConnector,
+  rakuten:    RakutenConnector,
+  custom:     CustomConnector,
 };
 
 function get(platform) {
@@ -32,6 +44,7 @@ function list() {
     platform: c.platform,
     label: c.label,
     capabilities: c.capabilities,
+    credential_hints: c.credentialHints || null,
   }));
 }
 
