@@ -11,7 +11,7 @@
  *   api_secret:  (unused)
  */
 const fetch = require('node-fetch');
-const { BaseConnector } = require('./base');
+const { BaseConnector, normApprovalStatus } = require('./base');
 
 const BASE = 'https://api.maxbounty.com/v1';
 
@@ -89,6 +89,11 @@ class MaxBountyConnector extends BaseConnector {
         active_to:   raw.end_date   ? Math.floor(new Date(raw.end_date).getTime()/1000)   : null,
       },
       status: (raw.status || 'active').toLowerCase(),
+      // MaxBounty: per-offer approval state. `is_approved` boolean is most
+      // common; some responses use `approval_status` string.
+      approval_status: normApprovalStatus(
+        raw.is_approved != null ? raw.is_approved : raw.approval_status
+      ),
       raw,
     };
   }

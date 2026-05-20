@@ -10,7 +10,7 @@
  * default rate card.
  */
 const fetch = require('node-fetch');
-const { BaseConnector } = require('./base');
+const { BaseConnector, normApprovalStatus } = require('./base');
 
 function basicAuth(creds) {
   const user = creds.network_id || creds.account_sid;
@@ -102,6 +102,10 @@ class ImpactConnector extends BaseConnector {
 
       status: (raw.CampaignStatus || raw.Status || 'active').toLowerCase(),
       advertiser_name: raw.AdvertiserName || null,
+
+      // Impact: ContractStatus is the publisher↔campaign contract state.
+      // "Active" = approved, "Application Received"/"Pending" = pending.
+      approval_status: normApprovalStatus(raw.ContractStatus || raw.contract_status),
 
       raw,
     };

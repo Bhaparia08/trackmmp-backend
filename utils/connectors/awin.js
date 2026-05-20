@@ -11,7 +11,7 @@
  *   api_secret:  (unused)
  */
 const fetch = require('node-fetch');
-const { BaseConnector } = require('./base');
+const { BaseConnector, normApprovalStatus } = require('./base');
 
 const BASE = 'https://api.awin.com';
 
@@ -90,6 +90,9 @@ class AwinConnector extends BaseConnector {
       caps:                  { daily: null, monthly: null, total: null },
       schedule:              { active_from: null, active_to: null },
       status:                (raw.status || raw.programmeStatus || 'active').toLowerCase(),
+      // Awin: listOffers filters by `relationship=joined` — every programme
+      // returned is one the publisher is already approved on. Auto-approved.
+      approval_status:       'approved',
       raw,
     };
   }

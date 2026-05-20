@@ -744,6 +744,13 @@ const migrations = [
   `ALTER TABLE campaign_candidates ADD COLUMN fx_rate_used REAL`,
   `CREATE INDEX IF NOT EXISTS idx_candidates_payout_usd ON campaign_candidates(payout_usd DESC)`,
 
+  // Phase A: approval status — distinguish "we're not approved yet on this offer"
+  // from "no URL because platform doesn't expose it" and from "URL exists but broken".
+  // Values: 'unknown' (default — we don't have a signal), 'approved' (cleared to promote),
+  // 'pending' (visible to us, awaiting application or decision), 'rejected'.
+  `ALTER TABLE campaign_candidates ADD COLUMN approval_status TEXT DEFAULT 'unknown'`,
+  `CREATE INDEX IF NOT EXISTS idx_candidates_approval ON campaign_candidates(approval_status)`,
+
   // Sync state tracking on advertiser_api_credentials — additive columns only
   `ALTER TABLE advertiser_api_credentials ADD COLUMN auto_sync          INTEGER DEFAULT 1`,
   `ALTER TABLE advertiser_api_credentials ADD COLUMN last_synced_at     INTEGER`,
@@ -858,6 +865,59 @@ const migrations = [
   `ALTER TABLE campaign_inventory_approvals ADD COLUMN ecpm_computed_at INTEGER`,
   `ALTER TABLE campaign_inventory_approvals ADD COLUMN ecpm_sample_size INTEGER`,
   `CREATE INDEX IF NOT EXISTS idx_cia_ecpm ON campaign_inventory_approvals(inventory_id, ecpm_estimate DESC)`,
+
+  // ── Phase 5: CPM/CPC pricing + external-inventory namespace ───────────────
+  // Today every campaign is implicitly CPA (advertiser pays on conversion).
+  // To run the network-operator business (external publishers, advertisers
+  // paying for impressions/clicks instead of conversions), we record what
+  // pricing model each campaign uses.  Backwards-compatible — existing
+  // campaigns get pricing_model='cpa' by default; /api/v1/serve behavior
+  // is unchanged for them.  A new campaign created with pricing_model='cpm'
+  // or 'cpc' bills differently — but the billing pipeline that actually
+  // CHARGES advertisers is a separate phase (this commit just adds schema).
+  `ALTER TABLE campaigns ADD COLUMN pricing_model TEXT NOT NULL DEFAULT 'cpa'`,
+  `ALTER TABLE campaigns ADD COLUMN cpm_rate     REAL`,
+  `ALTER TABLE campaigns ADD COLUMN cpc_rate     REAL`,
+  `ALTER TABLE campaigns ADD COLUMN flat_rate    REAL`,
+  `ALTER TABLE campaigns ADD COLUMN flat_period  TEXT`,
+
+  // External-inventory namespace: distinguishes owned sites from external
+  // partner inventory so the two business lines stay segmented.
+  //   'owned'              → your 18 sites
+  //   'external_publisher' → sites/apps owned by external partners
+  //   'network_supply'     → inventory brought in via OpenRTB/SSP (future)
+  `ALTER TABLE owned_inventory ADD COLUMN source TEXT NOT NULL DEFAULT 'owned'`,
+  `CREATE INDEX IF NOT EXISTS idx_owned_inv_source ON owned_inventory(source, status)`,
+
+  // Per-impression billing log — populated when a CPM campaign serves
+  `CREATE TABLE IF NOT EXISTS billing_impressions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    impression_id     TEXT,
+    campaign_id       INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+    inventory_id      INTEGER REFERENCES owned_inventory(id) ON DELETE SET NULL,
+    placement_id      INTEGER REFERENCES placements(id) ON DELETE SET NULL,
+    advertiser_charge REAL,
+    publisher_revenue REAL,
+    currency          TEXT NOT NULL DEFAULT 'USD',
+    created_at        INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_bimp_campaign ON billing_impressions(campaign_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_bimp_inv      ON billing_impressions(inventory_id, created_at)`,
+
+  // Per-click billing log — populated when a CPC campaign serves
+  `CREATE TABLE IF NOT EXISTS billing_clicks (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    click_id          TEXT,
+    campaign_id       INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+    inventory_id      INTEGER REFERENCES owned_inventory(id) ON DELETE SET NULL,
+    placement_id      INTEGER REFERENCES placements(id) ON DELETE SET NULL,
+    advertiser_charge REAL,
+    publisher_revenue REAL,
+    currency          TEXT NOT NULL DEFAULT 'USD',
+    created_at        INTEGER NOT NULL DEFAULT (unixepoch())
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_bclk_campaign ON billing_clicks(campaign_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_bclk_inv      ON billing_clicks(inventory_id, created_at)`,
 
   // CTIT (Click-to-Install Time) fraud analysis
   `ALTER TABLE postbacks ADD COLUMN ctit_seconds INTEGER`,

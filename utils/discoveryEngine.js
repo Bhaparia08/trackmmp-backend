@@ -56,7 +56,7 @@ function getLegacyAdapter(platform) {
 // Convert a legacy /offer-import offer shape → Discovery Hub NormalizedOffer.
 // Legacy shape:  { external_id, name, description, payout, payout_type, currency,
 //                  status, tracking_url, preview_url, allowed_countries (CSV string),
-//                  advertiser_name, categories, raw }
+//                  advertiser_name, categories, approval_status?, raw }
 function legacyOfferToNormalized(o, cred) {
   const countriesStr = String(o.allowed_countries || '').trim();
   const allowed_countries = countriesStr
@@ -80,6 +80,7 @@ function legacyOfferToNormalized(o, cred) {
     preview_url: o.preview_url || null,
     status: o.status === 'active' ? 'active' : 'paused',
     advertiser_name: o.advertiser_name || null,
+    approval_status: o.approval_status || 'unknown',
     raw: o.raw || o,
   };
 }
@@ -100,6 +101,8 @@ function upsertCandidate(normalized, credentialId) {
   // Currency Phase 1: compute USD equivalent at upsert time so /candidates can
   // sort + display in a comparable unit regardless of source currency.
   const { payout_usd, fx_rate_used } = toUsd(normalized.payout || 0, normalized.payout_currency);
+  // Phase A: capture per-offer approval state for the new pending_approval bucket.
+  const approvalStatus = normalized.approval_status || 'unknown';
 
   if (existing) {
     db.prepare(`
@@ -111,6 +114,7 @@ function upsertCandidate(normalized, credentialId) {
         normalized_payload = ?, raw_payload = ?,
         source_advertiser_id = ?, source_advertiser_name = ?,
         source_credential_id = ?,
+        approval_status = ?,
         last_seen_at = unixepoch()
       WHERE id = ?
     `).run(
@@ -122,6 +126,7 @@ function upsertCandidate(normalized, credentialId) {
       blob, raw,
       normalized.source_advertiser_id || null, normalized.advertiser_name || null,
       credentialId || null,
+      approvalStatus,
       existing.id,
     );
     return existing.id;
@@ -134,8 +139,9 @@ function upsertCandidate(normalized, credentialId) {
       payout_usd, fx_rate_used,
       allowed_countries, allowed_devices, allowed_os,
       destination_url, tracking_url_template, preview_url,
-      normalized_payload, raw_payload
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?)
+      normalized_payload, raw_payload,
+      approval_status
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?,  ?)
   `).run(
     credentialId || null,
     normalized.source_platform, normalized.source_offer_id,
@@ -146,6 +152,7 @@ function upsertCandidate(normalized, credentialId) {
     countriesJSON, devicesJSON, osJSON,
     normalized.destination_url || null, normalized.tracking_url_template || null, normalized.preview_url || null,
     blob, raw,
+    approvalStatus,
   );
   return result.lastInsertRowid;
 }
@@ -170,7 +177,7 @@ async function processValidationQueue(batch = 10) {
   if (!isEnabled()) return { processed: 0 };
   const rows = db.prepare(`
     SELECT q.id AS qid, q.candidate_id, q.attempt_count,
-           c.destination_url, c.tracking_url_template, c.allowed_countries
+           c.destination_url, c.tracking_url_template, c.allowed_countries, c.approval_status
     FROM discovery_validation_queue q
     JOIN campaign_candidates c ON c.id = q.candidate_id
     WHERE q.status = 'pending' AND q.next_attempt_at <= unixepoch()
@@ -181,6 +188,18 @@ async function processValidationQueue(batch = 10) {
   let processed = 0;
   for (const row of rows) {
     db.prepare("UPDATE discovery_validation_queue SET status = 'running' WHERE id = ?").run(row.qid);
+
+    // Phase A: skip LP fetch entirely for candidates we haven't been approved on yet.
+    // The URL would resolve to the network's "you don't have access" page — wastes a
+    // fetch, may anger the network, and the result is meaningless to operators.
+    // Mark as done so the queue moves on; the candidate's approval_status carries
+    // the actionable signal to the UI.
+    if (row.approval_status === 'pending') {
+      db.prepare("UPDATE discovery_validation_queue SET status = 'done' WHERE id = ?").run(row.qid);
+      db.prepare(`UPDATE campaign_candidates SET validation_status = 'pending_approval', validation_notes = 'awaiting approval — LP check skipped', validation_checked_at = unixepoch() WHERE id = ?`).run(row.candidate_id);
+      continue;
+    }
+
     const url = row.destination_url || row.tracking_url_template;
     if (!url) {
       db.prepare("UPDATE discovery_validation_queue SET status = 'done' WHERE id = ?").run(row.qid);

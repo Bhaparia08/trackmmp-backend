@@ -6,7 +6,7 @@
  * Base URL: https://<network_id>.api.hasoffers.com/Apiv3/json
  */
 const fetch = require('node-fetch');
-const { BaseConnector } = require('./base');
+const { BaseConnector, normApprovalStatus } = require('./base');
 
 function payoutTypeFromTune(t) {
   const v = String(t || '').toLowerCase();
@@ -100,6 +100,11 @@ class TuneConnector extends BaseConnector {
 
       status: (raw.status || 'active').toLowerCase(),
       advertiser_name: raw.advertiser_name || null,
+
+      // TUNE per-affiliate approval lives on AffiliateOffer/findAll. The
+      // current listOffers uses Offer/findAll which omits it. Mark unknown
+      // until the affiliate endpoint is wired in (Phase A.1).
+      approval_status: 'unknown',
 
       raw,
     };

@@ -6,7 +6,7 @@
  * Base URL: https://api.eflow.team/v1/networks/<network_id>/...
  */
 const fetch = require('node-fetch');
-const { BaseConnector } = require('./base');
+const { BaseConnector, normApprovalStatus } = require('./base');
 
 const BASE = 'https://api.eflow.team/v1';
 
@@ -118,6 +118,10 @@ class EverflowConnector extends BaseConnector {
 
       status: (raw.offer_status || 'active').toLowerCase(),
       advertiser_name: advName,
+
+      // Everflow: relationship object carries the affiliate↔offer status when
+      // present. Network-admin endpoint may omit it — defaults to 'unknown'.
+      approval_status: normApprovalStatus(raw.relationship?.status || raw.relationship_status),
 
       raw,
     };

@@ -173,6 +173,23 @@ function toOurMacros(url, platform, options = {}) {
   return result;
 }
 
+// Phase A: surface per-offer approval state so Discovery Hub can distinguish
+// "we're not yet approved on this" from "platform doesn't expose a URL" and
+// from "URL is broken". Values: 'approved' | 'pending' | 'rejected' | 'unknown'.
+//
+// Each platform exposes the signal under a different name; this normalizer
+// folds them into one vocabulary. When the platform's signal is absent or
+// unrecognized, default to 'unknown' so we never falsely claim approval.
+function normApprovalStatus(value, customMap = {}) {
+  if (value == null || value === '') return 'unknown';
+  const v = String(value).trim().toLowerCase();
+  if (customMap[v]) return customMap[v];
+  if (['approved', 'active', 'joined', 'connected', 'public'].includes(v)) return 'approved';
+  if (['pending', 'application received', 'awaiting approval', 'pendingapproval', 'requires_attention', 'unblocked'].includes(v)) return 'pending';
+  if (['rejected', 'declined', 'denied', 'blocked', 'banned'].includes(v)) return 'rejected';
+  return 'unknown';
+}
+
 function normPayoutType(raw = '') {
   const t = raw.toLowerCase();
   if (t.includes('install') || t === 'cpi') return 'cpi';
@@ -224,6 +241,8 @@ async function fetchEverflow(cred) {
                            : (o.allowed_countries || ''),
       advertiser_name:   o.advertiser?.label || o.advertiser_name || '',
       categories:        (o.categories || []).map(c => c.label || c.name || c).join(', '),
+      // Everflow: relationship object signals affiliate↔offer status
+      approval_status:   normApprovalStatus(o.relationship?.status || o.relationship_status),
       raw: o,
     };
   });
@@ -311,6 +330,11 @@ async function fetchTune(cred) {
       allowed_countries: countries,
       advertiser_name:   adv.company || adv.name || o.advertiser_name || '',
       categories:        '',
+      // TUNE: per-affiliate approval lives on AffiliateOffer/findAll, not on
+      // Offer/findAll which this fetcher uses. Mark unknown until the affiliate
+      // endpoint is wired in (Phase A.1 follow-up). HasOffers' click handler
+      // will gracefully reject unauthorized clicks at runtime.
+      approval_status:   'unknown',
       raw: entry,
     };
   });
@@ -353,6 +377,8 @@ async function fetchCityAds(cred) {
       allowed_countries: '',
       advertiser_name:   String(o.advertiser || ''),
       categories:        '',
+      // CityAds doesn't expose per-publisher approval in the basic feed.
+      approval_status:   'unknown',
       raw: o,
     };
   });
@@ -396,6 +422,9 @@ async function fetchImpact(cred) {
                            : (o.AllowedCountries || o.allowed_countries || ''),
       advertiser_name:   o.AdvertiserName || o.Advertiser || o.advertiser_name || '',
       categories:        (o.Categories || []).map(c => c.Name || c.name || c).join(', '),
+      // Impact: ContractStatus is the publisher↔campaign contract state.
+      // "Active" = approved, "Application Received"/"Pending" = pending, "Declined" = rejected.
+      approval_status:   normApprovalStatus(o.ContractStatus || o.contract_status),
       raw: o,
     };
   });
@@ -423,6 +452,9 @@ async function fetchAppsFlyer(cred) {
       allowed_countries: (o.geo || []).join(','),
       advertiser_name:   o.advertiser_name || '',
       categories:        '',
+      // AppsFlyer partner-feed is pre-scoped to your partnership — if it's in
+      // the feed, you're approved to promote.
+      approval_status:   'approved',
       raw: o,
     };
   });
@@ -500,6 +532,9 @@ async function fetchSwaarm(cred) {
       allowed_countries: countries,
       advertiser_name:   '',         // not in feed response
       categories:        Array.isArray(o.app_categories) ? o.app_categories.join(', ') : (platform ? platform.toUpperCase() : ''),
+      // Swaarm feed is publisher-scoped — every ad returned is available to
+      // promote with this api_key. No per-ad approval handshake.
+      approval_status:   'approved',
       raw: o,
     };
   });
@@ -618,6 +653,10 @@ async function fetchAdmitad(cred) {
       categories:        Array.isArray(o.categories)
                            ? o.categories.map(c => c.name || c).join(', ')
                            : '',
+      // Admitad: connection_status is the publisher↔advertiser handshake state.
+      // 'connected' = approved, 'pending' / 'requires_attention' = pending,
+      // anything else (e.g. 'not_connected') = pending application.
+      approval_status:   normApprovalStatus(o.connection_status, { not_connected: 'pending' }),
       raw: o,
     };
   });
@@ -654,6 +693,9 @@ async function fetchInsparx(cred) {
       allowed_countries: (norm.allowed_countries || []).join(','),
       advertiser_name:   norm.advertiser_name || 'Insparx',
       categories:        norm.vertical || '',
+      // CAKE OfferFeed doesn't expose affiliate_offer_status — we'd need to
+      // hit OfferSummary per offer to learn approval state (Phase B).
+      approval_status:   norm.approval_status || 'unknown',
       raw:               raw,
     };
   });

@@ -15,7 +15,7 @@
  *   api_secret:  (unused)
  */
 const fetch = require('node-fetch');
-const { BaseConnector } = require('./base');
+const { BaseConnector, normApprovalStatus } = require('./base');
 
 const GRAPHQL_URL = 'https://ads.api.cj.com/query';
 
@@ -95,6 +95,10 @@ class CJConnector extends BaseConnector {
       caps:                   { daily: null, monthly: null, total: null },
       schedule:               { active_from: null, active_to: null },
       status:                 (raw.relationshipStatus || 'active').toLowerCase(),
+      // CJ: relationshipStatus is "Joined" | "PendingApproval" | "Rejected" |
+      // "NotJoined". advertiserStatus:JOINED filter already excludes most NotJoined,
+      // but PendingApproval can still appear for in-flight applications.
+      approval_status:        normApprovalStatus(raw.relationshipStatus),
       raw,
     };
   }

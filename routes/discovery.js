@@ -55,6 +55,7 @@ adminRouter.get('/connectors', (_req, res) => {
 adminRouter.get('/candidates', (req, res) => {
   const {
     source_platform, advertiser_id, vertical, validation_status,
+    approval_status,
     import_status = 'new,reviewing',
     min_match_score,
     search,
@@ -76,6 +77,7 @@ adminRouter.get('/candidates', (req, res) => {
   if (advertiser_id)      { conds.push('source_advertiser_id = ?'); params.push(advertiser_id); }
   if (vertical)           { conds.push('LOWER(vertical) = ?');    params.push(String(vertical).toLowerCase()); }
   if (validation_status)  { conds.push('validation_status = ?');  params.push(validation_status); }
+  if (approval_status)    { conds.push('approval_status = ?');    params.push(approval_status); }
   if (min_match_score)    { conds.push('best_match_score >= ?'); params.push(Number(min_match_score)); }
   if (search) {
     conds.push('(name LIKE ? OR source_advertiser_name LIKE ? OR source_offer_id LIKE ?)');
@@ -96,6 +98,7 @@ adminRouter.get('/candidates', (req, res) => {
            allowed_countries, allowed_devices,
            destination_url, preview_url,
            validation_status, validation_checked_at, validation_final_url, validation_http_code, validation_notes,
+           approval_status,
            best_match_score, best_match_inventory_id, match_breakdown,
            import_status, imported_campaign_id,
            first_seen_at, last_seen_at
@@ -898,15 +901,22 @@ async function applyAutoImportRule(rule, actorId) {
 }
 
 // GET /api/discovery/stats — KPI strip data
+//
+// Phase A: candidates are bucketed by priority so the KPI cards sum to the
+// candidate total without double-counting. Priority order:
+//   1. pending_approval — actionable; trumps validation status because the URL
+//      we'd test would resolve to "you don't have access" anyway.
+//   2. valid_lp         — landing page tested and works.
+//   3. no_url           — connector limitation; we never tested.
+//   4. broken_or_parked — tested and failed.
 adminRouter.get('/stats', (_req, res) => {
   const totals = db.prepare(`
     SELECT
       COUNT(*) AS candidates,
-      SUM(CASE WHEN validation_status = 'valid' THEN 1 ELSE 0 END) AS valid_lp,
-      SUM(CASE WHEN validation_status IN ('broken','parked','redirect_loop','timeout') THEN 1 ELSE 0 END) AS broken_or_parked,
-      -- 'no_url' is "we couldn't test", distinct from 'broken' which is "we tested and it failed".
-      -- Connectors that don't expose destination URLs in their basic feed land here.
-      SUM(CASE WHEN validation_status = 'no_url' THEN 1 ELSE 0 END) AS no_url,
+      SUM(CASE WHEN approval_status = 'pending' THEN 1 ELSE 0 END) AS pending_approval,
+      SUM(CASE WHEN approval_status != 'pending' AND validation_status = 'valid' THEN 1 ELSE 0 END) AS valid_lp,
+      SUM(CASE WHEN approval_status != 'pending' AND validation_status IN ('broken','parked','redirect_loop','timeout') THEN 1 ELSE 0 END) AS broken_or_parked,
+      SUM(CASE WHEN approval_status != 'pending' AND validation_status = 'no_url' THEN 1 ELSE 0 END) AS no_url,
       SUM(CASE WHEN import_status = 'imported' AND reviewed_at >= unixepoch('now','-7 days') THEN 1 ELSE 0 END) AS imported_7d,
       AVG(best_match_score) AS avg_match,
       MAX(last_seen_at) AS last_scan,

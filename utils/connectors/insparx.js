@@ -39,7 +39,7 @@
  *   import; we can iterate to add URLs in a follow-up.
  */
 const fetch = require('node-fetch');
-const { BaseConnector } = require('./base');
+const { BaseConnector, normApprovalStatus } = require('./base');
 
 const DEFAULT_BASE = 'https://affiliates.insparx.com/affiliates/api/1';
 
@@ -201,6 +201,10 @@ class InsparxConnector extends BaseConnector {
 
       status: statusFromCake(raw.status_name),
       advertiser_name: null,           // Not exposed in OfferFeed
+
+      // CAKE OfferFeed doesn't return per-affiliate approval state — that
+      // lives on OfferSummary which isn't wired up yet (Phase B follow-up).
+      approval_status: 'unknown',
 
       raw,
     };

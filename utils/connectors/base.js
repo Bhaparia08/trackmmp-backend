@@ -102,4 +102,22 @@ class BaseConnector {
  * @property {object} raw                    original payload for debugging
  */
 
-module.exports = { BaseConnector };
+// Phase A: shared approval-status normalizer used by every connector + bridge.
+// Maps a platform's per-offer "can the publisher promote this?" signal into
+// a single vocabulary: 'approved' | 'pending' | 'rejected' | 'unknown'.
+//
+// Each connector calls this on its raw field; pass a customMap for any
+// platform-specific values that don't fit the defaults.
+function normApprovalStatus(value, customMap = {}) {
+  if (value == null || value === '') return 'unknown';
+  if (value === true)  return 'approved';
+  if (value === false) return 'pending';
+  const v = String(value).trim().toLowerCase();
+  if (customMap[v]) return customMap[v];
+  if (['approved', 'active', 'joined', 'connected', 'public'].includes(v)) return 'approved';
+  if (['pending', 'application received', 'awaiting approval', 'pendingapproval', 'requires_attention', 'unblocked'].includes(v)) return 'pending';
+  if (['rejected', 'declined', 'denied', 'blocked', 'banned'].includes(v)) return 'rejected';
+  return 'unknown';
+}
+
+module.exports = { BaseConnector, normApprovalStatus };
