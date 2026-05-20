@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Full system plan — preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .topbar { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .topbar a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 24px 80px; }
+
+    h2 { font-size: 22px; margin: 38px 0 6px; }
+    h3 { font-size: 16px; margin: 26px 0 8px; color: #a5f3fc; }
+    p, li { color: #cbd5e1; }
+    .lede { color: #94a3b8; font-size: 14px; margin: 0 0 18px; }
+
+    .card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; margin-bottom: 18px; }
+    .card.green { border-left: 4px solid #10b981; }
+    .card.blue  { border-left: 4px solid #6366f1; }
+    .card.amber { border-left: 4px solid #f59e0b; }
+    .card h3 { margin-top: 0; }
+
+    pre { background: #0a0a14; color: #a5f3fc; padding: 14px; border-radius: 8px; font-size: 12px; line-height: 1.55; overflow-x: auto; border: 1px solid #ffffff14; }
+    code { background: rgba(99,102,241,.15); color: #a5f3fc; padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: 'SF Mono', Menlo, monospace; }
+
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid #ffffff14; text-align: left; vertical-align: top; }
+    th { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+    .pill-green  { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .pill-amber  { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .pill-red    { background: rgba(239,68,68,.15);  color: #fca5a5; }
+    .pill-blue   { background: rgba(99,102,241,.15); color: #c7d2fe; }
+
+    .banner { background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 13px; color: #c7d2fe; }
+    .banner strong { color: #fff; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+    @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+    .col-card { background: #0a0a14; border: 1px solid #ffffff14; border-radius: 8px; padding: 14px 16px; }
+    .col-card h4 { margin: 0 0 8px; font-size: 14px; color: #fff; }
+    .col-card .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; margin-top: 8px; }
+
+    .toc { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+    .toc a { background: #1a1a2e; border: 1px solid #ffffff14; padding: 7px 14px; border-radius: 8px; color: #c7d2fe; text-decoration: none; font-size: 13px; }
+    .toc a:hover { border-color: #6366f1; color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>Preview: full-system build plan</h1>
+</div>
+
+<div class="wrap">
+
+<div class="banner">
+  <strong>This is what was just built locally — not yet on prod.</strong>
+  Reviewing this preview is the gate before the code goes live.  Approve sections individually or all at once with one reply.
+</div>
+
+<div class="toc">
+  <a href="#android">📱 Android SDK</a>
+  <a href="#ios">📱 iOS SDK</a>
+  <a href="#cpmcpc">💰 CPM/CPC pricing</a>
+  <a href="#namespace">🗂 Inventory namespace</a>
+  <a href="#decision">✋ Your decision</a>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="android">📱 Android SDK — v0 scaffold</h2>
+<p class="lede">Kotlin module with the public API surface mirroring our web JS SDK.  Ready for a mobile engineer to extend and publish to Maven Central.</p>
+
+<div class="card green">
+  <h3>What's in the scaffold</h3>
+  <ul>
+    <li><code>build.gradle.kts</code> — Gradle 8.6 + Kotlin 2.0 + Android 14 (SDK 34)</li>
+    <li><code>ApogeeMobi.kt</code> — singleton with <code>init()</code>, <code>loadOffers()</code>, <code>trackClick()</code>, <code>setConsent()</code></li>
+    <li><code>Models.kt</code> — Kotlin data classes for <code>Offer</code>, <code>Creative</code>, <code>ServeResponse</code></li>
+    <li><code>README.md</code> — install instructions + sample usage + next-steps for the mobile engineer</li>
+  </ul>
+
+  <h3>Sample integration in a host app</h3>
+<pre><code>// Application.onCreate
+ApogeeMobi.init(applicationContext, "your_api_key")
+
+// In Activity or Composable
+ApogeeMobi.loadOffers("top-loan-offers") { result ->
+    result.onSuccess { resp -> renderOffers(resp.offers) }
+}
+
+// On tap
+val url = ApogeeMobi.trackClick(offer)
+startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))</code></pre>
+
+  <h3>What's NOT in the scaffold (mobile engineer's job)</h3>
+  <ul>
+    <li>Maven Central publishing setup (Sonatype OSSRH)</li>
+    <li>Compose UI helpers (host apps render their own UI today)</li>
+    <li>Mediation layer (AdMob/Meta integration for unfilled impressions)</li>
+    <li>VAST/VPAID video ad rendering</li>
+    <li>Espresso instrumented tests</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="ios">📱 iOS SDK — v0 scaffold</h2>
+<p class="lede">Swift Package Manager module with the same API as Android, ready for Xcode + SwiftPM distribution.</p>
+
+<div class="card green">
+  <h3>What's in the scaffold</h3>
+  <ul>
+    <li><code>Package.swift</code> — SwiftPM manifest (iOS 13+ minimum, zero external deps)</li>
+    <li><code>ApogeeMobi.swift</code> — singleton with <code>initialize()</code>, <code>loadOffers()</code>, <code>trackClick()</code>, <code>setConsent()</code></li>
+    <li><code>Models.swift</code> — Codable structs for <code>Offer</code>, <code>Creative</code>, <code>ServeResponse</code></li>
+    <li><code>README.md</code> — install instructions for SwiftPM + sample usage</li>
+  </ul>
+
+  <h3>Sample integration in a host app</h3>
+<pre><code>// SwiftUI App init or AppDelegate
+ApogeeMobi.shared.initialize(apiKey: "your_api_key")
+
+// In a View
+ApogeeMobi.shared.loadOffers(placementSlug: "top-loan-offers") { result in
+    if case .success(let response) = result {
+        DispatchQueue.main.async { self.offers = response.offers }
+    }
+}
+
+// On tap
+let url = ApogeeMobi.shared.trackClick(offer: offer)
+UIApplication.shared.open(url)</code></pre>
+
+  <h3>What's NOT in the scaffold</h3>
+  <ul>
+    <li>Separate <code>apogeemobi-ios-sdk</code> public GitHub repo for SwiftPM consumers</li>
+    <li>SwiftUI offer-card / comparison-table view modifiers</li>
+    <li>ATT (App Tracking Transparency) prompt orchestration</li>
+    <li>iOS 17 Privacy Manifest (<code>PrivacyInfo.xcprivacy</code>)</li>
+    <li>XCTest coverage</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="cpmcpc">💰 CPM/CPC pricing — schema sketch</h2>
+<p class="lede">Right now every campaign is CPA (advertiser pays on conversion).  To run the network-operator business, you need campaigns priced by impression (CPM) or click (CPC).  This is the schema change.  Billing logic is a separate phase.</p>
+
+<div class="card blue">
+  <h3>New columns on <code>campaigns</code> table</h3>
+  <table>
+    <tr><th>Column</th><th>Type</th><th>Purpose</th></tr>
+    <tr><td><code>pricing_model</code></td><td>TEXT default 'cpa'</td><td>One of: <code>cpa</code> / <code>cpm</code> / <code>cpc</code> / <code>flat</code></td></tr>
+    <tr><td><code>cpm_rate</code></td><td>REAL</td><td>$ per 1000 impressions (set when model=cpm)</td></tr>
+    <tr><td><code>cpc_rate</code></td><td>REAL</td><td>$ per click (set when model=cpc)</td></tr>
+    <tr><td><code>flat_rate</code></td><td>REAL</td><td>$ per period (set when model=flat)</td></tr>
+    <tr><td><code>flat_period</code></td><td>TEXT</td><td><code>day</code> / <code>week</code> / <code>month</code></td></tr>
+  </table>
+
+  <h3>New tables — billing logs</h3>
+  <div class="two-col">
+    <div class="col-card">
+      <h4><code>billing_impressions</code></h4>
+      <div class="label">Populated per impression for CPM campaigns</div>
+      <p style="font-size:12px;color:#94a3b8;margin:6px 0 0">advertiser_charge (what we bill the advertiser) and publisher_revenue (what we owe the publisher) are stored separately so you can compute the margin per row.</p>
+    </div>
+    <div class="col-card">
+      <h4><code>billing_clicks</code></h4>
+      <div class="label">Populated per click for CPC campaigns</div>
+      <p style="font-size:12px;color:#94a3b8;margin:6px 0 0">Mirrors the impressions table.  Click → look up campaign → if CPC → row inserted with the rate.</p>
+    </div>
+  </div>
+</div>
+
+<div class="card amber">
+  <h3>What's NOT in this commit (separate phase)</h3>
+  <ul>
+    <li>The <code>/api/v1/serve</code> endpoint <strong>does not yet</strong> insert into <code>billing_impressions</code> when serving a CPM campaign.  Schema is ready; pipeline is phase 2.</li>
+    <li><code>/track/click/...</code> <strong>does not yet</strong> insert into <code>billing_clicks</code> when the campaign is CPC.</li>
+    <li>No advertiser invoicing yet — CPM/CPC bills are written but not totaled into invoices.</li>
+    <li>No advertiser-side budget enforcement — a CPM campaign could in theory run past its budget.</li>
+  </ul>
+  <p style="margin:10px 0 0">All 4 of those need separate work.  The schema being ready means we can implement them in any order without another migration.</p>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="namespace">🗂 External-inventory namespace</h2>
+<p class="lede">Keeps your own 18 sites cleanly separated from inventory contributed by external publishers.  One column.</p>
+
+<div class="card blue">
+  <h3>New column on <code>owned_inventory</code> table</h3>
+  <table>
+    <tr><th>source value</th><th>Meaning</th><th>Default for…</th></tr>
+    <tr>
+      <td><span class="pill pill-green">owned</span></td>
+      <td>Your own portfolio sites — current 18 fall here</td>
+      <td>All existing rows on prod (default value)</td>
+    </tr>
+    <tr>
+      <td><span class="pill pill-blue">external_publisher</span></td>
+      <td>Sites/apps owned by external partners you've onboarded</td>
+      <td>BD team sets when they register a new publisher's site</td>
+    </tr>
+    <tr>
+      <td><span class="pill pill-amber">network_supply</span></td>
+      <td>OpenRTB/SSP supply (future — when you sell to external DSPs)</td>
+      <td>n/a yet, reserved</td>
+    </tr>
+  </table>
+
+  <h3>How it gets used</h3>
+  <ul>
+    <li>Admin dashboard can split metrics: "earnings from owned sites" vs "earnings from external publisher network" — different P&Ls</li>
+    <li><code>/api/sites/health</code> can filter to show one business at a time</li>
+    <li>Different default <code>publisher_payout</code> rules per source (you might pay external publishers 70% of advertiser CPM but keep 100% from owned sites)</li>
+    <li>Different reporting cadence (external publishers want self-serve daily reports; owned doesn't need that)</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="decision">✋ Your decision — what to deploy?</h2>
+
+<div class="card">
+  <p>None of the above is on prod yet.  Files live in your local repo, waiting for explicit approval.</p>
+
+  <table style="margin-top:14px">
+    <tr><th>Section</th><th>Files added/changed</th><th>Production risk</th><th>Reversible?</th></tr>
+    <tr>
+      <td>Android SDK scaffold</td>
+      <td><code>backend/sdk/android/*</code> (4 files, ~500 LoC)</td>
+      <td><span class="pill pill-green">none</span> — sits in repo, not loaded by server</td>
+      <td>Trivially (just delete)</td>
+    </tr>
+    <tr>
+      <td>iOS SDK scaffold</td>
+      <td><code>backend/sdk/ios/*</code> (4 files, ~400 LoC)</td>
+      <td><span class="pill pill-green">none</span> — same</td>
+      <td>Trivially</td>
+    </tr>
+    <tr>
+      <td>CPM/CPC schema</td>
+      <td><code>backend/db/init.js</code> + 2 new tables, 5 new columns</td>
+      <td><span class="pill pill-amber">low</span> — adds nullable cols + new tables, doesn't change behavior</td>
+      <td>Yes (drop the new tables / set the new cols to NULL)</td>
+    </tr>
+    <tr>
+      <td>Inventory namespace</td>
+      <td><code>backend/db/init.js</code> — 1 new col, 1 new index</td>
+      <td><span class="pill pill-green">none</span> — defaults to <code>owned</code> for all existing rows; no read paths use it yet</td>
+      <td>Yes (drop column)</td>
+    </tr>
+  </table>
+
+  <h3 style="margin-top:24px">Reply with one of:</h3>
+  <ul style="line-height:1.9">
+    <li><strong>"deploy all"</strong> — ships everything (SDKs + schema)</li>
+    <li><strong>"deploy schema only"</strong> — ships the CPM/CPC + namespace schema additions; SDKs stay local for the mobile engineer</li>
+    <li><strong>"deploy sdks only"</strong> — ships the iOS + Android scaffolds; schema stays local</li>
+    <li><strong>"hold"</strong> — everything stays local, you review further</li>
+  </ul>
+
+  <p style="margin-top:20px;font-size:12px;color:#94a3b8;font-style:italic">
+    Recommendation: <strong>deploy schema only</strong> first.  Schema migrations are idempotent and reversible, but they need to be on prod before you can experiment with CPM/CPC campaigns.  The SDK scaffolds are inert files until a mobile engineer picks them up — no urgency to ship them.
+  </p>
+</div>
+
+<p style="margin-top:40px;font-size:12px;color:#64748b;text-align:center">
+  Generated 2026-05-20 ·  static preview, no backend required ·  shareable across devices
+</p>
+
+</div>
+</body>
+</html>
