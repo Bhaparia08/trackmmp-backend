@@ -1054,3 +1054,7 @@ router.post('/test-postback', async (req, res, next) => {
 });
 
 module.exports = router;
+// Expose the legacy ADAPTERS map so utils/discoveryEngine.js can fall back to
+// the proven /offer-import fetchers when a Discovery Hub connector is missing
+// or errors. Read-only — never mutated by the bridge.
+module.exports.ADAPTERS = ADAPTERS;
