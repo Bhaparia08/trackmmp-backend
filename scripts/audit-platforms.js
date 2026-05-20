@@ -30,7 +30,10 @@ const FRONTEND_SRC  = path.join(ROOT, 'frontend', 'src', 'pages');
 
 // Platforms that aren't expected to live in every UI. Adjust these only when
 // a stub becomes a real connector or an MMP gains list_offers capability.
-const STUB_PLATFORMS = new Set(['clickbank', 'lomadee', 'shareasale']);
+// Rakuten was added 2026-04 as a stub but accumulated 16+ cross-file refs (track.js,
+// acquisition.js, campaigns.js, multiple frontend pages) — too invasive to remove
+// without a focused refactor. Exempt from parity until a real connector is built.
+const STUB_PLATFORMS = new Set(['clickbank', 'lomadee', 'shareasale', 'rakuten']);
 const MMP_PLATFORMS  = new Set(['adjust', 'branch']);     // no offer fetch by design
 const WEBHOOK_ONLY   = new Set(['custom']);                // operator pushes, no UI tile needed
 const EXEMPT_FROM_API_ACCESS_FORM = new Set();             // ones intentionally not in /api-access
