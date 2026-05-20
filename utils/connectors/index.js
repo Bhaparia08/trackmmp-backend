@@ -14,9 +14,11 @@ const MaxBounty  = require('./maxbounty');
 const Awin       = require('./awin');
 const {
   AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector,
-  ClickBankConnector, LomadeeConnector, ShareASaleConnector,
 } = require('./stubs');
 
+// Removed 2026-05-20: clickbank, lomadee, shareasale were stubs that returned []
+// and misled operators into thinking we had those integrations. Restore them
+// here (along with imports above) when real connectors are built.
 const connectors = {
   everflow:   Everflow,
   tune:       TUNE,
@@ -25,9 +27,6 @@ const connectors = {
   cj:         CJ,
   maxbounty:  MaxBounty,
   awin:       Awin,
-  clickbank:  ClickBankConnector,
-  lomadee:    LomadeeConnector,
-  shareasale: ShareASaleConnector,
   adjust:     AdjustConnector,
   branch:     BranchConnector,
   cityads:    CityAdsConnector,
