@@ -902,10 +902,10 @@ router.post('/import', (req, res, next) => {
     const insertCampaign = db.prepare(`
       INSERT INTO campaigns
         (user_id, advertiser_id, name, advertiser_name, campaign_token, security_token,
-         payout, payout_type, publisher_payout, publisher_payout_type,
+         payout, payout_type, payout_currency, publisher_payout, publisher_payout_type,
          destination_url, preview_url, allowed_countries, visibility, status,
          source_credential_id, external_offer_id, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
     `);
 
     const updateCampaign = db.prepare(`
@@ -914,6 +914,7 @@ router.post('/import', (req, res, next) => {
         advertiser_name = COALESCE(?, advertiser_name),
         payout = COALESCE(?, payout),
         payout_type = COALESCE(?, payout_type),
+        payout_currency = COALESCE(?, payout_currency),
         publisher_payout = COALESCE(?, publisher_payout),
         publisher_payout_type = COALESCE(?, publisher_payout_type),
         destination_url = COALESCE(?, destination_url),
@@ -952,6 +953,7 @@ router.post('/import', (req, res, next) => {
             advName,
             advPayout != null ? advPayout : null,
             offer.payout_type || null,
+            normCurrency(offer.currency),   // Currency Phase 2 — preserve currency on re-import
             pubPayout != null ? pubPayout : null,
             pubPayoutType || null,
             destUrl,
@@ -985,6 +987,7 @@ router.post('/import', (req, res, next) => {
         secToken,
         advPayout,
         offer.payout_type || 'cpi',
+        normCurrency(offer.currency),   // Currency Phase 2 — preserve currency on new import
         pubPayout,
         pubPayoutType,
         destUrl,

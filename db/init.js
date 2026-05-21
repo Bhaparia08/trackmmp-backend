@@ -734,6 +734,45 @@ const migrations = [
     WHERE validation_status = 'broken'
       AND validation_notes = 'no url'`,
 
+  // Currency Phase 2 (2026-05-21): preserve currency on imported campaigns too.
+  // The /api/integrations/import flow was discarding currency, so every imported
+  // campaign defaulted to whatever the operator saw in their dashboard — usually USD.
+  // payout_currency  — ISO 4217 code from the source candidate (or fetched offer)
+  // payout_usd       — USD equivalent at import time (refreshed on auto-sync)
+  // fx_rate_used     — snapshot of conversion rate for audit
+  `ALTER TABLE campaigns ADD COLUMN payout_currency TEXT DEFAULT 'USD'`,
+  `ALTER TABLE campaigns ADD COLUMN payout_usd      REAL`,
+  `ALTER TABLE campaigns ADD COLUMN fx_rate_used    REAL`,
+  // Backfill: for campaigns linked to a source candidate, copy the candidate's
+  // currency + USD value. Unlinked campaigns stay 'USD' (the legacy default).
+  `UPDATE campaigns
+      SET payout_currency = (
+            SELECT payout_currency FROM campaign_candidates
+             WHERE source_credential_id = campaigns.source_credential_id
+               AND source_offer_id      = campaigns.external_offer_id
+             LIMIT 1
+          ),
+          payout_usd = (
+            SELECT payout_usd FROM campaign_candidates
+             WHERE source_credential_id = campaigns.source_credential_id
+               AND source_offer_id      = campaigns.external_offer_id
+             LIMIT 1
+          ),
+          fx_rate_used = (
+            SELECT fx_rate_used FROM campaign_candidates
+             WHERE source_credential_id = campaigns.source_credential_id
+               AND source_offer_id      = campaigns.external_offer_id
+             LIMIT 1
+          )
+    WHERE source_credential_id IS NOT NULL
+      AND external_offer_id    IS NOT NULL
+      AND payout_currency      = 'USD'   -- only fill rows still at the default
+      AND EXISTS (
+        SELECT 1 FROM campaign_candidates
+         WHERE source_credential_id = campaigns.source_credential_id
+           AND source_offer_id      = campaigns.external_offer_id
+      )`,
+
   // Currency Phase 1: store USD-converted payout alongside the original currency.
   // payout_usd     — computed at scan time using utils/currencyConverter
   // fx_rate_used   — rate snapshot at conversion time, so historical reports stay accurate
