@@ -707,7 +707,61 @@ async function fetchInsparx(cred) {
   });
 }
 
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx };
+async function fetchTrackier(cred) {
+  if (!cred?.api_key) {
+    throw new Error('Trackier requires API Key');
+  }
+  const Trackier = require('../utils/connectors/trackier');
+  const rawOffers = await Trackier.listOffers(cred);
+  return rawOffers.map(raw => {
+    const norm = Trackier.normalizeOffer(raw, cred);
+    return {
+      external_id:       norm.source_offer_id,
+      name:              norm.name,
+      description:       norm.description || '',
+      payout:            norm.payout || 0,
+      payout_type:       norm.payout_type || 'cpa',
+      currency:          normCurrency(norm.payout_currency),
+      status:            norm.status === 'active' ? 'active' : 'paused',
+      tracking_url:      norm.tracking_url_template || '',
+      preview_url:       norm.preview_url || norm.destination_url || '',
+      allowed_countries: (norm.allowed_countries || []).join(','),
+      advertiser_name:   norm.advertiser_name || 'Trackier',
+      categories:        norm.vertical || '',
+      approval_status:   norm.approval_status || 'approved',
+      raw,
+    };
+  });
+}
+
+async function fetchAffise(cred) {
+  if (!cred?.api_key || !cred?.base_url) {
+    throw new Error('Affise requires API Key and API URL (base_url)');
+  }
+  const Affise = require('../utils/connectors/affise');
+  const rawOffers = await Affise.listOffers(cred);
+  return rawOffers.map(raw => {
+    const norm = Affise.normalizeOffer(raw, cred);
+    return {
+      external_id:       norm.source_offer_id,
+      name:              norm.name,
+      description:       norm.description || '',
+      payout:            norm.payout || 0,
+      payout_type:       norm.payout_type || 'cpa',
+      currency:          normCurrency(norm.payout_currency),
+      status:            norm.status === 'active' ? 'active' : 'paused',
+      tracking_url:      norm.tracking_url_template || '',
+      preview_url:       norm.preview_url || norm.destination_url || '',
+      allowed_countries: (norm.allowed_countries || []).join(','),
+      advertiser_name:   norm.advertiser_name || 'Affise',
+      categories:        norm.vertical || '',
+      approval_status:   norm.approval_status || 'unknown',
+      raw,
+    };
+  });
+}
+
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx, trackier: fetchTrackier, affise: fetchAffise };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {
