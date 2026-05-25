@@ -12,8 +12,9 @@ const Insparx    = require('./insparx');
 const CJ         = require('./cj');
 const MaxBounty  = require('./maxbounty');
 const Awin       = require('./awin');
-const Trackier   = require('./trackier');
-const Affise     = require('./affise');
+const Trackier    = require('./trackier');
+const Affise      = require('./affise');
+const ClickDealer = require('./clickdealer');
 const {
   AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector,
 } = require('./stubs');
@@ -29,9 +30,10 @@ const connectors = {
   cj:         CJ,
   maxbounty:  MaxBounty,
   awin:       Awin,
-  trackier:   Trackier,
-  affise:     Affise,
-  adjust:     AdjustConnector,
+  trackier:    Trackier,
+  affise:      Affise,
+  clickdealer: ClickDealer,
+  adjust:      AdjustConnector,
   branch:     BranchConnector,
   cityads:    CityAdsConnector,
   rakuten:    RakutenConnector,
