@@ -144,6 +144,65 @@ function toOurMacros(url, platform, options = {}) {
       // when we construct the deeplink URL; no macro replacement needed here.
       // This entry is a no-op placeholder kept for consistency.
     ],
+    trackier: [
+      // Trackier convention: click_id is passed as &p1=, returned in postbacks as {p1}
+      ['{your-transaction-id}', '{click_id}'],
+      ['{your-click-id}',       '{click_id}'],
+      ['{p1}',                  '{click_id}'],   // platform-side placeholder
+      ['{your-sub-aff-id}',     '{pid}'],
+      ['{sub-aff-id}',          '{pid}'],
+      ['{source}',              '{pid}'],
+      ['{p2}',                  '{sub1}'],
+      ['{p3}',                  '{sub2}'],
+      ['{gaid}',                '{gaid}'],
+      ['{idfa}',                '{idfa}'],
+    ],
+    affise: [
+      // Affise has NO click_id macro — convention is to pass click_id as {sub1}.
+      // We rewrite Affise's typical placeholders to our macros and rely on the
+      // auto-inject below to append &sub1={click_id} if not already present.
+      ['{sub1}',          '{click_id}'],   // sub1 carries click_id by convention
+      ['{sub2}',          '{sub1}'],
+      ['{sub3}',          '{sub2}'],
+      ['{partner_id}',    '{pid}'],
+      ['{pid}',           '{pid}'],
+      ['{gaid}',          '{gaid}'],
+      ['{idfa}',          '{idfa}'],
+      ['{country_code}',  '{country}'],
+    ],
+    clickdealer: [
+      // ClickDealer is CAKE — same macros as Insparx/CAKE generic.
+      // CAKE convention: click_id passed as &s2=, returned in postbacks as #s2#.
+      ['#s2#',                '{click_id}'],
+      ['{s2}',                '{click_id}'],
+      ['#requested_action_id#','{goal_value}'],
+      ['#price#',             '{payout}'],
+      ['#received_amount#',   '{revenue}'],
+      ['#s3#',                '{gaid}'],
+      ['{s3}',                '{gaid}'],
+      ['#s4#',                '{idfa}'],
+      ['{s4}',                '{idfa}'],
+      ['#s5#',                '{sub1}'],
+      ['{s5}',                '{sub1}'],
+      ['#affiliate_id#',      affiliateTarget],
+      ['{affiliate_id}',      affiliateTarget],
+    ],
+    cake: [
+      // Same as ClickDealer — every CAKE-powered network follows this macro convention.
+      ['#s2#',                '{click_id}'],
+      ['{s2}',                '{click_id}'],
+      ['#requested_action_id#','{goal_value}'],
+      ['#price#',             '{payout}'],
+      ['#received_amount#',   '{revenue}'],
+      ['#s3#',                '{gaid}'],
+      ['{s3}',                '{gaid}'],
+      ['#s4#',                '{idfa}'],
+      ['{s4}',                '{idfa}'],
+      ['#s5#',                '{sub1}'],
+      ['{s5}',                '{sub1}'],
+      ['#affiliate_id#',      affiliateTarget],
+      ['{affiliate_id}',      affiliateTarget],
+    ],
   };
 
   const pairs = maps[platform] || [];
@@ -157,13 +216,17 @@ function toOurMacros(url, platform, options = {}) {
   // using the canonical click_id param name for this platform.
   if (result && !result.includes('{click_id}')) {
     const clickIdParams = {
-      impact:    'irclickid={click_id}',
-      everflow:  'transaction_id={click_id}',
-      tune:      'transaction_id={click_id}',
-      cityads:   'click_id={click_id}',
-      appsflyer: 'clickid={click_id}',
-      swaarm:    'pub_click_id={click_id}',
-      admitad:   'subid={click_id}',
+      impact:      'irclickid={click_id}',
+      everflow:    'transaction_id={click_id}',
+      tune:        'transaction_id={click_id}',
+      cityads:     'click_id={click_id}',
+      appsflyer:   'clickid={click_id}',
+      swaarm:      'pub_click_id={click_id}',
+      admitad:     'subid={click_id}',
+      trackier:    'p1={click_id}',           // Trackier's click_id convention
+      affise:      'sub1={click_id}',         // Affise has no click_id macro; sub1 carries it
+      clickdealer: 's2={click_id}',           // CAKE convention
+      cake:        's2={click_id}',           // CAKE convention (any CAKE-powered network)
     };
     const param = clickIdParams[platform];
     if (param) {
@@ -715,6 +778,7 @@ async function fetchTrackier(cred) {
   const rawOffers = await Trackier.listOffers(cred);
   return rawOffers.map(raw => {
     const norm = Trackier.normalizeOffer(raw, cred);
+    const rawTracking = norm.tracking_url_template || '';
     return {
       external_id:       norm.source_offer_id,
       name:              norm.name,
@@ -723,7 +787,7 @@ async function fetchTrackier(cred) {
       payout_type:       norm.payout_type || 'cpa',
       currency:          normCurrency(norm.payout_currency),
       status:            norm.status === 'active' ? 'active' : 'paused',
-      tracking_url:      norm.tracking_url_template || '',
+      tracking_url:      toOurMacros(rawTracking, 'trackier'),
       preview_url:       norm.preview_url || norm.destination_url || '',
       allowed_countries: (norm.allowed_countries || []).join(','),
       advertiser_name:   norm.advertiser_name || 'Trackier',
@@ -742,6 +806,7 @@ async function fetchAffise(cred) {
   const rawOffers = await Affise.listOffers(cred);
   return rawOffers.map(raw => {
     const norm = Affise.normalizeOffer(raw, cred);
+    const rawTracking = norm.tracking_url_template || '';
     return {
       external_id:       norm.source_offer_id,
       name:              norm.name,
@@ -750,7 +815,7 @@ async function fetchAffise(cred) {
       payout_type:       norm.payout_type || 'cpa',
       currency:          normCurrency(norm.payout_currency),
       status:            norm.status === 'active' ? 'active' : 'paused',
-      tracking_url:      norm.tracking_url_template || '',
+      tracking_url:      toOurMacros(rawTracking, 'affise'),
       preview_url:       norm.preview_url || norm.destination_url || '',
       allowed_countries: (norm.allowed_countries || []).join(','),
       advertiser_name:   norm.advertiser_name || 'Affise',
@@ -769,6 +834,7 @@ async function fetchClickDealer(cred) {
   const rawOffers = await ClickDealer.listOffers(cred);
   return rawOffers.map(raw => {
     const norm = ClickDealer.normalizeOffer(raw, cred);
+    const rawTracking = norm.tracking_url_template || '';
     return {
       external_id:       norm.source_offer_id,
       name:              norm.name,
@@ -777,7 +843,7 @@ async function fetchClickDealer(cred) {
       payout_type:       norm.payout_type || 'cpa',
       currency:          normCurrency(norm.payout_currency),
       status:            norm.status === 'active' ? 'active' : 'paused',
-      tracking_url:      norm.tracking_url_template || '',
+      tracking_url:      toOurMacros(rawTracking, 'clickdealer'),
       preview_url:       norm.preview_url || norm.destination_url || '',
       allowed_countries: (norm.allowed_countries || []).join(','),
       advertiser_name:   norm.advertiser_name || 'ClickDealer',
@@ -800,6 +866,7 @@ async function fetchCAKE(cred) {
   const rawOffers = await CAKE.listOffers(cred);
   return rawOffers.map(raw => {
     const norm = CAKE.normalizeOffer(raw, cred);
+    const rawTracking = norm.tracking_url_template || '';
     return {
       external_id:       norm.source_offer_id,
       name:              norm.name,
@@ -808,7 +875,7 @@ async function fetchCAKE(cred) {
       payout_type:       norm.payout_type || 'cpa',
       currency:          normCurrency(norm.payout_currency),
       status:            norm.status === 'active' ? 'active' : 'paused',
-      tracking_url:      norm.tracking_url_template || '',
+      tracking_url:      toOurMacros(rawTracking, 'cake'),
       preview_url:       norm.preview_url || norm.destination_url || '',
       allowed_countries: (norm.allowed_countries || []).join(','),
       advertiser_name:   norm.advertiser_name || extra.display_name || 'CAKE Network',
