@@ -2,13 +2,32 @@ const express = require('express');
 const db = require('../db/init');
 const { nanoid16 } = require('../utils/clickId');
 const { parseDevice } = require('../utils/deviceParser');
-const { lookupCountry } = require('../utils/geoip');
+const { lookupCountry, lookupGeo } = require('../utils/geoip');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
 
 const clickLimiter = rateLimit({ windowMs: 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 const impLimiter   = rateLimit({ windowMs: 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false });
+
+// Phase A targeting helper. Returns true if `actual` passes the allow/block
+// CSV lists. Empty list or 'all' (legacy default for allowed_devices) means
+// "no filter". Empty `actual` skips enforcement on this lever — mirrors how
+// the country check tolerates 'XX' when GeoIP DB is missing.
+function targetingPasses(actual, allowedCsv, blockedCsv) {
+  const v = String(actual || '').trim().toLowerCase();
+  if (!v) return true;
+  const parse = (csv) => {
+    const raw = String(csv || '').trim().toLowerCase();
+    if (!raw || raw === 'all') return [];
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  };
+  const allowed = parse(allowedCsv);
+  const blocked = parse(blockedCsv);
+  if (allowed.length > 0 && !allowed.includes(v)) return false;
+  if (blocked.length > 0 &&  blocked.includes(v)) return false;
+  return true;
+}
 
 // GET /track/click/:campaign_token
 router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
@@ -23,7 +42,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
     const q = req.query;
     const ua = req.headers['user-agent'] || '';
     const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
-    const country = await lookupCountry(ip);
+    const { country, region, city } = await lookupGeo(ip);
     const { device_type, os, browser, platform } = parseDevice(ua);
     const language = req.headers['accept-language']?.split(',')[0] || '';
 
@@ -119,14 +138,53 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
         // FIX #4: log a rejected click so publisher can debug, still return 200
         db.prepare(`INSERT INTO clicks
           (click_id, campaign_id, publisher_id, user_id, pid, publisher_click_id,
-           ip, user_agent, country, device_type, os, platform, advertising_id,
+           ip, user_agent, country, region, city, device_type, os, browser, platform, advertising_id,
            inventory_id, placement_id, status)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'geo_blocked')`)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'geo_blocked')`)
           .run(nanoid16(), campaign.id, publisher_id, campaign.user_id,
-               q.pid||null, publisher_click_id, ip, ua, country,
-               device_type, os, platform, advertising_id||null,
+               q.pid||null, publisher_click_id, ip, ua, country, region||null, city||null,
+               device_type, os, browser, platform, advertising_id||null,
                inventory_id, placement_id);
         return res.status(200).send('GEO_BLOCKED');
+      }
+    }
+
+    // ── Phase A targeting: region / city / device / OS / browser ─────────────
+    // After country passes (or is unset), enforce remaining targeting levers.
+    // Same redirect-to-fallback behavior as country block. Empty lists = no
+    // filter; unknown actual values (e.g. region/city when only the country
+    // GeoIP DB is loaded) skip enforcement on that lever.
+    if (!previewBypass) {
+      const targetingFailedOn =
+        !targetingPasses(region,      campaign.allowed_regions,  campaign.blocked_regions)  ? 'region'  :
+        !targetingPasses(city,        campaign.allowed_cities,   campaign.blocked_cities)   ? 'city'    :
+        !targetingPasses(device_type, campaign.allowed_devices,  campaign.blocked_devices)  ? 'device'  :
+        !targetingPasses(os,          campaign.allowed_os,       campaign.blocked_os)       ? 'os'      :
+        !targetingPasses(browser,     campaign.allowed_browsers, campaign.blocked_browsers) ? 'browser' :
+        null;
+
+      if (targetingFailedOn) {
+        const fallback = campaign.geo_fallback_url;
+        if (fallback) {
+          const qs = [];
+          if (q.pid) qs.push('pid=' + encodeURIComponent(q.pid));
+          if (publisher_click_id) qs.push('clickid=' + encodeURIComponent(publisher_click_id));
+          if (advertising_id) qs.push('advertising_id=' + encodeURIComponent(advertising_id));
+          if (q.sub1) qs.push('sub1=' + encodeURIComponent(q.sub1));
+          if (q.sub2) qs.push('sub2=' + encodeURIComponent(q.sub2));
+          const dest = fallback + (qs.length ? (fallback.includes('?') ? '&' : '?') + qs.join('&') : '');
+          return res.redirect(302, dest);
+        }
+        db.prepare(`INSERT INTO clicks
+          (click_id, campaign_id, publisher_id, user_id, pid, publisher_click_id,
+           ip, user_agent, country, region, city, device_type, os, browser, platform, advertising_id,
+           inventory_id, placement_id, status)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'geo_blocked')`)
+          .run(nanoid16(), campaign.id, publisher_id, campaign.user_id,
+               q.pid||null, publisher_click_id, ip, ua, country, region||null, city||null,
+               device_type, os, browser, platform, advertising_id||null,
+               inventory_id, placement_id);
+        return res.status(200).send('GEO_BLOCKED:' + targetingFailedOn.toUpperCase());
       }
     }
 
@@ -324,17 +382,17 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
        pid, af_c_id, af_siteid,
        af_sub1, af_sub2, af_sub3, af_sub4, af_sub5,
        sub6, sub7, sub8, sub9, sub10,
-       publisher_click_id, ip, user_agent, country, language,
+       publisher_click_id, ip, user_agent, country, region, city, language,
        device_type, os, browser, advertising_id, platform, referrer,
        creative_id, ad_id, landing_page_id, inventory_id, placement_id,
        cre_variant_id, consent_state)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(click_id, campaign.id, publisher_id, campaign.user_id,
            q.pid||null, q.af_c_id||null, q.af_siteid||null,
            q.af_sub1||q.sub1||null, q.af_sub2||q.sub2||null,
            q.af_sub3||q.sub3||null, q.af_sub4||q.sub4||null, q.af_sub5||q.sub5||null,
            q.sub6||null, q.sub7||null, q.sub8||null, q.sub9||null, q.sub10||null,
-           publisher_click_id, ip, ua, country, language,
+           publisher_click_id, ip, ua, country, region||null, city||null, language,
            device_type, os, browser, advertising_id, platform,
            req.headers.referer||null,
            q.creative_id||q.creative||null, q.ad_id||null,
@@ -411,6 +469,9 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       '{ip}':          ip,
       '{country}':     country || '',
       '{country_code}':country || '',
+      '{region}':      region || '',
+      '{state}':       region || '',   // alias — Trackier convention
+      '{city}':        city || '',
       '{device_type}': device_type || '',
       '{os}':          os || '',
       '{browser}':     browser || '',

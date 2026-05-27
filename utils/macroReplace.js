@@ -67,6 +67,8 @@ function macroReplace(url, data) {
     // ── Geo / Device ─────────────────────────────────────────────────────────
     '{country_code}':  data.country || '',
     '{country}':       data.country || '',
+    '{region}':        data.region || '',
+    '{state}':         data.region || '',          // alias — Trackier convention
     '{city}':          data.city || '',
     '{language}':      data.language || '',
     '{ip}':            data.ip || '',

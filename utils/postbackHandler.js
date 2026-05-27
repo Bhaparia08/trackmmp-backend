@@ -451,7 +451,7 @@ function handlePostback(params, ip, io) {
     af_sub4: click.af_sub4, af_sub5: click.af_sub5,
     sub6: click.sub6, sub7: click.sub7, sub8: click.sub8, sub9: click.sub9, sub10: click.sub10,
     creative_id: click.creative_id, ad_id: click.ad_id,
-    country: click.country, language: click.language,
+    country: click.country, region: click.region, city: click.city, language: click.language,
     platform: click.platform, bundle_id: app?.bundle_id, app_name: app?.name,
     is_retargeting: campaign?.is_retargeting,
     install_unix_ts: Math.floor(Date.now()/1000),

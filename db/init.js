@@ -1039,6 +1039,21 @@ const migrations = [
     UNIQUE(base_currency, target_currency, date)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_exchange_rates_target_date ON exchange_rates(target_currency, date)`,
+
+  // ── Phase A targeting: state/region, city, device, OS, browser ────────────
+  // Mirrors `allowed_countries`/`geo_fallback_url` pattern: CSV strings, empty
+  // means "no targeting". `allowed_devices` already exists with default 'all';
+  // we ADD a paired `blocked_devices` and treat 'all' as empty in track.js.
+  `ALTER TABLE campaigns ADD COLUMN allowed_regions   TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN blocked_regions   TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN allowed_cities    TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN blocked_cities    TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN blocked_devices   TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN allowed_os        TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN blocked_os        TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN allowed_browsers  TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE campaigns ADD COLUMN blocked_browsers  TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE clicks    ADD COLUMN region            TEXT`,
 ];
 
 const IGNORABLE = [

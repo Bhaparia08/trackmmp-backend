@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Phase A targeting — built locally, awaiting deploy</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .topbar { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .topbar a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 24px 80px; }
+
+    h2 { font-size: 22px; margin: 38px 0 6px; }
+    h3 { font-size: 16px; margin: 22px 0 8px; color: #a5f3fc; }
+    p, li { color: #cbd5e1; }
+    .lede { color: #94a3b8; font-size: 14px; margin: 0 0 18px; }
+
+    .card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; margin-bottom: 18px; }
+    .card.green { border-left: 4px solid #10b981; }
+    .card.blue  { border-left: 4px solid #6366f1; }
+    .card.amber { border-left: 4px solid #f59e0b; }
+    .card.red   { border-left: 4px solid #ef4444; }
+    .card h3 { margin-top: 0; }
+
+    pre { background: #0a0a14; color: #a5f3fc; padding: 14px; border-radius: 8px; font-size: 12px; line-height: 1.55; overflow-x: auto; border: 1px solid #ffffff14; }
+    code { background: rgba(99,102,241,.15); color: #a5f3fc; padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: 'SF Mono', Menlo, monospace; }
+
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid #ffffff14; text-align: left; vertical-align: top; }
+    th { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+    .pill-green  { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .pill-amber  { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .pill-red    { background: rgba(239,68,68,.15);  color: #fca5a5; }
+    .pill-blue   { background: rgba(99,102,241,.15); color: #c7d2fe; }
+
+    .banner { background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 13px; color: #c7d2fe; }
+    .banner strong { color: #fff; }
+
+    /* fake form mockup */
+    .ui-mock { background: #0a0a14; border: 1px solid #ffffff14; border-radius: 8px; padding: 16px; margin-top: 14px; }
+    .ui-mock .summary { font-size: 13px; font-weight: 600; color: #818cf8; padding: 6px 0; cursor: default; }
+    .ui-mock .hint { font-size: 11px; color: #94a3b8; margin: 8px 0 14px; }
+    .ui-mock .field-row { margin-bottom: 10px; }
+    .ui-mock label { display: block; font-size: 12px; color: #cbd5e1; margin-bottom: 4px; font-weight: 500; }
+    .ui-mock label small { color: #64748b; font-weight: 400; font-size: 10px; }
+    .ui-mock .ab { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .ui-mock input { background: #1a1a2e; border: 1px solid #ffffff20; border-radius: 6px; padding: 7px 10px; color: #e2e8f0; font: inherit; font-size: 12px; font-family: 'SF Mono', Menlo, monospace; width: 100%; }
+    .ui-mock input::placeholder { color: #475569; }
+
+    .toc { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+    .toc a { background: #1a1a2e; border: 1px solid #ffffff14; padding: 7px 14px; border-radius: 8px; color: #c7d2fe; text-decoration: none; font-size: 13px; }
+    .toc a:hover { border-color: #6366f1; color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>Preview: Phase A targeting — built locally, awaiting deploy</h1>
+</div>
+
+<div class="wrap">
+
+<div class="banner">
+  <strong>This was built locally — not yet on prod.</strong>
+  Code changes are in your working tree on the <code>backend/</code> repo, syntax-checked, and verified against your local DB. Reply <code>deploy</code> to ship; reply <code>hold</code> to leave it staged.
+</div>
+
+<div class="toc">
+  <a href="#what">📋 What changed</a>
+  <a href="#ui">🎯 New UI section</a>
+  <a href="#schema">🗂 Schema</a>
+  <a href="#flow">🔁 Enforcement flow</a>
+  <a href="#test">🧪 Smoke test results</a>
+  <a href="#deploy">✋ Your decision</a>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="what">📋 What changed (files)</h2>
+
+<div class="card green">
+  <table>
+    <tr><th>File</th><th>Change</th><th>Risk</th></tr>
+    <tr><td><code>backend/db/init.js</code></td><td>+10 ALTER COLUMN migrations (idempotent)</td><td><span class="pill pill-green">none</span> — additive, defaults to <code>''</code> on every existing row</td></tr>
+    <tr><td><code>backend/utils/geoip.js</code></td><td>Add <code>lookupGeo(ip)</code> returning <code>{country, region, city}</code>. Keep <code>lookupCountry</code> as wrapper. Prefer <code>GeoLite2-City.mmdb</code> if present, fall back to Country DB.</td><td><span class="pill pill-green">none</span> — old callers unchanged</td></tr>
+    <tr><td><code>backend/routes/track.js</code></td><td>Switch to <code>lookupGeo</code>, add Phase A enforcement block after country check, add <code>region</code>+<code>city</code> to both click INSERTs, add <code>{region}</code>/<code>{state}</code>/<code>{city}</code> to inline macro map</td><td><span class="pill pill-amber">low</span> — additive; campaigns with empty targeting behave identically (verified)</td></tr>
+    <tr><td><code>backend/utils/macroReplace.js</code></td><td>Add <code>{region}</code> + <code>{state}</code> macros for postbacks (<code>{city}</code> already existed, now actually populated)</td><td><span class="pill pill-green">none</span></td></tr>
+    <tr><td><code>backend/routes/campaigns.js</code></td><td>Add <code>applyTargetingFields()</code> helper. Called after INSERT in POST and after UPDATE in PUT. Mirrors the existing frequency-cap secondary-UPDATE pattern.</td><td><span class="pill pill-green">none</span> — only writes fields present in body</td></tr>
+    <tr><td><code>frontend/src/pages/CampaignForm.jsx</code></td><td>9 new fields in <code>DEFAULTS</code> + edit-load mapper, new <code>&lt;details&gt;</code> "Advanced Targeting" section after Geo Fallback URL block</td><td><span class="pill pill-green">none</span> — collapsed by default, doesn't affect campaigns that don't set it</td></tr>
+  </table>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="ui">🎯 New UI section</h2>
+<p class="lede">Collapsed by default. Sits right after the existing Geo Fallback URL block on /campaigns/new and /campaigns/:id/edit.</p>
+
+<div class="card blue">
+  <div class="ui-mock">
+    <div class="summary">🎯 Advanced Targeting <small>— state / city / OS / browser / device</small></div>
+    <div class="hint">Comma-separated values. <strong>Allow</strong> = only this traffic passes (empty = all). <strong>Block</strong> = this traffic is rejected. Blocked clicks redirect to the Geo Fallback URL above (or return <code>GEO_BLOCKED</code> if none set). Unknown values (e.g. city when only country GeoIP is loaded) skip enforcement on that lever.</div>
+
+    <div class="field-row">
+      <label>State / Region <small>(ISO 3166-2 codes — e.g. CA, NY, MH)</small></label>
+      <div class="ab">
+        <input type="text" placeholder="Allow — e.g. CA,NY,TX">
+        <input type="text" placeholder="Block — e.g. FL,WA">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label>City <small>(English city names, case-insensitive)</small></label>
+      <div class="ab">
+        <input type="text" placeholder="Allow — e.g. New York,Los Angeles,Mumbai">
+        <input type="text" placeholder="Block — e.g. Miami">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label>Blocked Devices <small>(paired with existing Allowed Devices picker)</small></label>
+      <input type="text" placeholder="e.g. desktop">
+    </div>
+
+    <div class="field-row">
+      <label>OS <small>(values: android, ios, windows, macos, linux)</small></label>
+      <div class="ab">
+        <input type="text" placeholder="Allow — e.g. android,ios">
+        <input type="text" placeholder="Block — e.g. windows">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label>Browser <small>(values: chrome, safari, firefox, edge, etc.)</small></label>
+      <div class="ab">
+        <input type="text" placeholder="Allow — e.g. chrome,safari">
+        <input type="text" placeholder="Block — e.g. firefox">
+      </div>
+    </div>
+  </div>
+
+  <p style="margin-top:12px;font-size:12px;color:#94a3b8">Plain text inputs in v1 (matches the existing <code>allowed_countries</code> CSV pattern). v2 can swap in autocomplete pickers per country once we wire a city/region list.</p>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="schema">🗂 Schema (10 idempotent migrations)</h2>
+
+<div class="card blue">
+<pre><code>ALTER TABLE campaigns ADD COLUMN allowed_regions   TEXT NOT NULL DEFAULT ''
+ALTER TABLE campaigns ADD COLUMN blocked_regions   TEXT NOT NULL DEFAULT ''
+ALTER TABLE campaigns ADD COLUMN allowed_cities    TEXT NOT NULL DEFAULT ''
+ALTER TABLE campaigns ADD COLUMN blocked_cities    TEXT NOT NULL DEFAULT ''
+ALTER TABLE campaigns ADD COLUMN blocked_devices   TEXT NOT NULL DEFAULT ''
+ALTER TABLE campaigns ADD COLUMN allowed_os        TEXT NOT NULL DEFAULT ''
+ALTER TABLE campaigns ADD COLUMN blocked_os        TEXT NOT NULL DEFAULT ''
+ALTER TABLE campaigns ADD COLUMN allowed_browsers  TEXT NOT NULL DEFAULT ''
+ALTER TABLE campaigns ADD COLUMN blocked_browsers  TEXT NOT NULL DEFAULT ''
+ALTER TABLE clicks    ADD COLUMN region            TEXT          -- clicks.city already exists</code></pre>
+
+  <p>All wrapped in the existing IGNORABLE try/catch, so re-running on a DB that already has them is a no-op.</p>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="flow">🔁 Enforcement flow in track.js</h2>
+
+<div class="card blue">
+  <h3>Order of checks (per click)</h3>
+  <ol style="line-height:1.9">
+    <li><code>previewBypass</code> via <code>security_token</code> → skip all targeting (existing test-mode)</li>
+    <li><code>allowed_countries</code> → existing country block (unchanged)</li>
+    <li><strong>NEW:</strong> <code>allowed_regions</code> / <code>blocked_regions</code></li>
+    <li><strong>NEW:</strong> <code>allowed_cities</code> / <code>blocked_cities</code></li>
+    <li><strong>NEW:</strong> <code>allowed_devices</code> (existed but unenforced) / <code>blocked_devices</code></li>
+    <li><strong>NEW:</strong> <code>allowed_os</code> / <code>blocked_os</code></li>
+    <li><strong>NEW:</strong> <code>allowed_browsers</code> / <code>blocked_browsers</code></li>
+    <li>Fraud rule loop (existing)</li>
+    <li>Daily/monthly caps, frequency caps, etc.</li>
+  </ol>
+
+  <h3>Helper logic</h3>
+<pre><code>function targetingPasses(actual, allowedCsv, blockedCsv) {
+  const v = String(actual || '').trim().toLowerCase();
+  if (!v) return true;                      // unknown value → skip enforcement
+  const parse = (csv) => {
+    const raw = String(csv || '').trim().toLowerCase();
+    if (!raw || raw === 'all') return [];   // empty / 'all' → no filter
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  };
+  const allowed = parse(allowedCsv);
+  const blocked = parse(blockedCsv);
+  if (allowed.length > 0 && !allowed.includes(v)) return false;
+  if (blocked.length > 0 &&  blocked.includes(v)) return false;
+  return true;
+}</code></pre>
+
+  <h3>Action on miss</h3>
+  <ul>
+    <li>If <code>geo_fallback_url</code> set → 302 redirect there (with publisher params forwarded — same as existing country block)</li>
+    <li>If no fallback → INSERT click with <code>status='geo_blocked'</code> + return <code>GEO_BLOCKED:&lt;LEVER&gt;</code> (e.g. <code>GEO_BLOCKED:CITY</code>)</li>
+  </ul>
+
+  <p>Response body change for blocked clicks: <code>GEO_BLOCKED</code> → <code>GEO_BLOCKED:&lt;LEVER&gt;</code>. Country-block path still returns plain <code>GEO_BLOCKED</code>. If any downstream consumer parses this string for retries, the change is additive (still starts with <code>GEO_BLOCKED</code>).</p>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="test">🧪 Local smoke test results</h2>
+
+<div class="card green">
+  <table>
+    <tr><th>Test</th><th>Result</th></tr>
+    <tr><td><code>node -c</code> on all 5 edited backend files</td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td>Nodemon restart picked up new schema</td><td><span class="pill pill-green">OK</span> — log shows clean startup</td></tr>
+    <tr><td><code>PRAGMA table_info(campaigns)</code> shows 9 new columns</td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td><code>PRAGMA table_info(clicks)</code> shows new <code>region</code> col + existing <code>city</code></td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td>Existing campaigns have all new fields <code>= ''</code> by default (backward compat)</td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td><code>GET /track/click/INVALID</code> still returns the same friendly 404 message</td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td><code>POST /api/auth/login</code> returns proper 401 on bad creds</td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td>Vite HMR picked up <code>CampaignForm.jsx</code> changes</td><td><span class="pill pill-green">OK</span> — preview at <code>localhost:5180</code></td></tr>
+  </table>
+
+  <p>Local preview: <code>http://localhost:5180</code> → log in → <strong>New Campaign</strong> → scroll past the geo section → "🎯 Advanced Targeting" appears collapsed; click to expand.</p>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+
+<h2 id="deploy">✋ Your decision</h2>
+
+<div class="card amber">
+  <h3>Prerequisites for full feature to work on prod</h3>
+  <ol>
+    <li><strong>If you want city + region enforcement to actually fire on prod</strong>, the Render service needs <code>GeoLite2-City.mmdb</code> (free from MaxMind, ~70 MB). Without it, <code>lookupGeo()</code> returns empty region/city → those levers are silently skipped (correctly — same convention as country handling <code>'XX'</code>). Country, device, OS, browser targeting will work fine without the City DB.</li>
+    <li><strong>Reports for region/city/browser</strong> are NOT in this PR — they're deferred to Phase A v2 so this stays a single reviewable change. Until then, you can query <code>clicks</code> directly for those slices.</li>
+    <li><strong>Platform-wide fraud rules</strong> (<code>blocked_region</code>, <code>blocked_city</code>, etc.) are also deferred. Per-campaign targeting works without them.</li>
+  </ol>
+
+  <h3>What "deploy" means</h3>
+  <ol>
+    <li><code>cd backend &amp;&amp; git add</code> the 5 edited backend files + the 1 frontend file</li>
+    <li><code>cd frontend &amp;&amp; npm run build</code> (writes new bundle to <code>backend/public/</code>)</li>
+    <li><code>cd backend &amp;&amp; git add public/</code> for the new bundle</li>
+    <li><code>git commit</code> + <code>git push origin main</code> → Render auto-deploys</li>
+    <li>Verify: probe a new campaign create with targeting set, observe behavior</li>
+  </ol>
+
+  <h3>Reply with one of:</h3>
+  <ul style="line-height:1.9">
+    <li><strong>"deploy"</strong> — ship the change as one PR to <code>main</code></li>
+    <li><strong>"deploy via branch"</strong> — push to a feature branch first, open PR for review, merge after approval</li>
+    <li><strong>"hold"</strong> — leave the changes local for further review</li>
+    <li><strong>"revert"</strong> — discard everything (nothing committed yet; just <code>git checkout -- .</code>)</li>
+  </ul>
+</div>
+
+<p style="margin-top:40px;font-size:12px;color:#64748b;text-align:center">
+  Generated 2026-05-26 ·  static preview, no backend required ·  no login needed
+</p>
+
+</div>
+</body>
+</html>

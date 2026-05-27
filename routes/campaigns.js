@@ -9,6 +9,30 @@ const audit = require('../utils/auditLog');
 const router = express.Router();
 router.use(requireAuth);
 
+// Phase A targeting — apply provided region/city/device/os/browser allow+block
+// CSV strings as a secondary UPDATE so neither POST nor PUT has to expand its
+// already-large field list. Only writes fields present in the request body.
+const TARGETING_FIELDS = [
+  'allowed_regions','blocked_regions',
+  'allowed_cities','blocked_cities',
+  'blocked_devices',                       // allowed_devices stays in primary INSERT/UPDATE
+  'allowed_os','blocked_os',
+  'allowed_browsers','blocked_browsers',
+];
+function applyTargetingFields(campaignId, body) {
+  const set = [];
+  const vals = [];
+  for (const f of TARGETING_FIELDS) {
+    if (body[f] !== undefined) {
+      set.push(`${f} = ?`);
+      vals.push(String(body[f] ?? '').trim());
+    }
+  }
+  if (set.length === 0) return;
+  db.prepare(`UPDATE campaigns SET ${set.join(', ')}, updated_at = unixepoch() WHERE id = ?`)
+    .run(...vals, campaignId);
+}
+
 // Helper: advertiser IDs assigned to an account manager (uses junction table + legacy FK)
 function getAMAdvertiserIds(userId) {
   const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(userId);
@@ -142,6 +166,7 @@ router.post('/', (req, res, next) => {
     });
     const campaignId = insertCampaign();
     upsertApprovedPublishers(campaignId, approved_publishers, req.user.id);
+    applyTargetingFields(campaignId, req.body);
 
     const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
     const approvedPubs = db.prepare(
@@ -277,6 +302,8 @@ router.put('/:id', (req, res, next) => {
       upsertApprovedPublishers(c.id, approved_publishers, req.user.id);
     }
 
+    applyTargetingFields(c.id, req.body);
+
     const approvedPubs = db.prepare(
       "SELECT publisher_id FROM campaign_access_requests WHERE campaign_id = ? AND status = 'approved'"
     ).all(c.id).map(r => r.publisher_id);
@@ -352,6 +379,10 @@ router.post('/:id/clone', (req, res, next) => {
       );
       return result.lastInsertRowid;
     })();
+
+    // Carry Phase A targeting fields across to the clone (source row has the
+    // same field names as the API body, so the helper works directly on it).
+    applyTargetingFields(cloneId, c);
 
     const cloned = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(cloneId);
     res.status(201).json(cloned);
