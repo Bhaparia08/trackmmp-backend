@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SOP — Safe Deploys for TrackMMP</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.6 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .topbar { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .topbar a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 24px 80px; }
+
+    h2 { font-size: 24px; margin: 46px 0 8px; padding-top: 18px; border-top: 1px solid #ffffff10; }
+    h2:first-of-type { border-top: 0; padding-top: 0; }
+    h3 { font-size: 16px; margin: 24px 0 8px; color: #a5f3fc; font-weight: 600; }
+    h4 { font-size: 12px; margin: 18px 0 6px; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+    p, li { color: #cbd5e1; }
+    .lede { color: #94a3b8; font-size: 15px; margin: 0 0 18px; }
+
+    .card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; margin-bottom: 18px; }
+    .card.green { border-left: 4px solid #10b981; }
+    .card.blue  { border-left: 4px solid #6366f1; }
+    .card.amber { border-left: 4px solid #f59e0b; }
+    .card.red   { border-left: 4px solid #ef4444; }
+
+    pre { background: #0a0a14; color: #a5f3fc; padding: 14px 16px; border-radius: 8px; font-size: 12px; line-height: 1.6; overflow-x: auto; border: 1px solid #ffffff14; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    code { background: rgba(99,102,241,.15); color: #a5f3fc; padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #ffffff14; text-align: left; vertical-align: top; }
+    th { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .pill-green { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .pill-amber { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .pill-red   { background: rgba(239,68,68,.15);  color: #fca5a5; }
+    .pill-blue  { background: rgba(99,102,241,.15); color: #c7d2fe; }
+    .pill-gray  { background: rgba(148,163,184,.15); color: #cbd5e1; }
+
+    .checklist { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 8px; padding: 16px 22px; margin: 12px 0; }
+    .checklist h4 { margin: 0 0 12px; color: #fff; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; }
+    .checklist ul { list-style: none; padding-left: 0; margin: 0; }
+    .checklist li { padding: 5px 0 5px 28px; position: relative; font-size: 13px; }
+    .checklist li::before { content: "□"; position: absolute; left: 4px; color: #818cf8; font-size: 14px; }
+
+    .tier { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px 24px; margin: 16px 0; }
+    .tier h3 { color: #fff; margin-top: 0; font-size: 18px; }
+    .tier .meta { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .tier.t1 { border-left: 4px solid #10b981; }
+    .tier.t2 { border-left: 4px solid #6366f1; }
+    .tier.t3 { border-left: 4px solid #f59e0b; }
+    .tier.t4 { border-left: 4px solid #ef4444; }
+
+    .banner { background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 13px; color: #c7d2fe; }
+    .banner strong { color: #fff; }
+    .danger-banner { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.3); border-radius: 8px; padding: 14px 18px; margin: 20px 0; color: #fca5a5; font-size: 13px; }
+    .danger-banner strong { color: #fff; }
+
+    .toc { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+    .toc a { background: #1a1a2e; border: 1px solid #ffffff14; padding: 7px 14px; border-radius: 8px; color: #c7d2fe; text-decoration: none; font-size: 13px; }
+    .toc a:hover { border-color: #6366f1; color: #fff; }
+    a { color: #818cf8; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>SOP — Safe Deploys for TrackMMP</h1>
+</div>
+
+<div class="wrap">
+
+<div class="banner">
+  <strong>This is the deploy rulebook for track.apogeemobi.com.</strong>
+  Live at <code>/SOP-Safe-Deploys.md</code> in the repo too — this preview is for sharing / reading. v1 written 2026-05-29 after the 4 deploys 2026-05-26 to 2026-05-29.
+</div>
+
+<div class="toc">
+  <a href="#tldr">📋 TL;DR (6 rules)</a>
+  <a href="#state">🔍 Where we stand</a>
+  <a href="#tiers">🚀 Tiered plan</a>
+  <a href="#failures">🚨 Failure modes</a>
+  <a href="#checklist">✅ Pre-deploy checklist</a>
+  <a href="#honest">💬 Honest limits</a>
+</div>
+
+<!-- ─── TLDR ─── -->
+<h2 id="tldr">📋 TL;DR — 6 rules every deploy must follow</h2>
+
+<div class="card green">
+  <ol style="line-height:2">
+    <li><strong>Never push to <code>main</code> without:</strong> a written design (preview deck or PR description), local testing, and explicit <code>"deploy"</code> consent.</li>
+    <li><strong>Schema changes are always additive</strong> — <code>ALTER TABLE ADD COLUMN</code>, <code>CREATE IF NOT EXISTS</code>. Never <code>DROP</code> or <code>RENAME</code> in the same deploy that ships code depending on the change.</li>
+    <li><strong>New features ship behind a flag</strong> (env var or DB-stored toggle) defaulting OFF in production. Ramp by editing the flag, not by redeploying.</li>
+    <li><strong>Backend behavior changes must be backward-compatible</strong> with the immediately preceding frontend bundle. Assume the user has a stale cached page when your backend lands.</li>
+    <li><strong>Every PR touching request handlers must be probed against prod within 5 minutes of deploy</strong> via <code>npm run smoke</code> or equivalent.</li>
+    <li><strong>Rollback is <code>git revert &lt;sha&gt; &amp;&amp; git push</code></strong> — always available, always mentally tested before deploy.</li>
+  </ol>
+  <p style="margin-top:14px"><strong>If you can't satisfy 1-6 for a change, it doesn't ship today.</strong></p>
+</div>
+
+<!-- ─── Where we stand ─── -->
+<h2 id="state">🔍 Where TrackMMP currently stands (honest)</h2>
+
+<div class="card amber">
+  <p class="lede">Snapshot 2026-05-29. This is aspirational vs. reality.</p>
+  <table>
+    <tr><th>Capability</th><th>State</th></tr>
+    <tr><td>Environments</td><td><span class="pill pill-amber">1 (prod only)</span> — no dev / staging</td></tr>
+    <tr><td>Deploy trigger</td><td><span class="pill pill-amber">git push → Render auto-deploy</span> — no CI gate</td></tr>
+    <tr><td>Database</td><td><span class="pill pill-amber">Single SQLite file on Render disk</span> — no replicas, no point-in-time recovery</td></tr>
+    <tr><td>Rollback</td><td><span class="pill pill-blue">git revert + push (~30-45s)</span> — manual decision</td></tr>
+    <tr><td>Health check</td><td><span class="pill pill-blue">/health 200 JSON</span> — but no auto-rollback on failure</td></tr>
+    <tr><td>Feature flags</td><td><span class="pill pill-blue">Env vars (DISCOVERY_HUB_*, CORS_ORIGINS)</span> — ad-hoc but functional</td></tr>
+    <tr><td>Schema migrations</td><td><span class="pill pill-green">Idempotent ALTER COLUMN + IGNORABLE try/catch</span> — already good</td></tr>
+    <tr><td>Backups</td><td><span class="pill pill-red">None automated</span></td></tr>
+    <tr><td>Monitoring</td><td><span class="pill pill-amber">console.error to stdout</span> — no Sentry / no alerting</td></tr>
+    <tr><td>Preview environments</td><td><span class="pill pill-amber">Static HTML at /sdk/preview-v2/*</span> — no code-running preview</td></tr>
+    <tr><td>Tests</td><td><span class="pill pill-red">Manual smoke only</span></td></tr>
+    <tr><td>Frontend/backend coupling</td><td><span class="pill pill-blue">Atomic — same commit ships both</span> — eliminates version skew but increases blast radius</td></tr>
+  </table>
+</div>
+
+<div class="danger-banner">
+  <strong>Reality check:</strong> there is currently a <strong>15-45 second window during every deploy</strong> where the Node.js process is restarting. Existing connections are killed; new requests get 502 from Render's edge. To get true "users always see the live platform," you need Tier 4 (multi-instance + Postgres or Redis, ~$25/mo + 1-2 weeks engineering). Until then, the practical goal is "minimize the window + catch issues fast."
+</div>
+
+<!-- ─── Tiers ─── -->
+<h2 id="tiers">🚀 The tiered Safe Deploy plan</h2>
+
+<div class="tier t1">
+  <div class="meta">Tier 1 · ~2 hours setup · zero infra cost · DO THIS NOW</div>
+  <h3>Defensive deploys</h3>
+  <h4>What you get</h4>
+  <ul>
+    <li>Pre-deploy checklist (in <a href="#checklist">section below</a>)</li>
+    <li><code>npm run smoke</code> — 28-check post-deploy probe (already shipped in this commit)</li>
+    <li>Explicit schema migration rules (additive-only)</li>
+    <li>Feature flag pattern (already in use for DISCOVERY_HUB, etc.)</li>
+    <li>Rollback procedure (one-liner)</li>
+  </ul>
+  <h4>How to use</h4>
+  <pre><code># After every push to main:
+cd backend
+npm run smoke
+
+# Tests 28 things; exits 0 if healthy, 1 with list of regressions.
+# Configure target host via PROD env var:
+PROD=https://staging.track.apogeemobi.com npm run smoke
+npm run smoke:local   # against http://localhost:3001</code></pre>
+</div>
+
+<div class="tier t2">
+  <div class="meta">Tier 2 · ~4 hours setup · ~$7/mo · NEXT</div>
+  <h3>Staging environment + backup discipline</h3>
+  <h4>What you get</h4>
+  <ul>
+    <li>Render <code>trackmmp-backend-staging</code> service tied to <code>staging</code> branch</li>
+    <li>Staging-first deploy workflow (feature branch → staging → main)</li>
+    <li>Manual DB snapshot procedure (run before risky migrations)</li>
+    <li>Expand-contract pattern documented (for the rare non-additive change)</li>
+  </ul>
+  <h4>How to set up the staging service</h4>
+  <ol>
+    <li>Render dashboard → New → Web Service → connect <code>Bhaparia08/trackmmp-backend</code></li>
+    <li>Branch: <code>staging</code></li>
+    <li>Service name: <code>trackmmp-backend-staging</code></li>
+    <li>Env vars: copy from prod, override:<br>
+      <code>NODE_ENV=staging</code><br>
+      <code>DB_PATH=/opt/render/project/data/staging.db</code><br>
+      <code>CORS_ORIGINS=https://trackmmp-backend-staging.onrender.com,http://localhost:5173</code><br>
+      <code>SEED_ADMIN_EMAIL=staging@apogeemobi.com</code>
+    </li>
+    <li>Auto-deploy from <code>staging</code></li>
+  </ol>
+  <h4>Deploy workflow with staging</h4>
+  <pre><code>git checkout -b feature/your-feature
+# develop locally, test...
+git push origin feature/your-feature
+
+# merge to staging branch
+git checkout staging &amp;&amp; git pull
+git merge feature/your-feature
+git push origin staging
+# Render deploys to staging (~30s)
+
+PROD=https://trackmmp-backend-staging.onrender.com npm run smoke
+
+# If green, promote to prod
+git checkout main &amp;&amp; git pull
+git merge --ff-only staging
+git push origin main
+# Render deploys to prod (~30s)
+
+npm run smoke   # verify prod</code></pre>
+</div>
+
+<div class="tier t3">
+  <div class="meta">Tier 3 · ~6 hours setup · ~$1-3/mo per active PR · LATER</div>
+  <h3>Render preview environments per PR</h3>
+  <h4>What you get</h4>
+  <ul>
+    <li>Every PR auto-creates a Render preview deploy at <code>trackmmp-backend-pr-N.onrender.com</code></li>
+    <li>Approve via smoke test against the preview URL before merging</li>
+    <li>Practical equivalent of blue/green: preview is "green", main stays "blue"</li>
+  </ul>
+  <h4>How to set up</h4>
+  <ol>
+    <li>Render dashboard → trackmmp-backend → Settings → Preview Environments → enable (manual generation, 7-day expiration)</li>
+    <li>Add to <code>server.js</code>:
+      <pre><code>const isPreview = process.env.IS_PULL_REQUEST === 'true';
+if (isPreview) {
+  process.env.DB_PATH = '/tmp/preview.db';     // ephemeral per-PR DB
+  process.env.DISCOVERY_HUB_ENABLED = 'false'; // don't scan real networks
+}</code></pre>
+    </li>
+    <li>Open a PR → wait for Render preview URL → smoke against it → merge</li>
+  </ol>
+</div>
+
+<div class="tier t4">
+  <div class="meta">Tier 4 · ~$25/mo + ~8 hours · WHEN VOLUME JUSTIFIES</div>
+  <h3>Multi-instance + true zero-downtime</h3>
+  <h4>What you get</h4>
+  <ul>
+    <li><strong>User-invisible deploys</strong> — rolling deploys at N=2+ instances; old serves until new is healthy</li>
+    <li>Health-check auto-rollback (Render Standard plan)</li>
+    <li>Error aggregation (Sentry) + uptime monitor</li>
+  </ul>
+  <h4>What it costs</h4>
+  <ul>
+    <li>Render Standard: $7/mo per instance × 2 = <strong>$14/mo</strong></li>
+    <li>Render Redis (for socket.io multi-instance) OR Render Postgres: <strong>$7-10/mo</strong></li>
+    <li>Sentry free tier (5k errors/mo) + UptimeRobot free tier: <strong>$0</strong></li>
+    <li>Total: <strong>~$21-25/mo</strong></li>
+  </ul>
+  <h4>Required code changes</h4>
+  <ul>
+    <li>SQLite is fine for campaigns/clicks (single writer) but socket.io session state must move to Redis OR migrate SQLite → Postgres entirely</li>
+    <li>Expand-contract discipline for all future schema changes (5 PRs per logical change)</li>
+    <li>Wire Render health-check + rollback-on-fail policy</li>
+  </ul>
+</div>
+
+<!-- ─── Failure modes ─── -->
+<h2 id="failures">🚨 Common failure modes</h2>
+
+<div class="card blue">
+  <table>
+    <tr><th>Symptom</th><th>Recovery</th></tr>
+    <tr><td><strong>F1.</strong> Render shows "deploy failed"</td><td>Read build log. Usually missing dep in <code>package-lock.json</code>. Render keeps prior version live — no action needed.</td></tr>
+    <tr><td><strong>F2.</strong> Deploy succeeded but smoke fails</td><td><code>git revert &lt;sha&gt; &amp;&amp; git push</code>. Investigate locally, never on prod.</td></tr>
+    <tr><td><strong>F3.</strong> Migration ran but old code still serving</td><td>Expected if migration was additive (old code ignores new columns). If not expected, your migration was NOT additive — re-add dropped column, re-deploy, plan expand-contract.</td></tr>
+    <tr><td><strong>F4.</strong> Render is down / 502 / 503</td><td>Check status.render.com. Wait it out. Can't deploy during their incident.</td></tr>
+    <tr><td><strong>F5.</strong> GitHub PAT broken, can't push</td><td>Rotate at github.com/settings/personal-access-tokens. <strong>Switch to SSH</strong> instead: <code>git remote set-url origin git@github.com:Bhaparia08/trackmmp-backend.git</code>. Standing recommendation: do this NOW.</td></tr>
+    <tr><td><strong>F6.</strong> Render free tier sleeps service</td><td>15-min inactivity → 30-60s cold start. Keep-alive ping already in code (commit <code>9d14b8e</code>). Permanent fix: upgrade to Standard ($7/mo).</td></tr>
+  </table>
+</div>
+
+<!-- ─── Checklist ─── -->
+<h2 id="checklist">✅ Pre-deploy checklist — the 2-minute version</h2>
+
+<div class="checklist">
+  <h4>Tape this to your monitor</h4>
+  <ul>
+    <li>Local backend reloads cleanly: <code>npx nodemon server.js</code> no errors</li>
+    <li>Modified <code>.js</code> files pass <code>node -c &lt;file&gt;</code></li>
+    <li>Schema change? Additive-only (<code>ADD COLUMN</code>, <code>CREATE IF NOT EXISTS</code>)</li>
+    <li>Behavior change? Feature-flagged, default OFF</li>
+    <li>Backward-compatible with previous frontend bundle</li>
+    <li>Backward-compatible with previous backend (can roll back)</li>
+    <li>Owner consented with "deploy" / "yes" / "go ahead"</li>
+    <li>Staged specific files: <code>git add path/to/file</code> — NEVER <code>-A</code></li>
+    <li>Commit message describes what, why, risk</li>
+    <li>Smoke test ready: <code>npm run smoke</code></li>
+    <li>Rollback command identified: <code>git revert &lt;my-sha&gt;</code></li>
+    <li>Push: <code>git push origin main</code></li>
+    <li>Within 60s: probe <code>/health</code> + changed surface</li>
+    <li>Within 5min: <code>npm run smoke</code></li>
+    <li>Result documented in PR or session memory</li>
+  </ul>
+</div>
+
+<!-- ─── Honest section ─── -->
+<h2 id="honest">💬 Why this SOP is honest about what it can't deliver</h2>
+
+<div class="card red">
+  <p>The phrase <strong>"user always sees the live platform"</strong> implies continuous availability during deploys. <strong>Tier 1-3 do NOT give you that</strong> — there is a 15-45 second window during every deploy where Render is restarting Node.js and users get 502/503.</p>
+
+  <h4>The honest cost of true zero-downtime</h4>
+  <ul>
+    <li>Tier 4 minimum: <strong>~$25/mo</strong> (Render Standard × 2 + Postgres or Redis)</li>
+    <li>Engineering: <strong>1-2 weeks</strong> to remove SQLite single-writer assumptions</li>
+    <li>Ongoing: <strong>expand-contract discipline forever</strong></li>
+  </ul>
+
+  <h4>Until Tier 4 is in place, the realistic goal is</h4>
+  <ul>
+    <li>Make the deploy window as short as possible (~15-30s currently)</li>
+    <li>Make the rollback window equally short (~30-45s)</li>
+    <li>Catch most issues before they hit prod (Tier 1-3)</li>
+    <li>Accept 1-2 brief 502s during deploys as the cost of single-instance simplicity</li>
+  </ul>
+
+  <p>This is fine for current TrackMMP scale. <strong>The decision to move to Tier 4 should be data-driven</strong> — when a 30-second blip starts costing real money or trust.</p>
+</div>
+
+<p style="margin-top:40px;font-size:12px;color:#64748b;text-align:center">
+  Companion to <code>/SOP-Safe-Deploys.md</code> in the repo · Generated 2026-05-29 · no auth needed
+</p>
+
+</div>
+</body>
+</html>

@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "build": "npm rebuild better-sqlite3"
+    "build": "npm rebuild better-sqlite3",
+    "smoke": "bash scripts/smoke-prod.sh",
+    "smoke:local": "PROD=http://localhost:3001 bash scripts/smoke-prod.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",
