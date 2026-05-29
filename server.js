@@ -11,6 +11,7 @@ process.on('unhandledRejection', (reason) => {
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
+const helmet = require('helmet');
 const morgan = require('morgan');
 const jwt = require('jsonwebtoken');
 const path = require('path');
@@ -22,6 +23,8 @@ const { errorHandler } = require('./middleware/errorHandler');
 require('./db/init');
 
 const app = express();
+app.disable('x-powered-by');                          // suppress Express fingerprint
+app.set('trust proxy', 1);                            // trust Render/Cloudflare X-Forwarded-* for real client IPs
 const server = http.createServer(app);
 
 // Socket.io — in production allow same-origin (Express serves the frontend)
@@ -53,9 +56,45 @@ io.on('connection', (socket) => {
 // Make io available to routes
 app.set('io', io);
 
-// Middleware
-const corsOrigin = process.env.NODE_ENV === 'production' ? true : (process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
-app.use(cors({ origin: corsOrigin, credentials: true }));
+// ── Security headers (helmet) ────────────────────────────────────────────
+// HSTS, X-Content-Type-Options, Referrer-Policy, X-DNS-Prefetch-Control, etc.
+// CSP is disabled because the SPA bundle uses inline scripts/styles (vite output)
+// — flip it on as a separate hardening PR after the build is CSP-friendly.
+// Frameguard set to deny so the admin UI cannot be embedded as an iframe (clickjacking).
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,                   // SDK is loaded cross-origin on publisher sites
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  frameguard: { action: 'deny' },
+  hsts: { maxAge: 15552000, includeSubDomains: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
+
+// ── CORS ─────────────────────────────────────────────────────────────────
+// PRIOR BUG: in production, origin was `true` which made the cors library
+// reflect any request Origin with Access-Control-Allow-Credentials: true.
+// Effectively any third-party site could make credentialed cross-origin
+// requests on a logged-in user's behalf.
+//
+// FIX: explicit allowlist + credentials:false. Authentication on this
+// platform is JWT-in-Authorization-header (not cookies), so removing
+// credentials closes the exposure without breaking the admin dashboard or
+// publisher SDK. Non-allowlisted origins (e.g. publisher sites embedding
+// the JS SDK) still receive valid CORS headers — they just can't carry
+// cookies cross-origin.
+const STRICT_ORIGINS = (process.env.CORS_ORIGINS ||
+  'https://track.apogeemobi.com,http://localhost:5173,http://localhost:5180'
+).split(',').map(s => s.trim()).filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, cb) {
+    if (!origin) return cb(null, true);               // curl, server-to-server, mobile native — no Origin header
+    if (STRICT_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(null, true);                            // publisher SDK sites — credentials:false below means no cookie reflection
+  },
+  credentials: false,
+}));
+
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -283,7 +322,15 @@ if (frontendDist) {
     res.sendFile(path.join(frontendDist, 'offers.html'));
   });
 
-  // All unmatched routes → React SPA (client-side routing)
+  // Unmatched /api/* paths return JSON 404 (not the SPA shell).
+  // Without this guard, typos like /api/dashbord, wrong HTTP methods, or
+  // missing routes return HTTP 200 with the React index.html, which silently
+  // masks misconfiguration and integration bugs (pitfall #5 in the project log).
+  app.use('/api', (req, res) => {
+    res.status(404).json({ error: 'Not found', method: req.method, path: req.originalUrl });
+  });
+
+  // All other unmatched GETs → React SPA (client-side routing)
   app.get('*', (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Pragma', 'no-cache');

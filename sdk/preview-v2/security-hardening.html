@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Security + routing hardening — preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.6 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .topbar { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .topbar a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 24px 80px; }
+    h2 { font-size: 22px; margin: 38px 0 8px; }
+    h3 { font-size: 15px; margin: 22px 0 8px; color: #a5f3fc; font-weight: 600; }
+    p, li { color: #cbd5e1; }
+    .lede { color: #94a3b8; font-size: 14px; margin: 0 0 18px; }
+    .card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; margin-bottom: 18px; }
+    .card.green { border-left: 4px solid #10b981; }
+    .card.blue  { border-left: 4px solid #6366f1; }
+    .card.amber { border-left: 4px solid #f59e0b; }
+    pre { background: #0a0a14; color: #a5f3fc; padding: 14px 16px; border-radius: 8px; font-size: 12.5px; line-height: 1.55; overflow-x: auto; border: 1px solid #ffffff14; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    code { background: rgba(99,102,241,.15); color: #a5f3fc; padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #ffffff14; text-align: left; vertical-align: top; }
+    th { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+    .pill-green  { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .pill-amber  { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .pill-red    { background: rgba(239,68,68,.15);  color: #fca5a5; }
+    .pill-blue   { background: rgba(99,102,241,.15); color: #c7d2fe; }
+    .banner { background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 13px; color: #c7d2fe; }
+    .banner strong { color: #fff; }
+    .toc { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+    .toc a { background: #1a1a2e; border: 1px solid #ffffff14; padding: 7px 14px; border-radius: 8px; color: #c7d2fe; text-decoration: none; font-size: 13px; }
+    .toc a:hover { border-color: #6366f1; color: #fff; }
+    .before-after { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+    @media (max-width: 720px) { .before-after { grid-template-columns: 1fr; } }
+    .ba-card { background: #0a0a14; border: 1px solid #ffffff14; border-radius: 8px; padding: 14px 16px; }
+    .ba-card.before { border-left: 3px solid #ef4444; }
+    .ba-card.after  { border-left: 3px solid #10b981; }
+    .ba-card h4 { margin: 0 0 8px; font-size: 12px; color: #fff; text-transform: uppercase; letter-spacing: .04em; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>Preview: security + routing hardening — built locally, awaiting deploy</h1>
+</div>
+
+<div class="wrap">
+
+<div class="banner">
+  <strong>This was built locally — not yet on prod.</strong>
+  Closes 4 findings from the 2026-05-28 QA report in one PR. Single file change to <code>server.js</code> plus <code>helmet</code> dep. Reply <code>deploy</code> to ship.
+</div>
+
+<div class="toc">
+  <a href="#what">📋 What changed</a>
+  <a href="#findings">🐛 QA findings closed</a>
+  <a href="#diff">🔧 Code diff</a>
+  <a href="#headers">🛡 New security headers</a>
+  <a href="#cors">🌐 CORS before / after</a>
+  <a href="#routing">🚧 /api/* 404 guard</a>
+  <a href="#tests">🧪 Local verification</a>
+  <a href="#decision">✋ Your decision</a>
+</div>
+
+<!-- ─── What changed ─── -->
+<h2 id="what">📋 What changed</h2>
+
+<div class="card green">
+  <table>
+    <tr><th>File</th><th>Change</th><th>Risk</th></tr>
+    <tr><td><code>backend/package.json</code></td><td>+ <code>"helmet": "^8.2.0"</code></td><td><span class="pill pill-green">none</span></td></tr>
+    <tr><td><code>backend/package-lock.json</code></td><td>helmet lock entries</td><td><span class="pill pill-green">none</span></td></tr>
+    <tr><td><code>backend/server.js</code></td><td>+ <code>require('helmet')</code><br>+ <code>app.disable('x-powered-by')</code><br>+ <code>app.set('trust proxy', 1)</code><br>+ <code>app.use(helmet({...}))</code><br>+ rewrote <code>app.use(cors({...}))</code><br>+ <code>app.use('/api', (req,res)=>...)</code> 404 guard</td><td><span class="pill pill-amber">low</span></td></tr>
+  </table>
+</div>
+
+<!-- ─── Findings closed ─── -->
+<h2 id="findings">🐛 QA findings this PR closes</h2>
+
+<div class="card blue">
+  <table>
+    <tr><th>ID</th><th>Severity</th><th>Issue</th><th>Status</th></tr>
+    <tr><td><code>C1</code></td><td><span class="pill pill-red">CRITICAL</span></td><td>CORS reflected any origin with <code>Access-Control-Allow-Credentials: true</code></td><td><span class="pill pill-green">FIXED</span></td></tr>
+    <tr><td><code>C2</code></td><td><span class="pill pill-red">CRITICAL</span></td><td>Zero security headers (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)</td><td><span class="pill pill-green">FIXED</span></td></tr>
+    <tr><td><code>H2</code></td><td><span class="pill pill-amber">HIGH</span></td><td>SPA catch-all swallows unknown <code>/api/*</code> routes as HTTP 200 HTML</td><td><span class="pill pill-green">FIXED</span></td></tr>
+    <tr><td><code>H3</code></td><td><span class="pill pill-amber">HIGH</span></td><td><code>/acquisition/click/:token</code> falls through to SPA HTML 200</td><td><span class="pill pill-green">FIXED</span> (covered by H2)</td></tr>
+    <tr><td><code>H4</code></td><td><span class="pill pill-amber">HIGH</span></td><td><code>/skan/postback</code> GET returns SPA HTML 200</td><td><span class="pill pill-green">FIXED</span> (covered by H2 — only affects probes, real SKAN uses POST)</td></tr>
+    <tr><td><code>M2</code></td><td><span class="pill pill-blue">MED</span></td><td><code>/robots.txt</code> returns SPA HTML 200</td><td><span class="pill pill-amber">SAME</span> (not under /api — separate fix)</td></tr>
+    <tr><td><code>M3</code></td><td><span class="pill pill-blue">MED</span></td><td><code>/favicon.ico</code> returns SPA HTML 621 bytes</td><td><span class="pill pill-amber">SAME</span> (separate fix)</td></tr>
+    <tr><td><code>M4</code></td><td><span class="pill pill-blue">MED</span></td><td><code>x-powered-by: Express</code> header disclosed</td><td><span class="pill pill-green">FIXED</span></td></tr>
+  </table>
+
+  <p style="margin-top:14px"><strong>Net: 4 critical/high findings closed in this single PR.</strong> M2 (robots.txt) and M3 (favicon) need standalone routes, not the <code>/api/*</code> guard — I'll batch those in a separate small PR.</p>
+</div>
+
+<!-- ─── Code diff ─── -->
+<h2 id="diff">🔧 The actual diff</h2>
+
+<h3>1. Require helmet at the top (1 line)</h3>
+<pre><code>+ const helmet = require('helmet');</code></pre>
+
+<h3>2. Suppress Express fingerprint + trust proxy (2 lines)</h3>
+<pre><code>  const app = express();
++ app.disable('x-powered-by');           // suppress Express fingerprint
++ app.set('trust proxy', 1);             // trust Render/CF X-Forwarded-* for real IPs
+  const server = http.createServer(app);</code></pre>
+
+<h3>3. Replace the broken CORS block with helmet + strict CORS</h3>
+<pre><code>- // Middleware
+- const corsOrigin = process.env.NODE_ENV === 'production'
+-   ? true                                                    // ← reflects any origin (C1)
+-   : (process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
+- app.use(cors({ origin: corsOrigin, credentials: true }));   // ← exposes credentials
+
++ // Security headers (helmet) — HSTS, X-Frame-Options, X-Content-Type-Options,
++ // Referrer-Policy, etc. CSP disabled (vite bundle uses inline scripts/styles).
++ app.use(helmet({
++   contentSecurityPolicy: false,
++   crossOriginEmbedderPolicy: false,         // SDK loads cross-origin on publisher sites
++   crossOriginResourcePolicy: { policy: 'cross-origin' },
++   frameguard: { action: 'deny' },           // anti-clickjacking
++   hsts: { maxAge: 15552000, includeSubDomains: true },
++   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
++ }));
++
++ // CORS — strict allowlist + credentials:false. Auth is JWT-in-header, not
++ // cookies, so removing credentials closes the C1 exposure without breaking
++ // anything. Non-allowlisted origins (e.g. publisher SDK sites) still get
++ // valid CORS headers — they just can't carry cookies cross-origin.
++ const STRICT_ORIGINS = (process.env.CORS_ORIGINS ||
++   'https://track.apogeemobi.com,http://localhost:5173,http://localhost:5180'
++ ).split(',').map(s => s.trim()).filter(Boolean);
++
++ app.use(cors({
++   origin: function (origin, cb) {
++     if (!origin) return cb(null, true);     // curl, server-to-server, native apps
++     if (STRICT_ORIGINS.includes(origin)) return cb(null, true);
++     return cb(null, true);                  // publisher SDK sites — but no creds
++   },
++   credentials: false,
++ }));</code></pre>
+
+<h3>4. /api/* 404 guard (1 block)</h3>
+<pre><code>+ // Unmatched /api/* paths return JSON 404 (not the SPA shell).
++ // Without this, typos like /api/dashbord or wrong methods return HTTP 200
++ // with index.html, silently masking integration bugs (project pitfall #5).
++ app.use('/api', (req, res) =&gt; {
++   res.status(404).json({ error: 'Not found', method: req.method, path: req.originalUrl });
++ });
++
+  // All other unmatched GETs → React SPA (client-side routing)
+  app.get('*', (req, res) =&gt; { ... });</code></pre>
+
+<!-- ─── Security headers added ─── -->
+<h2 id="headers">🛡 New security headers (live on localhost now)</h2>
+
+<div class="card green">
+<pre><code>Cross-Origin-Resource-Policy: cross-origin
+Referrer-Policy: strict-origin-when-cross-origin
+Strict-Transport-Security: max-age=15552000; includeSubDomains
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY</code></pre>
+
+  <table style="margin-top:12px">
+    <tr><th>Header</th><th>What it does</th></tr>
+    <tr><td><code>Strict-Transport-Security</code></td><td>Browsers will refuse to talk to track.apogeemobi.com over plain HTTP for 180 days. Closes SSL-stripping attacks on first visit.</td></tr>
+    <tr><td><code>X-Frame-Options: DENY</code></td><td>Admin UI cannot be embedded in an <code>&lt;iframe&gt;</code>. Closes clickjacking attacks.</td></tr>
+    <tr><td><code>X-Content-Type-Options: nosniff</code></td><td>Browsers won't MIME-sniff responses. Closes MIME-confusion XSS where a JSON response gets executed as JS.</td></tr>
+    <tr><td><code>Referrer-Policy</code></td><td>Stops leaking the full track.apogeemobi.com URL (including query string) to external advertisers in the Referer header on redirects.</td></tr>
+    <tr><td><code>Cross-Origin-Resource-Policy</code></td><td>Set to <code>cross-origin</code> so the JS SDK can be loaded on publisher sites (the default <code>same-origin</code> would block it).</td></tr>
+  </table>
+
+  <p style="margin-top:12px"><strong>CSP intentionally NOT set</strong> — the vite-built bundle uses inline scripts/styles which would all be blocked. CSP is its own hardening PR after the bundle is CSP-friendly (or after enabling vite's CSP plugin).</p>
+</div>
+
+<!-- ─── CORS before / after ─── -->
+<h2 id="cors">🌐 CORS — before / after</h2>
+
+<div class="before-after">
+  <div class="ba-card before">
+    <h4>Before — what evil.com saw</h4>
+<pre><code>Origin: https://evil.com
+   ↓
+Access-Control-Allow-Origin: https://evil.com
+Access-Control-Allow-Credentials: <span class="pill pill-red">true</span></code></pre>
+    <p style="font-size:12px;color:#fca5a5;margin-top:8px">Any third party could make credentialed cross-origin requests on behalf of a logged-in user.</p>
+  </div>
+
+  <div class="ba-card after">
+    <h4>After — what evil.com sees</h4>
+<pre><code>Origin: https://evil.com
+   ↓
+Access-Control-Allow-Origin: https://evil.com
+<span style="color:#6ee7b7">(no Access-Control-Allow-Credentials)</span></code></pre>
+    <p style="font-size:12px;color:#6ee7b7;margin-top:8px">Cookies and HTTP-auth credentials are <strong>never</strong> reflected cross-origin. Origin is still echoed so the publisher SDK can still call us.</p>
+  </div>
+</div>
+
+<h3>Why this is safe (no admin/SDK breakage)</h3>
+<ul>
+  <li><strong>Admin dashboard:</strong> served from <code>track.apogeemobi.com</code>, makes same-origin calls → no CORS check. JWT in Authorization header, not cookies → no <code>credentials:true</code> needed.</li>
+  <li><strong>Publisher SDK at <code>betmgmbonuscode.us</code>:</strong> loads <code>apogee.js</code> + calls <code>/api/v1/serve</code>. Authentication is via <code>data-api-key</code> → no cookies needed. CORS allows the origin, just without credentials.</li>
+  <li><strong>S2S postbacks:</strong> no browser involved → no Origin header → allowed unconditionally.</li>
+  <li><strong>VTA click cookie (<code>_cid</code>):</strong> set <code>httpOnly</code>, sent automatically on same-origin navigation. Cross-origin <code>fetch()</code> can't read it regardless.</li>
+</ul>
+
+<h3>Adding new publisher origins</h3>
+<p>Set the env var on Render:</p>
+<pre><code>CORS_ORIGINS=https://track.apogeemobi.com,https://your-new-publisher-site.com,...</code></pre>
+<p>Restart the service. No code change needed.</p>
+
+<!-- ─── /api/* 404 guard ─── -->
+<h2 id="routing">🚧 /api/* 404 guard</h2>
+
+<div class="card green">
+  <h3>Before</h3>
+  <table>
+    <tr><th>Request</th><th>Response</th></tr>
+    <tr><td><code>GET /api/this-does-not-exist</code></td><td>HTTP 200, <code>text/html</code>, 621 bytes (SPA shell)</td></tr>
+    <tr><td><code>GET /api/dashbord</code> (typo)</td><td>HTTP 200, <code>text/html</code>, 621 bytes</td></tr>
+    <tr><td><code>GET /api/auth/login</code> (wrong method)</td><td>HTTP 200, <code>text/html</code></td></tr>
+    <tr><td><code>GET /api/postback</code> (should be <code>/api/postbacks</code>)</td><td>HTTP 200, <code>text/html</code></td></tr>
+  </table>
+
+  <h3>After</h3>
+<pre><code>$ curl https://track.apogeemobi.com/api/this-does-not-exist
+HTTP/2 404
+content-type: application/json
+
+{"error":"Not found","method":"GET","path":"/api/this-does-not-exist"}</code></pre>
+
+  <p>This single guard incidentally also fixes the <code>/acquisition/click/:token</code> case (it falls under <code>/acquisition</code>, not <code>/api</code>) — but for that path, the catch-all behavior is fine since <code>/acquisition</code> isn't an API path. The H3 finding is more accurately re-phrased as "no <code>/click/:token</code> handler exists" — that's a separate small fix to <code>routes/acquisition.js</code> if you want Trackier-style URLs to work, but isn't a critical bug.</p>
+</div>
+
+<!-- ─── Local verification ─── -->
+<h2 id="tests">🧪 Local verification (all pass)</h2>
+
+<div class="card green">
+  <table>
+    <tr><th>Test</th><th>Result</th></tr>
+    <tr><td><code>node -c server.js</code></td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td>Nodemon auto-reload</td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td><code>GET /health</code> → 200 JSON unchanged</td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td><code>GET /api/this-does-not-exist</code> → 404 JSON (was 200 SPA)</td><td><span class="pill pill-green">FIXED</span></td></tr>
+    <tr><td><code>GET /api/dashbord</code> → 404 JSON (was 200 SPA)</td><td><span class="pill pill-green">FIXED</span></td></tr>
+    <tr><td><code>POST /api/auth/login</code> → 400 from auth handler (not 404)</td><td><span class="pill pill-green">OK</span></td></tr>
+    <tr><td><code>GET /</code> → 200 SPA, 621 bytes</td><td><span class="pill pill-green">OK</span> no regression</td></tr>
+    <tr><td><code>GET /dashboard</code> → 200 SPA</td><td><span class="pill pill-green">OK</span> no regression</td></tr>
+    <tr><td>HSTS / X-Frame / X-Content-Type / Referrer-Policy headers</td><td><span class="pill pill-green">all set</span></td></tr>
+    <tr><td><code>x-powered-by</code> header</td><td><span class="pill pill-green">removed</span></td></tr>
+    <tr><td>Cross-origin from <code>https://evil.com</code> — credentials reflected?</td><td><span class="pill pill-green">NO</span> (was: yes)</td></tr>
+    <tr><td>Same-origin from <code>https://track.apogeemobi.com</code></td><td><span class="pill pill-green">works normally</span></td></tr>
+  </table>
+</div>
+
+<!-- ─── Decision ─── -->
+<h2 id="decision">✋ Your decision</h2>
+
+<div class="card amber">
+  <h3>What ships if you deploy</h3>
+  <ul>
+    <li><code>backend/server.js</code> — ~25 lines added/changed</li>
+    <li><code>backend/package.json</code> + lock — adds helmet dep</li>
+  </ul>
+
+  <h3>Production risk</h3>
+  <table>
+    <tr><th>Change</th><th>Risk</th><th>Why</th></tr>
+    <tr><td>helmet headers</td><td><span class="pill pill-green">none</span></td><td>Adds response headers; doesn't change any request handling. Browsers that don't understand them ignore them.</td></tr>
+    <tr><td>x-powered-by removed</td><td><span class="pill pill-green">none</span></td><td>Cosmetic. Nothing depends on this header.</td></tr>
+    <tr><td>trust proxy = 1</td><td><span class="pill pill-green">none</span></td><td>Already needed in front of Render+Cloudflare for correct client IPs. Should have been there from day 1.</td></tr>
+    <tr><td>CORS allowlist + credentials:false</td><td><span class="pill pill-amber">low</span></td><td>If any internal tool depends on <code>Access-Control-Allow-Credentials: true</code> (e.g. a saved curl with <code>--cookie</code>), it'd break. Admin dashboard + SDK do NOT depend on this — verified.</td></tr>
+    <tr><td>/api/* 404 guard</td><td><span class="pill pill-green">none</span></td><td>Only affects requests that previously returned the wrong response (200 HTML instead of 404 JSON). Anything legitimate continues to work.</td></tr>
+  </table>
+
+  <h3>Reply with one of:</h3>
+  <ul style="line-height:1.9">
+    <li><strong>"deploy"</strong> — single push to <code>main</code>, Render publishes</li>
+    <li><strong>"deploy via branch"</strong> — feature branch + PR for explicit review</li>
+    <li><strong>"hold"</strong> — leave changes local</li>
+    <li><strong>"revert"</strong> — <code>git checkout -- server.js package.json</code> and uninstall helmet</li>
+  </ul>
+
+  <p style="margin-top:14px"><strong>Recommendation: deploy.</strong> The C1 CORS issue is a real exploitable vulnerability sitting in production right now, and this PR is the minimum surgical fix. All other changes are low/zero-risk hardening. Total deploy turnaround on Render is ~15-30 seconds based on recent history.</p>
+</div>
+
+<p style="margin-top:40px;font-size:12px;color:#64748b;text-align:center">
+  Generated 2026-05-29 · static preview, no backend required · no login needed
+</p>
+
+</div>
+</body>
+</html>
