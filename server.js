@@ -151,10 +151,14 @@ app.use('/api/currency', require('./routes/currency'));
 //   /api/v1/openapi.yaml — raw spec (for Postman/Insomnia/codegen import)
 //   /api/v1/openapi.json — parsed spec
 //   /api/docs            — interactive Swagger UI (try-it-out enabled)
+//
+// Spec lives at backend/openapi.yaml (NOT backend/public/openapi.yaml) so
+// that `vite build` with emptyOutDir:true cannot wipe it on every frontend
+// deploy. See project_trackmmp_pitfalls.md section 2.
 {
   const swaggerUi = require('swagger-ui-express');
   const yaml      = require('js-yaml');
-  const specPath  = path.join(__dirname, 'public', 'openapi.yaml');
+  const specPath  = path.join(__dirname, 'openapi.yaml');
   let spec;
   try {
     spec = yaml.load(fs.readFileSync(specPath, 'utf8'));
@@ -311,6 +315,26 @@ if (frontendDist) {
       }
     },
   }));
+  // robots.txt — explicitly served so crawlers get plain text instead of
+  // the SPA HTML shell. Tracking platforms shouldn't be indexed.
+  app.get('/robots.txt', (req, res) => {
+    res.type('text/plain').send([
+      'User-agent: *',
+      'Disallow: /',
+      '',
+      '# Public surfaces a crawler might still want:',
+      '# Allow: /sellers.json',
+      '# Allow: /sdk/v1/apogee.js',
+    ].join('\n') + '\n');
+  });
+
+  // favicon.ico — return 204 No Content rather than serving the 621-byte
+  // SPA shell on every page load. (Real favicon can be added later by
+  // dropping the .ico into backend/public/ and adding a sendFile here.)
+  app.get('/favicon.ico', (req, res) => {
+    res.status(204).end();
+  });
+
   // Serve standalone HTML pages (not part of React SPA)
   app.get('/publisher-preview.html', (req, res) => {
     res.sendFile(path.join(frontendDist, 'publisher-preview.html'));

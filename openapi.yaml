@@ -1,0 +1,217 @@
+openapi: 3.1.0
+info:
+  title: Apogeemobi TrackMMP — Publisher API
+  description: |
+    Public API for publishers using the JS SDK or programmatic offer serving.
+
+    **Authentication:** every endpoint under `/api/v1` requires a publisher API key.
+    Send it either as the `x-api-key` HTTP header OR as the `?api_key=` query
+    parameter. Get your key from the publisher portal under "API Access".
+
+    **Other public surfaces** (not in this spec):
+    - `GET  /track/click/{campaign_token}` — click tracker (no auth, 302 redirect)
+    - `GET  /pb` and `POST /pb` — generic postback receiver (no auth, always 200)
+    - `GET  /acquisition` — Trackier-compatible postback receiver
+    - `GET  /adjust/event` — Adjust-compatible postback receiver
+    - `GET  /pixel.gif` — 1x1 impression pixel
+    - `GET  /sellers.json` — IAB v1.0 sellers identification
+
+    For the full publisher integration guide (with macros, examples, and
+    troubleshooting), see <https://track.apogeemobi.com/sdk/preview-v2/publisher-guide.html>.
+  version: "1.0.0"
+  contact:
+    name: Apogeemobi Integration
+    email: integration@apogeemobi.com
+servers:
+  - url: https://track.apogeemobi.com
+    description: Production
+
+components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Publisher API key
+    ApiKeyQuery:
+      type: apiKey
+      in: query
+      name: api_key
+      description: Publisher API key (alternative to header)
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      example:
+        error: "API key required. Pass via x-api-key header or ?api_key= query param."
+    Offer:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 76
+        name:
+          type: string
+          example: "Chime Banking"
+        tracking_url:
+          type: string
+          format: uri
+          example: "https://track.apogeemobi.com/track/click/yRiop9cOjpI0?pid=38"
+        payout:
+          type: number
+          example: 75.00
+        currency:
+          type: string
+          example: "USD"
+        creative:
+          type: object
+          properties:
+            image_url: { type: string, format: uri }
+            headline:  { type: string }
+            cta:       { type: string }
+    ServeResponse:
+      type: object
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Offer"
+        placement:
+          type: object
+          properties:
+            floor_ecpm:
+              type: number
+              nullable: true
+            prebid_config:
+              type: object
+              nullable: true
+        visitor:
+          type: object
+          properties:
+            visitor_id:        { type: string }
+            jurisdiction:      { type: string, example: "US-CA" }
+            consent_required:  { type: boolean }
+            consent_state:     { type: string, nullable: true }
+        capped_out:
+          type: array
+          items: { type: integer }
+
+security:
+  - ApiKeyHeader: []
+  - ApiKeyQuery: []
+
+paths:
+  /api/v1/serve:
+    get:
+      summary: Fetch an offer to render
+      description: |
+        Returns the best-matched offer for the given placement based on
+        the campaign's targeting (country, region, city, device, OS,
+        browser), the requesting visitor's resolved geo + UA, frequency
+        caps, A/B testing, and consent state.
+
+        If no offer matches, `offers` will be `[]` and `capped_out` will
+        list any campaign IDs that were filtered out by frequency cap.
+      parameters:
+        - name: placement
+          in: query
+          required: true
+          description: Placement slug (configured in the admin panel)
+          schema: { type: string }
+        - name: country
+          in: query
+          required: false
+          description: Override country (ISO 3166-1 alpha-2). Defaults to GeoIP from request IP.
+          schema: { type: string, example: "US" }
+        - name: device
+          in: query
+          required: false
+          description: Override device type
+          schema: { type: string, enum: [mobile, tablet, desktop] }
+      responses:
+        '200':
+          description: Offer(s) returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServeResponse" }
+        '401':
+          description: API key missing or invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/v1/impression:
+    post:
+      summary: Fire impression beacon
+      description: Call when an offer is rendered. Counts toward frequency capping.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                visitor_id:    { type: string }
+                placement_id:  { type: integer }
+                creative_id:   { type: integer, nullable: true }
+                consent_state: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Impression recorded
+        '401':
+          description: API key missing or invalid
+
+  /api/v1/consent:
+    post:
+      summary: Audit-log a consent state change
+      description: Persist a visitor's consent state for compliance and personalization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                visitor_id:    { type: string }
+                consent_state: { type: string, description: "TCF v2.2 string or 'accepted'/'rejected'" }
+      responses:
+        '200':
+          description: Consent recorded
+        '401':
+          description: API key missing or invalid
+
+  /api/v1/event:
+    post:
+      summary: Fire a generic conversion event (S2S-style)
+      description: |
+        For publishers firing conversions directly to us rather than the
+        advertiser firing. Authenticate with publisher API key — separate
+        from the advertiser-side `/api/s2s/event` flow.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_name, click_id]
+              properties:
+                event_name:  { type: string, example: "install" }
+                click_id:    { type: string, description: "Our click ID returned on the original /track/click" }
+                payout:      { type: number }
+                revenue:     { type: number }
+                currency:    { type: string, example: "USD" }
+      responses:
+        '200':
+          description: Event recorded
+        '401':
+          description: API key missing or invalid
+
+  /api/v1/links:
+    get:
+      summary: List your OneLinks (deep-link wizard)
+      description: OneLinks are deep-linkable smart URLs for cross-platform install attribution.
+      responses:
+        '200': { description: List of links }
+        '401': { description: Unauthorized }
