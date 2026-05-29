@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Apogeemobi Publisher Guide — track.apogeemobi.com</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.6 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; max-height: none; padding: 16px; } }
+
+    /* Sidebar nav */
+    .sidebar { background: #0a0a14; border-right: 1px solid #ffffff14; padding: 28px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+    .sidebar h1 { font-size: 14px; font-weight: 700; margin: 0 0 4px; color: #fff; }
+    .sidebar h1 span { font-weight: 400; color: #94a3b8; font-size: 11px; display: block; margin-top: 3px; }
+    .nav { margin-top: 22px; }
+    .nav a { display: block; padding: 6px 10px; font-size: 12px; color: #cbd5e1; text-decoration: none; border-radius: 5px; margin-bottom: 1px; }
+    .nav a:hover { background: #1a1a2e; color: #fff; }
+    .nav .group { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .08em; margin: 16px 10px 6px; font-weight: 600; }
+
+    /* Main content */
+    .main { padding: 40px 56px 100px; max-width: 920px; }
+    @media (max-width: 800px) { .main { padding: 28px 20px 60px; } }
+    h2 { font-size: 26px; margin: 44px 0 8px; font-weight: 700; color: #fff; padding-top: 12px; border-top: 1px solid #ffffff10; }
+    h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+    h3 { font-size: 17px; margin: 28px 0 8px; color: #a5f3fc; font-weight: 600; }
+    h4 { font-size: 14px; margin: 18px 0 6px; color: #cbd5e1; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+    p, li { color: #cbd5e1; }
+    .lede { color: #94a3b8; font-size: 15px; margin: 0 0 18px; }
+
+    /* Code */
+    pre { background: #0a0a14; color: #a5f3fc; padding: 14px 16px; border-radius: 8px; font-size: 12.5px; line-height: 1.6; overflow-x: auto; border: 1px solid #ffffff14; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    code { background: rgba(99,102,241,.15); color: #a5f3fc; padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #ffffff14; text-align: left; vertical-align: top; }
+    th { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; background: #1a1a2e; }
+    td code { font-size: 11.5px; }
+    td.required { color: #fcd34d; font-weight: 600; }
+    td.recommended { color: #6ee7b7; font-weight: 500; }
+
+    /* Pills */
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .pill-green  { background: rgba(16,185,129,.18); color: #6ee7b7; }
+    .pill-amber  { background: rgba(245,158,11,.18); color: #fcd34d; }
+    .pill-red    { background: rgba(239,68,68,.18);  color: #fca5a5; }
+    .pill-blue   { background: rgba(99,102,241,.18); color: #c7d2fe; }
+
+    /* Boxes */
+    .box { border-radius: 10px; padding: 16px 18px; margin: 16px 0; border: 1px solid; }
+    .box.tip       { background: rgba(99,102,241,.06); border-color: rgba(99,102,241,.3);  color: #c7d2fe; }
+    .box.warn      { background: rgba(245,158,11,.06); border-color: rgba(245,158,11,.3);  color: #fde68a; }
+    .box.success   { background: rgba(16,185,129,.06); border-color: rgba(16,185,129,.3);  color: #6ee7b7; }
+    .box.danger    { background: rgba(239,68,68,.06);  border-color: rgba(239,68,68,.3);   color: #fca5a5; }
+    .box .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; opacity: .8; }
+    .box p, .box li { color: inherit; opacity: 0.92; }
+
+    /* Stepper */
+    .stepper { counter-reset: step; margin: 16px 0; }
+    .step { background: #1a1a2e; border-left: 3px solid #6366f1; padding: 14px 18px; margin-bottom: 10px; border-radius: 0 8px 8px 0; position: relative; }
+    .step::before { counter-increment: step; content: counter(step); position: absolute; left: -16px; top: 12px; width: 26px; height: 26px; background: #6366f1; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+    .step h4 { margin: 0 0 6px; color: #fff; text-transform: none; letter-spacing: 0; font-size: 14px; }
+
+    /* Two-column compare */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 14px 0; }
+    @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+    .col-card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 8px; padding: 16px; }
+    .col-card h4 { margin: 0 0 8px; color: #fff; text-transform: none; letter-spacing: 0; font-size: 13px; }
+    .col-card .tag { font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; display: inline-block; }
+
+    a { color: #818cf8; text-decoration: none; }
+    a:hover { color: #c7d2fe; text-decoration: underline; }
+
+    .hdr { padding: 24px 56px; border-bottom: 1px solid #ffffff10; background: #0d1b35; position: sticky; top: 0; z-index: 5; }
+    .hdr h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .hdr .sub { color: #94a3b8; font-size: 12px; margin-top: 2px; }
+    @media (max-width: 800px) { .hdr { padding: 18px 20px; } }
+  </style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>📘 Apogeemobi Publisher Integration Guide</h1>
+  <div class="sub">Hand this to publishers · No login required · Last updated 2026-05-29</div>
+</div>
+
+<div class="layout">
+
+  <!-- ─── Sidebar ─── -->
+  <aside class="sidebar">
+    <h1>Publisher Guide<span>Integration reference for track.apogeemobi.com</span></h1>
+
+    <nav class="nav">
+      <div class="group">Quick Start</div>
+      <a href="#welcome">1. Welcome</a>
+      <a href="#fivemin">2. 5-minute setup</a>
+      <a href="#trackinglink">3. Your tracking link</a>
+
+      <div class="group">Click Parameters</div>
+      <a href="#core-params">4. Core parameters</a>
+      <a href="#sub-params">5. Source breakdown (sub1–10)</a>
+      <a href="#mobile-vs-web">6. Mobile vs Web</a>
+      <a href="#full-example">7. Full URL example</a>
+
+      <div class="group">Postbacks</div>
+      <a href="#postback-overview">8. How postbacks work</a>
+      <a href="#postback-setup">9. Setting up your postback</a>
+      <a href="#macro-reference">10. Macro reference</a>
+      <a href="#postback-status">11. Status codes &amp; retries</a>
+
+      <div class="group">Other Integrations</div>
+      <a href="#js-sdk">12. JS SDK (web)</a>
+      <a href="#pixel">13. Pixel impression</a>
+      <a href="#rest-api">14. REST API</a>
+      <a href="#s2s">15. S2S server-to-server</a>
+
+      <div class="group">Operations</div>
+      <a href="#testing">16. Testing your integration</a>
+      <a href="#troubleshooting">17. Troubleshooting</a>
+      <a href="#conventions">18. Industry conventions</a>
+      <a href="#support">19. Support</a>
+    </nav>
+  </aside>
+
+  <!-- ─── Main ─── -->
+  <main class="main">
+
+<!-- =========================== 1. Welcome =========================== -->
+<h2 id="welcome">1. Welcome</h2>
+
+<p class="lede">This guide tells you everything you need to send traffic to Apogeemobi offers and get paid for conversions. Cover-to-cover takes ~20 minutes; the 5-minute setup below is enough to start running.</p>
+
+<p>Apogeemobi is a Mobile Measurement Partner (MMP) and affiliate tracking platform. You'll:</p>
+<ol>
+  <li>Get a <strong>tracking link</strong> from your account manager (one per campaign)</li>
+  <li>Append your own <strong>click ID</strong> + <strong>source identifier</strong> to that link</li>
+  <li>Send traffic to it (it 302-redirects to the advertiser's destination)</li>
+  <li>Receive <strong>postbacks</strong> from us back to your URL when conversions happen</li>
+</ol>
+
+<div class="box tip">
+  <div class="label">In a hurry?</div>
+  <p>Skip to <a href="#fivemin">section 2 — 5-minute setup</a>. The rest of this guide is reference material you can come back to.</p>
+</div>
+
+<!-- =========================== 2. 5-minute setup =========================== -->
+<h2 id="fivemin">2. 5-minute setup</h2>
+
+<div class="stepper">
+  <div class="step">
+    <h4>Get your tracking link</h4>
+    <p>Your account manager hands you a URL like:<br>
+    <code>https://track.apogeemobi.com/track/click/yRiop9cOjpI0?pid=38</code></p>
+    <p>The <code>pid=38</code> is YOUR publisher ID (already filled in). The token <code>yRiop9cOjpI0</code> identifies the campaign you're promoting.</p>
+  </div>
+
+  <div class="step">
+    <h4>Append your click ID</h4>
+    <p>For every click you send, add a unique <code>clickid</code> parameter — this is YOUR own identifier so postbacks can be tied to that specific click on your side:</p>
+    <pre><code>https://track.apogeemobi.com/track/click/yRiop9cOjpI0?pid=38&amp;clickid=abc123xyz</code></pre>
+    <p>If you have multiple traffic sources, also append <code>sub1=facebook</code> (or whatever names your sources).</p>
+  </div>
+
+  <div class="step">
+    <h4>Send traffic</h4>
+    <p>When a user opens that URL, they're 302-redirected to the advertiser. Your click is recorded against your <code>pid</code>.</p>
+  </div>
+
+  <div class="step">
+    <h4>Set your postback URL (one-time)</h4>
+    <p>In your publisher portal → <strong>Postback Settings</strong>, enter the URL where you want us to notify you of conversions, with macros for the dynamic parts:</p>
+    <pre><code>https://your-tracker.com/postback?clickid={click_id}&amp;payout={payout}&amp;sub1={sub1}</code></pre>
+    <p>The <code>{click_id}</code> placeholder gets replaced with the same <code>clickid</code> you sent on the original click — so you can attribute the conversion.</p>
+  </div>
+
+  <div class="step">
+    <h4>Done</h4>
+    <p>Conversions fire automatically. View earnings in your portal → Reports.</p>
+  </div>
+</div>
+
+<!-- =========================== 3. Your tracking link =========================== -->
+<h2 id="trackinglink">3. Your tracking link</h2>
+
+<p>Every tracking link follows this shape:</p>
+
+<pre><code>https://track.apogeemobi.com/track/click/<span style="color:#fcd34d">CAMPAIGN_TOKEN</span>?pid=<span style="color:#6ee7b7">YOUR_PID</span>&amp;clickid=<span style="color:#c7d2fe">YOUR_CLICK_ID</span></code></pre>
+
+<table>
+  <tr><th>Part</th><th>What it is</th><th>Who provides it</th></tr>
+  <tr><td><code style="color:#fcd34d">CAMPAIGN_TOKEN</code></td><td>12-character ID for the specific campaign</td><td>Account manager (one per campaign)</td></tr>
+  <tr><td><code style="color:#6ee7b7">YOUR_PID</code></td><td>Numeric publisher ID</td><td>Apogeemobi (shown in your portal, e.g. <code>38</code>)</td></tr>
+  <tr><td><code style="color:#c7d2fe">YOUR_CLICK_ID</code></td><td>Your own unique ID for THIS click</td><td>Your traffic source / tracker generates it</td></tr>
+</table>
+
+<div class="box warn">
+  <div class="label">Important</div>
+  <p>The <code>CAMPAIGN_TOKEN</code> stays the same per campaign. The <code>YOUR_CLICK_ID</code> must be UNIQUE per click — otherwise multiple conversions can't be distinguished. Most trackers auto-generate this; if you're rolling your own, use a UUID or timestamp+random.</p>
+</div>
+
+<!-- =========================== 4. Core parameters =========================== -->
+<h2 id="core-params">4. Core parameters</h2>
+
+<h3>Required</h3>
+<table>
+  <tr><th>Parameter</th><th>What it is</th><th>Example</th></tr>
+  <tr><td><code>pid</code></td><td class="required">Your publisher ID (numeric, e.g. <code>38</code>) — OR legacy token (<code>z50ac0YVXE</code>)</td><td><code>pid=38</code></td></tr>
+</table>
+
+<h3>Strongly recommended</h3>
+<table>
+  <tr><th>Parameter</th><th>What it is</th><th>Example</th></tr>
+  <tr><td><code>clickid</code></td><td class="recommended">Your own click ID — echoed back in postbacks for attribution. Without it, you can't tie conversions to specific clicks.</td><td><code>clickid=abc123xyz</code></td></tr>
+  <tr><td><code>advertising_id</code></td><td class="recommended">GAID (Android) or IDFA (iOS) — <strong>required on mobile campaigns</strong> to pass the platform's fraud check. Aliases: <code>gps_adid</code>, <code>idfa</code>, <code>adid</code>.</td><td><code>advertising_id=AAAA-BBBB-CCCC</code></td></tr>
+</table>
+
+<div class="box tip">
+  <div class="label">About clickid aliases</div>
+  <p>We accept any of these as your click ID — pick one:<br>
+  <code>clickid</code> · <code>click_id</code> · <code>transaction_id</code> · <code>irclickid</code> · <code>pub_click_id</code> · <code>aff_click_id</code> · <code>aff_sub</code> · <code>subid</code> · <code>u1</code></p>
+  <p>If you're migrating from another network you can use the same parameter name they used — we'll auto-detect it.</p>
+</div>
+
+<!-- =========================== 5. Source breakdown =========================== -->
+<h2 id="sub-params">5. Source breakdown — sub1 through sub10</h2>
+
+<p>If you push traffic from <strong>multiple sources</strong> (Facebook, TikTok, Google Ads, native widgets, etc.) and want your conversion reports broken down by source, use <code>sub1</code>...<code>sub10</code>.</p>
+
+<h3>Common convention</h3>
+<table>
+  <tr><th>Slot</th><th>Typical use</th><th>Example value</th></tr>
+  <tr><td><code>sub1</code></td><td>Traffic source / network name</td><td><code>facebook</code> · <code>tiktok</code> · <code>google</code> · <code>taboola</code></td></tr>
+  <tr><td><code>sub2</code></td><td>Campaign / ad set name</td><td><code>fall_promo</code> · <code>retargeting_q4</code></td></tr>
+  <tr><td><code>sub3</code></td><td>Ad / creative ID</td><td><code>vid_15s_blue</code> · <code>banner_300x250</code></td></tr>
+  <tr><td><code>sub4</code></td><td>Placement / widget</td><td><code>feed</code> · <code>stories</code> · <code>widget_xyz</code></td></tr>
+  <tr><td><code>sub5</code></td><td>Audience / segment</td><td><code>lookalike_2pct</code> · <code>retarget_30d</code></td></tr>
+  <tr><td><code>sub6</code> – <code>sub10</code></td><td>Free-form — whatever you want</td><td>—</td></tr>
+</table>
+
+<div class="box tip">
+  <div class="label">AppsFlyer publishers</div>
+  <p>We also accept <code>af_sub1</code>...<code>af_sub5</code> as aliases (same fields, AppsFlyer convention). Either works. <code>sub6</code>–<code>sub10</code> have no <code>af_</code> alias.</p>
+</div>
+
+<h3>Site identifier (separate from sub-params)</h3>
+<p>If you run offers across multiple of your own sites, also add <code>af_siteid</code> (alias <code>site_id</code>) to identify which site:</p>
+<pre><code>?pid=38&amp;clickid=abc123&amp;sub1=facebook&amp;af_siteid=top10betting.us</code></pre>
+
+<!-- =========================== 6. Mobile vs Web =========================== -->
+<h2 id="mobile-vs-web">6. Mobile app vs Web — two different patterns</h2>
+
+<div class="two-col">
+  <div class="col-card">
+    <span class="tag pill pill-green">Web traffic</span>
+    <h4>Browser-based offers</h4>
+    <p>Insurance, finance, BNPL comparisons, e-commerce — clicks resolve to a web destination.</p>
+    <h4>Required params</h4>
+    <pre><code>?pid=38
+&amp;clickid={CLICK_ID}
+&amp;sub1={SOURCE}</code></pre>
+    <p style="margin-top:8px"><strong>No <code>advertising_id</code> needed</strong> — web campaigns skip the GAID/IDFA fraud check.</p>
+  </div>
+
+  <div class="col-card">
+    <span class="tag pill pill-blue">Mobile traffic</span>
+    <h4>App install offers</h4>
+    <p>App campaigns (CPI) — clicks resolve to App Store / Play Store, conversion = install.</p>
+    <h4>Required params</h4>
+    <pre><code>?pid=38
+&amp;clickid={CLICK_ID}
+&amp;sub1={SOURCE}
+&amp;advertising_id={GAID_OR_IDFA}</code></pre>
+    <p style="margin-top:8px"><strong>Missing <code>advertising_id</code> → click blocked by fraud rule</strong> (mobile campaigns only).</p>
+  </div>
+</div>
+
+<!-- =========================== 7. Full example =========================== -->
+<h2 id="full-example">7. Full URL example</h2>
+
+<h3>Web — finance offer</h3>
+<pre><code>https://track.apogeemobi.com/track/click/yRiop9cOjpI0
+  ?pid=38
+  &amp;clickid=cbc1f9a72e
+  &amp;sub1=facebook
+  &amp;sub2=insurance_quiz_q4
+  &amp;sub3=video_15s
+  &amp;af_siteid=insurancepick.us</code></pre>
+
+<h3>Mobile — Android install</h3>
+<pre><code>https://track.apogeemobi.com/track/click/xXatKcnnsOcH
+  ?pid=42
+  &amp;clickid=7f3a9b4c1d
+  &amp;sub1=tiktok
+  &amp;sub2=campaign_a
+  &amp;advertising_id=12345678-90ab-cdef-1234-567890abcdef</code></pre>
+
+<h3>Mobile — iOS install (IDFA available)</h3>
+<pre><code>https://track.apogeemobi.com/track/click/ptkTdRrA3f9w
+  ?pid=42
+  &amp;clickid=ios_clk_8a23
+  &amp;sub1=google_uac
+  &amp;advertising_id=AAAA-BBBB-CCCC-DDDD</code></pre>
+
+<!-- =========================== 8. Postbacks =========================== -->
+<h2 id="postback-overview">8. How postbacks work</h2>
+
+<p>A <strong>postback</strong> is an HTTP request the platform fires to YOUR URL when a conversion happens. It's how you find out which clicks converted.</p>
+
+<pre><code>┌─────────────────────────────────────────────────────────────────────┐
+│  1. User clicks your tracking URL with ?clickid=abc123              │
+│       ↓                                                              │
+│  2. Apogeemobi records click, 302-redirects user to advertiser      │
+│       ↓                                                              │
+│  3. User converts on advertiser site (install / signup / purchase)  │
+│       ↓                                                              │
+│  4. Advertiser fires conversion to Apogeemobi (S2S or pixel)        │
+│       ↓                                                              │
+│  5. Apogeemobi fires YOUR postback URL, substituting macros:        │
+│         https://your-tracker.com/cvr?clickid=abc123&amp;payout=2.50      │
+│       ↓                                                              │
+│  6. Your tracker receives it and credits the conversion to abc123   │
+└─────────────────────────────────────────────────────────────────────┘</code></pre>
+
+<h2 id="postback-setup">9. Setting up your postback URL</h2>
+
+<p>In your publisher portal → <strong>Postback Settings</strong> (or via API), set ONE postback URL. It will be fired for every conversion attributed to your <code>pid</code>.</p>
+
+<h3>Template format</h3>
+
+<p>Use <code>{macro_name}</code> placeholders for the dynamic parts. The platform substitutes real values when firing.</p>
+
+<h3>Minimum useful postback</h3>
+<pre><code>https://your-tracker.com/postback
+  ?clickid={click_id}
+  &amp;payout={payout}
+  &amp;status={status}</code></pre>
+
+<h3>Recommended (more attribution detail)</h3>
+<pre><code>https://your-tracker.com/postback
+  ?clickid={click_id}
+  &amp;payout={payout}
+  &amp;currency={currency}
+  &amp;event={event_name}
+  &amp;sub1={sub1}
+  &amp;sub2={sub2}
+  &amp;country={country}
+  &amp;platform={platform}</code></pre>
+
+<h3>Full power (geo + device + retargeting)</h3>
+<pre><code>https://your-tracker.com/postback
+  ?clickid={click_id}
+  &amp;payout={payout}
+  &amp;currency={currency}
+  &amp;event={event_name}
+  &amp;goal_id={goal_id}
+  &amp;sub1={sub1}&amp;sub2={sub2}&amp;sub3={sub3}&amp;sub4={sub4}&amp;sub5={sub5}
+  &amp;country={country}
+  &amp;region={region}
+  &amp;city={city}
+  &amp;device_type={device_type}
+  &amp;os={os}
+  &amp;browser={browser}
+  &amp;gaid={gaid}
+  &amp;is_retargeting={is_retargeting}</code></pre>
+
+<!-- =========================== 10. Macro reference =========================== -->
+<h2 id="macro-reference">10. Macro reference (everything you can substitute)</h2>
+
+<h3>Core conversion data</h3>
+<table>
+  <tr><th>Macro</th><th>Aliases</th><th>Resolves to</th></tr>
+  <tr><td><code>{click_id}</code></td><td><code>{clickid}</code>, <code>{transaction_id}</code>, <code>{our_click_id}</code></td><td>Our internal click ID (16-char). Same value across click ↔ postback.</td></tr>
+  <tr><td><code>{publisher_click_id}</code></td><td>—</td><td>Your own click ID you originally sent</td></tr>
+  <tr><td><code>{payout}</code></td><td>—</td><td>Your payout for this conversion (your CPA rate)</td></tr>
+  <tr><td><code>{revenue}</code></td><td>—</td><td>Advertiser revenue (visible if your account has revenue-share)</td></tr>
+  <tr><td><code>{currency}</code></td><td>—</td><td>ISO 4217 (e.g. <code>USD</code>) — defaults <code>USD</code></td></tr>
+  <tr><td><code>{event_name}</code></td><td>—</td><td>Event slug — e.g. <code>install</code>, <code>signup</code>, <code>purchase</code></td></tr>
+  <tr><td><code>{event_value}</code></td><td>—</td><td>URL-encoded extra event payload</td></tr>
+  <tr><td><code>{goal_name}</code></td><td>—</td><td>Matched goal (multi-goal campaigns)</td></tr>
+  <tr><td><code>{goal_id}</code></td><td>—</td><td>Matched goal ID</td></tr>
+  <tr><td><code>{status}</code></td><td>—</td><td><code>attributed</code> / <code>duplicate</code> / <code>rejected</code></td></tr>
+</table>
+
+<h3>Sub-parameters (echoed from click)</h3>
+<table>
+  <tr><th>Macro</th><th>Aliases</th></tr>
+  <tr><td><code>{sub1}</code></td><td><code>{af_sub1}</code></td></tr>
+  <tr><td><code>{sub2}</code></td><td><code>{af_sub2}</code></td></tr>
+  <tr><td><code>{sub3}</code></td><td><code>{af_sub3}</code></td></tr>
+  <tr><td><code>{sub4}</code></td><td><code>{af_sub4}</code></td></tr>
+  <tr><td><code>{sub5}</code></td><td><code>{af_sub5}</code></td></tr>
+  <tr><td><code>{sub6}</code> – <code>{sub10}</code></td><td>—</td></tr>
+</table>
+
+<h3>Device identifiers</h3>
+<table>
+  <tr><th>Macro</th><th>Aliases</th><th>Notes</th></tr>
+  <tr><td><code>{advertising_id}</code></td><td><code>{gps_adid}</code>, <code>{gaid}</code>, <code>{google_aid}</code></td><td>Mobile ad ID</td></tr>
+  <tr><td><code>{idfa}</code></td><td>—</td><td>iOS only</td></tr>
+  <tr><td><code>{idfv}</code></td><td>—</td><td>iOS vendor ID</td></tr>
+  <tr><td><code>{android_id}</code></td><td>—</td><td>Android device ID</td></tr>
+  <tr><td><code>{google_app_set_id}</code></td><td>—</td><td>Privacy-friendly app set ID</td></tr>
+  <tr><td><code>{att_status}</code></td><td>—</td><td>iOS App Tracking Transparency status</td></tr>
+</table>
+
+<h3>Geo (resolved from click IP via MaxMind GeoIP)</h3>
+<table>
+  <tr><th>Macro</th><th>Aliases</th><th>Resolves to</th></tr>
+  <tr><td><code>{country}</code></td><td><code>{country_code}</code></td><td>ISO 3166-1 alpha-2 (e.g. <code>US</code>) — <code>XX</code> if unknown</td></tr>
+  <tr><td><code>{region}</code></td><td><code>{state}</code></td><td>ISO 3166-2 subdivision (e.g. <code>CA</code>) — empty if City GeoIP DB not loaded</td></tr>
+  <tr><td><code>{city}</code></td><td>—</td><td>English city name — empty if City GeoIP DB not loaded</td></tr>
+  <tr><td><code>{language}</code></td><td>—</td><td>Browser <code>Accept-Language</code> (e.g. <code>en-US</code>)</td></tr>
+  <tr><td><code>{ip}</code></td><td>—</td><td>Click IP</td></tr>
+</table>
+
+<h3>Device / browser (resolved from User-Agent)</h3>
+<table>
+  <tr><th>Macro</th><th>Resolves to</th></tr>
+  <tr><td><code>{device_type}</code></td><td><code>mobile</code> / <code>desktop</code> / <code>tablet</code></td></tr>
+  <tr><td><code>{os}</code></td><td><code>Android</code>, <code>iOS</code>, <code>Windows</code>, <code>Mac OS</code>, <code>Linux</code></td></tr>
+  <tr><td><code>{browser}</code></td><td><code>Chrome</code>, <code>Safari</code>, <code>Firefox</code>, <code>Edge</code>, etc.</td></tr>
+  <tr><td><code>{platform}</code></td><td><code>web</code> / <code>android</code> / <code>ios</code></td></tr>
+  <tr><td><code>{user_agent}</code></td><td>URL-encoded UA string</td></tr>
+</table>
+
+<h3>Campaign / site</h3>
+<table>
+  <tr><th>Macro</th><th>Aliases</th><th>Resolves to</th></tr>
+  <tr><td><code>{c}</code></td><td><code>{campaign_name}</code></td><td>Campaign name</td></tr>
+  <tr><td><code>{campaign_id}</code></td><td><code>{af_c_id}</code></td><td>Campaign ID</td></tr>
+  <tr><td><code>{af_siteid}</code></td><td><code>{site_id}</code></td><td>Site ID you originally sent</td></tr>
+  <tr><td><code>{pid}</code></td><td><code>{media_source}</code>, <code>{network_name}</code></td><td>Your publisher ID</td></tr>
+  <tr><td><code>{app_id}</code></td><td><code>{bundle_id}</code></td><td>App bundle (mobile campaigns)</td></tr>
+  <tr><td><code>{app_name}</code></td><td>—</td><td>App name</td></tr>
+</table>
+
+<h3>Timestamps + flags</h3>
+<table>
+  <tr><th>Macro</th><th>Resolves to</th></tr>
+  <tr><td><code>{install_unix_ts}</code></td><td>Unix seconds at conversion</td></tr>
+  <tr><td><code>{click_unix_ts}</code></td><td>Unix seconds at original click</td></tr>
+  <tr><td><code>{is_retargeting}</code></td><td><code>true</code> / <code>false</code></td></tr>
+  <tr><td><code>{blocked_reason}</code></td><td>Set if fraud rule triggered</td></tr>
+</table>
+
+<h3>Adjust-specific</h3>
+<p style="font-size:13px"><code>{reftag}</code> · <code>{tracker_name}</code> · <code>{is_organic}</code> · <code>{label}</code> · <code>{adgroup}</code> · <code>{creative}</code></p>
+
+<h3>Branch-specific</h3>
+<p style="font-size:13px"><code>{branch_click_id}</code> · <code>{channel}</code> · <code>{feature}</code> · <code>{campaign}</code> · <code>{stage}</code> · <code>{tags}</code></p>
+
+<div class="box tip">
+  <div class="label">Macro behavior</div>
+  <p>Any <code>{xxx}</code> in your postback URL that isn't in this list stays as the literal text <code>{xxx}</code> in the fired request. So always sanity-check your URL against this list — typos like <code>{cliciid}</code> will fire to the network as a literal string.</p>
+</div>
+
+<!-- =========================== 11. Status codes =========================== -->
+<h2 id="postback-status">11. Postback status codes &amp; retries</h2>
+
+<table>
+  <tr><th>Status</th><th>When</th><th>What happens to your postback?</th></tr>
+  <tr><td><span class="pill pill-green">attributed</span></td><td>Click+event matched a live click within lookback window</td><td>Postback fires immediately</td></tr>
+  <tr><td><span class="pill pill-amber">duplicate</span></td><td>Same click+event already attributed</td><td>Postback fires with <code>{status}=duplicate</code> (your tracker should ignore)</td></tr>
+  <tr><td><span class="pill pill-red">rejected</span></td><td>Click ID unknown, lookback expired, or fraud rule blocked</td><td>Postback may fire with <code>{status}=rejected</code> depending on your settings</td></tr>
+</table>
+
+<h3>Retry behavior</h3>
+<p>If your postback endpoint returns non-2xx or times out, we retry with exponential backoff:</p>
+<table>
+  <tr><th>Attempt</th><th>Delay</th></tr>
+  <tr><td>1</td><td>immediate</td></tr>
+  <tr><td>2</td><td>+30 seconds</td></tr>
+  <tr><td>3</td><td>+2 minutes</td></tr>
+  <tr><td>4</td><td>+10 minutes</td></tr>
+  <tr><td>5</td><td>+1 hour</td></tr>
+</table>
+<p>After 5 failed attempts the postback is marked as <code>failed</code> in your dashboard. To make retries reliable, your endpoint must always respond with <code>200 OK</code> within 10 seconds.</p>
+
+<!-- =========================== 12. JS SDK =========================== -->
+<h2 id="js-sdk">12. JS SDK (drop-in for websites)</h2>
+
+<p>If you're a website publisher and want offers <strong>rendered on your page</strong> (not redirect-based), use the JS SDK:</p>
+
+<pre><code>&lt;script
+  src="https://track.apogeemobi.com/sdk/v1/apogee.js"
+  data-api-key="<span style="color:#fcd34d">YOUR_PUBLISHER_API_KEY</span>"
+  data-placement="top-loan-offers"
+  data-consent-mode="auto"
+  data-show-consent="true"
+  async&gt;&lt;/script&gt;
+
+&lt;div id="apogee-slot"&gt;&lt;/div&gt;</code></pre>
+
+<h3>Supported attributes</h3>
+<table>
+  <tr><th>Attribute</th><th>Values</th><th>Purpose</th></tr>
+  <tr><td><code>data-api-key</code></td><td>your publisher API key</td><td>required — identifies your account</td></tr>
+  <tr><td><code>data-placement</code></td><td>placement slug</td><td>required — which slot to fill</td></tr>
+  <tr><td><code>data-consent-mode</code></td><td><code>auto</code> / <code>manual</code></td><td>how the SDK handles GDPR consent</td></tr>
+  <tr><td><code>data-consent-text</code></td><td>custom string</td><td>banner text</td></tr>
+  <tr><td><code>data-show-consent</code></td><td><code>true</code> / <code>false</code></td><td>show built-in Accept/Decline banner</td></tr>
+  <tr><td><code>data-no-banner</code></td><td>(presence)</td><td>suppress built-in banner entirely</td></tr>
+</table>
+
+<h3>JavaScript API</h3>
+<p>After the SDK loads, <code>window.ApogeeMobi</code> exposes:</p>
+<table>
+  <tr><th>Method</th><th>Purpose</th></tr>
+  <tr><td><code>ApogeeMobi.setConsent(state)</code></td><td>TCF v2.2 string OR <code>'accepted'</code> / <code>'rejected'</code></td></tr>
+  <tr><td><code>ApogeeMobi.getConsent()</code></td><td>returns current consent state</td></tr>
+  <tr><td><code>ApogeeMobi.getVisitorId()</code></td><td>returns visitor ID (stored in <code>localStorage['apg:uid']</code> and cookie <code>apg_uid</code>, 1 year)</td></tr>
+  <tr><td><code>ApogeeMobi.onServe(data, slotEl)</code></td><td>hook for Prebid integration</td></tr>
+</table>
+
+<!-- =========================== 13. Pixel =========================== -->
+<h2 id="pixel">13. Pixel impression (image tag, no JS)</h2>
+
+<p>For impression tracking on pages that can't run JS:</p>
+
+<pre><code>&lt;img
+  src="https://track.apogeemobi.com/pixel.gif?campaign_token=<span style="color:#fcd34d">CAMPAIGN_TOKEN</span>&amp;pid=<span style="color:#6ee7b7">YOUR_PID</span>"
+  width="1" height="1"
+  style="display:none"&gt;</code></pre>
+
+<p>Returns a 42-byte transparent gif. Counts as an impression — used for frequency capping and view-through attribution.</p>
+
+<!-- =========================== 14. REST API =========================== -->
+<h2 id="rest-api">14. REST API (for programmatic publishers)</h2>
+
+<h3>Authentication</h3>
+<p>Send your publisher API key as a header OR query param:</p>
+<pre><code>x-api-key: YOUR_PUBLISHER_API_KEY
+  (or)
+?api_key=YOUR_PUBLISHER_API_KEY</code></pre>
+
+<h3>Endpoints</h3>
+<table>
+  <tr><th>Endpoint</th><th>Method</th><th>Purpose</th></tr>
+  <tr><td><code>/api/v1/serve</code></td><td>GET</td><td>Get an offer to render. Query: <code>placement</code>, optional <code>country</code> / <code>device</code></td></tr>
+  <tr><td><code>/api/v1/impression</code></td><td>POST</td><td>Fire impression beacon. Body: <code>{visitor_id, placement_id, creative_id, consent_state}</code></td></tr>
+  <tr><td><code>/api/v1/consent</code></td><td>POST</td><td>Audit-log consent change. Body: <code>{visitor_id, consent_state}</code></td></tr>
+  <tr><td><code>/api/v1/event</code></td><td>POST</td><td>Generic event. Body: <code>{event_name, click_id, payout, revenue, ...}</code></td></tr>
+</table>
+
+<h3>Example — fetch an offer</h3>
+<pre><code>curl -H "x-api-key: pk_live_abc123" \
+  "https://track.apogeemobi.com/api/v1/serve?placement=top-loan-offers&amp;country=US"</code></pre>
+
+<h3>Response shape</h3>
+<pre><code>{
+  "offers": [{
+    "id": 76,
+    "name": "Chime Banking",
+    "tracking_url": "https://track.apogeemobi.com/track/click/...",
+    "creative": { "image_url": "...", "headline": "...", "cta": "..." },
+    "payout": 75.00,
+    "currency": "USD"
+  }],
+  "placement": {
+    "floor_ecpm": 2.5,
+    "prebid_config": null
+  },
+  "visitor": {
+    "visitor_id": "v_xyz",
+    "jurisdiction": "US-CA",
+    "consent_required": false,
+    "consent_state": null
+  },
+  "capped_out": []
+}</code></pre>
+
+<!-- =========================== 15. S2S =========================== -->
+<h2 id="s2s">15. S2S server-to-server postback</h2>
+
+<p>If you (or your network) want to fire conversions to us instead of the advertiser firing — use S2S:</p>
+
+<pre><code>POST https://track.apogeemobi.com/api/s2s/event
+Headers:
+  authentication: YOUR_S2S_TOKEN
+  Content-Type: application/json
+
+Body:
+{
+  "click_id": "abc123",
+  "event_name": "install",
+  "payout": 2.50,
+  "revenue": 5.00,
+  "currency": "USD"
+}</code></pre>
+
+<p>S2S token comes from your account manager — separate from your publisher API key.</p>
+
+<h3>Acceptable postback receiver endpoints (for advertiser-side firing)</h3>
+<table>
+  <tr><th>Endpoint</th><th>Convention</th></tr>
+  <tr><td><code>GET /pb?clickid=...&amp;event=...&amp;payout=...</code></td><td>Generic (always returns 200)</td></tr>
+  <tr><td><code>GET /postbacks?clickid=...</code></td><td>Alias for <code>/pb</code></td></tr>
+  <tr><td><code>GET /acquisition?clickid=...&amp;security_token=...</code></td><td>Trackier-compatible</td></tr>
+  <tr><td><code>GET /adjust/event?app_token=...&amp;event_token=...&amp;s2s=1</code></td><td>Adjust-compatible</td></tr>
+  <tr><td><code>POST /skan/postback</code></td><td>Apple SKAN raw</td></tr>
+</table>
+
+<div class="box tip">
+  <div class="label">All postback receivers return HTTP 200</div>
+  <p>Per industry convention — networks don't retry 4xx responses. We always 200 and store the status (<code>attributed</code> / <code>duplicate</code> / <code>rejected</code>) on our side.</p>
+</div>
+
+<!-- =========================== 16. Testing =========================== -->
+<h2 id="testing">16. Testing your integration</h2>
+
+<div class="stepper">
+  <div class="step">
+    <h4>Open your tracking link in a browser</h4>
+    <p>Expect 302 redirect to advertiser's destination URL. If you see 404 "tracking link is no longer active" — the campaign token is wrong or campaign is paused.</p>
+  </div>
+
+  <div class="step">
+    <h4>Check the click was recorded</h4>
+    <p>In your portal → <strong>Clicks</strong>, the click should appear within ~1 second. Verify <code>publisher_click_id</code> matches what you sent.</p>
+  </div>
+
+  <div class="step">
+    <h4>Fire a test conversion</h4>
+    <p>If you have admin access, use the Campaign Link Tester at <code>/test-link</code> — supports geo bypass via security_token.</p>
+    <p>Otherwise: ask your account manager to fire a test postback. They can use:</p>
+    <pre><code>https://track.apogeemobi.com/pb
+  ?clickid=YOUR_TEST_CLICK_ID
+  &amp;event=install
+  &amp;payout=1</code></pre>
+  </div>
+
+  <div class="step">
+    <h4>Verify postback received on your side</h4>
+    <p>Your tracker should log the incoming request with <code>clickid</code> matching the original.</p>
+  </div>
+
+  <div class="step">
+    <h4>Check reports</h4>
+    <p>Your portal → <strong>Reports</strong> → By Day should show the conversion within a few minutes.</p>
+  </div>
+</div>
+
+<!-- =========================== 17. Troubleshooting =========================== -->
+<h2 id="troubleshooting">17. Troubleshooting</h2>
+
+<table>
+  <tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+  <tr>
+    <td>Click returns <code>HTTP 404</code> "tracking link is no longer active"</td>
+    <td>Wrong <code>CAMPAIGN_TOKEN</code> or campaign paused/archived</td>
+    <td>Re-copy URL from portal. Confirm campaign status with AM.</td>
+  </tr>
+  <tr>
+    <td>Click returns <code>302</code> but goes to a different URL than expected</td>
+    <td>Your country/region/device is blocked by campaign targeting — redirected to <code>geo_fallback_url</code></td>
+    <td>Check campaign's allowed countries/regions/devices. Use a matching IP / UA to test.</td>
+  </tr>
+  <tr>
+    <td>Click returns <code>200 GEO_BLOCKED</code> or <code>200 GEO_BLOCKED:DEVICE</code></td>
+    <td>Geo/device targeting filter rejected the click. No fallback URL configured.</td>
+    <td>Use traffic that matches campaign's allowed_countries / allowed_devices.</td>
+  </tr>
+  <tr>
+    <td>Mobile click returns <code>200 CLICK_BLOCKED</code> "empty advertising_id"</td>
+    <td>Mobile campaign requires <code>advertising_id</code> param</td>
+    <td>Send <code>advertising_id=&lt;GAID or IDFA&gt;</code> on every mobile click.</td>
+  </tr>
+  <tr>
+    <td>Postback never arrives even though click was recorded</td>
+    <td>(a) Conversion never fired on advertiser side, (b) lookback window expired, (c) clickid mismatch</td>
+    <td>Confirm advertiser fired postback. Default click lookback is 7 days — extend in campaign settings if your traffic converts slowly.</td>
+  </tr>
+  <tr>
+    <td>Postback arrives but <code>{click_id}</code> is literal text, not substituted</td>
+    <td>Your postback URL has typo (e.g. <code>{clikid}</code>) OR you're using a non-supported macro</td>
+    <td>Check macro name against <a href="#macro-reference">Section 10</a>. Macros are case-sensitive.</td>
+  </tr>
+  <tr>
+    <td>Postback fires multiple times for the same conversion</td>
+    <td>Advertiser fired multiple times — second one is <code>status=duplicate</code></td>
+    <td>Filter on <code>{status}=attributed</code> in your tracker, ignore duplicates.</td>
+  </tr>
+  <tr>
+    <td>Your <code>sub1</code> / source value is empty in postback</td>
+    <td>You didn't send it on the click — only echoed back if originally provided</td>
+    <td>Add <code>&amp;sub1=source_name</code> to every click URL.</td>
+  </tr>
+</table>
+
+<!-- =========================== 18. Industry conventions =========================== -->
+<h2 id="conventions">18. Industry conventions we also accept</h2>
+
+<p>If you're migrating from another network, you can probably keep using your existing parameter names — we accept aliases from the major MMPs.</p>
+
+<h3>AppsFlyer</h3>
+<table>
+  <tr><th>AppsFlyer name</th><th>Our equivalent</th></tr>
+  <tr><td><code>af_c_id</code></td><td>Same — accepted as-is</td></tr>
+  <tr><td><code>af_siteid</code></td><td>Same — accepted as-is</td></tr>
+  <tr><td><code>af_sub1</code>–<code>af_sub5</code></td><td>Same — accepted as-is</td></tr>
+  <tr><td><code>idfa</code> / <code>gps_adid</code></td><td>Auto-mapped to <code>advertising_id</code></td></tr>
+</table>
+
+<h3>Adjust</h3>
+<table>
+  <tr><th>Adjust name</th><th>Our equivalent</th></tr>
+  <tr><td><code>adid</code></td><td>Auto-mapped to <code>advertising_id</code></td></tr>
+  <tr><td><code>gps_adid</code></td><td>Auto-mapped to <code>advertising_id</code></td></tr>
+  <tr><td><code>{tracker_name}</code>, <code>{label}</code>, <code>{adgroup}</code>, <code>{creative}</code></td><td>Supported as postback macros</td></tr>
+</table>
+
+<h3>Trackier / Affise</h3>
+<table>
+  <tr><th>Trackier / Affise name</th><th>Our equivalent</th></tr>
+  <tr><td><code>aff_sub</code>, <code>aff_click_id</code>, <code>p1</code>, <code>subid</code>, <code>u1</code></td><td>All accepted as <code>clickid</code> aliases</td></tr>
+  <tr><td><code>sub1</code>–<code>sub10</code></td><td>Native — accepted as-is</td></tr>
+</table>
+
+<h3>Impact / IR</h3>
+<table>
+  <tr><th>Impact name</th><th>Our equivalent</th></tr>
+  <tr><td><code>irclickid</code></td><td>Auto-mapped to <code>clickid</code></td></tr>
+</table>
+
+<h3>Branch</h3>
+<p>Branch macros are supported as postback substitutions: <code>{branch_click_id}</code>, <code>{channel}</code>, <code>{feature}</code>, <code>{campaign}</code>, <code>{stage}</code>, <code>{tags}</code>.</p>
+
+<!-- =========================== 19. Support =========================== -->
+<h2 id="support">19. Support</h2>
+
+<div class="box success">
+  <div class="label">Need help?</div>
+  <p>
+    Contact your account manager directly — they have access to your campaigns, can test postbacks for you, adjust your settings, and pull diagnostic logs.
+  </p>
+  <p style="margin-top:8px">
+    For platform-wide questions or to report integration bugs, email <a href="mailto:integration@apogeemobi.com">integration@apogeemobi.com</a>.
+  </p>
+</div>
+
+<div class="box tip">
+  <div class="label">This guide is versioned</div>
+  <p>Bookmark this URL: <code>https://track.apogeemobi.com/sdk/preview-v2/publisher-guide.html</code></p>
+  <p>Last updated: <strong>2026-05-29</strong>. New macros, parameters, and endpoints are added regularly; check the macro reference (Section 10) if a postback macro doesn't seem to work — it may have been renamed or moved.</p>
+</div>
+
+<p style="margin-top:60px;font-size:12px;color:#64748b;text-align:center">
+  Apogeemobi · track.apogeemobi.com · Publisher Integration Guide
+</p>
+
+  </main>
+</div>
+
+<script>
+// smooth scroll for sidebar nav
+document.querySelectorAll('.nav a').forEach(a => {
+  a.addEventListener('click', (e) => {
+    const id = a.getAttribute('href');
+    if (!id || !id.startsWith('#')) return;
+    e.preventDefault();
+    const target = document.querySelector(id);
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+</script>
+
+</body>
+</html>
