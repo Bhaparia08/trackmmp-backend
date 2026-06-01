@@ -98,10 +98,7 @@ function offerImportTiles() {
   const match = src.match(/const PLATFORMS\s*=\s*\[([\s\S]*?)^\];/m);
   if (!match) return new Set();
   const out = new Set();
-  // Anchor to 4-space indent + line start so we only match TOP-LEVEL platform
-  // keys, not nested cred field keys like { key: 'api_key' } or { key: 'mid' }.
-  // Nested field objects in PLATFORMS[].fields use 6-space indent.
-  const re = /^ {4}key:\s*['"]([a-z][a-z0-9]*)['"]/gm;
+  const re = /key:\s*['"]([a-z][a-z0-9]*)['"]/g;
   let m; while ((m = re.exec(match[1])) !== null) out.add(m[1]);
   return out;
 }

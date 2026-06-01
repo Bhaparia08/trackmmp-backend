@@ -677,39 +677,7 @@ async function fetchCAKE(cred) {
   });
 }
 
-async function fetchOffer18(cred) {
-  if (!cred?.api_key || !cred?.network_id) {
-    throw new Error('Offer18 requires API Key and Affiliate ID (aid)');
-  }
-  const extra = cred.extra ? (typeof cred.extra === 'string' ? (() => { try { return JSON.parse(cred.extra); } catch { return {}; } })() : cred.extra) : {};
-  if (!cred.mid && !extra.mid) {
-    throw new Error('Offer18 requires Network MID (paste in extra.mid or top-level mid field)');
-  }
-  const Offer18 = require('../utils/connectors/offer18');
-  const rawOffers = await Offer18.listOffers(cred);
-  return rawOffers.map(raw => {
-    const norm = Offer18.normalizeOffer(raw, cred);
-    const rawTracking = norm.tracking_url_template || '';
-    return {
-      external_id:       norm.source_offer_id,
-      name:              norm.name,
-      description:       norm.description || '',
-      payout:            norm.payout || 0,
-      payout_type:       norm.payout_type || 'cpa',
-      currency:          normCurrency(norm.payout_currency),
-      status:            norm.status === 'active' ? 'active' : 'paused',
-      tracking_url:      toOurMacros(rawTracking, 'offer18'),
-      preview_url:       norm.preview_url || norm.destination_url || '',
-      allowed_countries: (norm.allowed_countries || []).join(','),
-      advertiser_name:   norm.advertiser_name || 'Offer18',
-      categories:        norm.vertical || '',
-      approval_status:   norm.approval_status || 'unknown',
-      raw,
-    };
-  });
-}
-
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx, trackier: fetchTrackier, affise: fetchAffise, clickdealer: fetchClickDealer, cake: fetchCAKE, offer18: fetchOffer18 };
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx, trackier: fetchTrackier, affise: fetchAffise, clickdealer: fetchClickDealer, cake: fetchCAKE };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {

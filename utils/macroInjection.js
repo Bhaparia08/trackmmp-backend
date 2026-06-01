@@ -204,24 +204,6 @@ function toOurMacros(url, platform, options = {}) {
       ['#affiliate_id#',      affiliateTarget],
       ['{affiliate_id}',      affiliateTarget],
     ],
-    offer18: [
-      // Offer18 convention: aff_sub carries the affiliate's click_id passthrough.
-      // Additional sub IDs: aff_sub1..aff_sub5. Some Offer18 installs also support
-      // {clickid} as a generic alias — we translate that too.
-      ['{aff_sub}',     '{click_id}'],
-      ['{clickid}',     '{click_id}'],
-      ['{click_id}',    '{click_id}'],   // already our format
-      ['{aff_sub1}',    '{sub1}'],
-      ['{aff_sub2}',    '{sub2}'],
-      ['{aff_sub3}',    '{sub3}'],
-      ['{aff_sub4}',    '{sub4}'],
-      ['{aff_sub5}',    '{sub5}'],
-      ['{affiliate_id}',affiliateTarget],
-      ['{aid}',         affiliateTarget],
-      ['{gaid}',        '{gaid}'],
-      ['{idfa}',        '{idfa}'],
-      ['{offer_id}',    '{campaign_id}'],
-    ],
   };
 
   const pairs = maps[platform] || [];
@@ -255,7 +237,6 @@ function toOurMacros(url, platform, options = {}) {
       clickdealer: ['s2',            '{click_id}'],  // CAKE convention
       cake:        ['s2',            '{click_id}'],  // CAKE convention (any CAKE-powered network)
       insparx:     ['s2',            '{click_id}'],  // CAKE convention (Insparx is CAKE)
-      offer18:     ['aff_sub',       '{click_id}'],  // Offer18 affiliate sub-id convention
     };
     const entry = clickIdParams[platform];
     if (entry) {
