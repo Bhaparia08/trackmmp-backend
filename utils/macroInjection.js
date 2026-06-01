@@ -215,44 +215,24 @@ function toOurMacros(url, platform, options = {}) {
 
   // If {click_id} is still not in the URL after macro conversion, auto-inject it
   // using the canonical click_id param name for this platform.
-  //
-  // H1 fix (2026-05-31): if the URL already contains the bare param key as a
-  // query parameter (e.g. ?sub1=somefixedvalue), REPLACE its value with
-  // {click_id} instead of appending a duplicate. Duplicate query params are
-  // ambiguous — different HTTP servers honor first/last/concat differently,
-  // which can swap attribution to the wrong value. By convention, the
-  // click-ID slot on these platforms is reserved for our click_id passthrough,
-  // so replacing is the right semantic.
   if (result && !result.includes('{click_id}')) {
     const clickIdParams = {
-      impact:      ['irclickid',     '{click_id}'],
-      everflow:    ['transaction_id','{click_id}'],
-      tune:        ['transaction_id','{click_id}'],
-      cityads:     ['click_id',      '{click_id}'],
-      appsflyer:   ['clickid',       '{click_id}'],
-      swaarm:      ['pub_click_id',  '{click_id}'],
-      admitad:     ['subid',         '{click_id}'],
-      trackier:    ['p1',            '{click_id}'],  // Trackier's click_id convention
-      affise:      ['sub1',          '{click_id}'],  // Affise has no click_id macro; sub1 carries it
-      clickdealer: ['s2',            '{click_id}'],  // CAKE convention
-      cake:        ['s2',            '{click_id}'],  // CAKE convention (any CAKE-powered network)
-      insparx:     ['s2',            '{click_id}'],  // CAKE convention (Insparx is CAKE)
+      impact:      'irclickid={click_id}',
+      everflow:    'transaction_id={click_id}',
+      tune:        'transaction_id={click_id}',
+      cityads:     'click_id={click_id}',
+      appsflyer:   'clickid={click_id}',
+      swaarm:      'pub_click_id={click_id}',
+      admitad:     'subid={click_id}',
+      trackier:    'p1={click_id}',           // Trackier's click_id convention
+      affise:      'sub1={click_id}',         // Affise has no click_id macro; sub1 carries it
+      clickdealer: 's2={click_id}',           // CAKE convention
+      cake:        's2={click_id}',           // CAKE convention (any CAKE-powered network)
+      insparx:     's2={click_id}',           // CAKE convention (Insparx is CAKE)
     };
-    const entry = clickIdParams[platform];
-    if (entry) {
-      const [paramName, paramValue] = entry;
-      // Detect bare param: ?paramName=... or &paramName=... (followed by & or end).
-      // Anchored to start of query-string-element to avoid matching e.g.
-      // ?my_p1=... when looking for `p1`.
-      const bareParamRegex = new RegExp(`([?&])${paramName}=[^&]*`);
-      if (bareParamRegex.test(result)) {
-        // Replace the existing value — operator/platform may have left a
-        // placeholder or empty value here; the click-ID slot must be ours.
-        result = result.replace(bareParamRegex, `$1${paramName}=${paramValue}`);
-      } else {
-        // No bare param yet — append safely with ? or & as needed.
-        result = result + (result.includes('?') ? '&' : '?') + `${paramName}=${paramValue}`;
-      }
+    const param = clickIdParams[platform];
+    if (param) {
+      result = result + (result.includes('?') ? '&' : '?') + param;
     }
   }
 

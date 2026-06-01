@@ -167,29 +167,13 @@ function parseOfferFeedXML(xml) {
 
 // Parse a CAKE response body — auto-detects JSON vs XML, or honours
 // explicit responseFormat. Returns { offers: Array, rowCount: number|null }.
-//
-// H3 fix (2026-05-31): separate JSON parse failure (legitimate fall-through
-// to XML in auto mode) from API logic failure (success != true), which must
-// always propagate so operators see the real failure. Previously a single
-// try/catch swallowed both — leading to "0 offers" when the API actually
-// said "Invalid api_key".
 function parseFeedResponse(text, format) {
   const trimmed = String(text || '').trimStart();
 
   // Try JSON if requested or if format is auto and looks JSON-shaped
   if (format === 'json' || (format !== 'xml' && trimmed.startsWith('{'))) {
-    let body = null;
     try {
-      body = JSON.parse(text);
-    } catch (parseErr) {
-      // SyntaxError: body wasn't valid JSON. In strict json mode we propagate.
-      // In auto mode we fall through to the XML parser below.
-      if (format === 'json') throw parseErr;
-      body = null;
-    }
-
-    if (body !== null) {
-      // JSON parsed successfully — API-level errors propagate regardless of mode.
+      const body = JSON.parse(text);
       if (String(body.success) !== 'true' && body.success !== true) {
         const errs = body['Possible errors:'];
         const msg = errs ? Object.keys(errs).join(', ') : 'API returned success != true';
@@ -199,10 +183,13 @@ function parseFeedResponse(text, format) {
         offers: Array.isArray(body.offers) ? body.offers : [],
         rowCount: Array.isArray(body.row_count) ? Number(body.row_count[0]) : Number(body.row_count) || null,
       };
+    } catch (e) {
+      if (format === 'json') throw e;
+      // auto mode: JSON parse failed, fall through to XML
     }
   }
 
-  // XML fallback (auto mode with non-JSON body, or explicit format='xml')
+  // XML fallback
   const offers = parseOfferFeedXML(text);
   return { offers, rowCount: null };
 }
