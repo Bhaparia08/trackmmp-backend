@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GPP support — preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.6 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .topbar { background: #0d1b35; border-bottom: 1px solid #ffffff14; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
+    .topbar a { color: #818cf8; text-decoration: none; font-size: 13px; }
+    .topbar h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 24px 80px; }
+    h2 { font-size: 22px; margin: 40px 0 8px; padding-top: 16px; border-top: 1px solid #ffffff10; }
+    h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+    h3 { font-size: 16px; margin: 22px 0 8px; color: #a5f3fc; font-weight: 600; }
+    p, li { color: #cbd5e1; }
+    .lede { color: #94a3b8; font-size: 14px; margin: 0 0 18px; }
+    .card { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 22px; margin-bottom: 18px; }
+    .card.green { border-left: 4px solid #10b981; }
+    .card.blue  { border-left: 4px solid #6366f1; }
+    .card.amber { border-left: 4px solid #f59e0b; }
+    pre { background: #0a0a14; color: #a5f3fc; padding: 14px 16px; border-radius: 8px; font-size: 12.5px; line-height: 1.55; overflow-x: auto; border: 1px solid #ffffff14; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    code { background: rgba(99,102,241,.15); color: #a5f3fc; padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+    pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #ffffff14; text-align: left; vertical-align: top; }
+    th { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .pill-green { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .pill-amber { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .pill-blue  { background: rgba(99,102,241,.15); color: #c7d2fe; }
+    .banner { background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 13px; color: #c7d2fe; }
+    .banner strong { color: #fff; }
+    .toc { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+    .toc a { background: #1a1a2e; border: 1px solid #ffffff14; padding: 7px 14px; border-radius: 8px; color: #c7d2fe; text-decoration: none; font-size: 13px; }
+    .toc a:hover { border-color: #6366f1; color: #fff; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="index.html">← back to previews</a>
+  <span style="opacity:.4">·</span>
+  <h1>Preview: GPP (Global Privacy Platform) support — Build #3</h1>
+</div>
+
+<div class="wrap">
+
+<div class="banner">
+  <strong>Built locally — awaiting deploy.</strong>
+  Future-proofs the platform against the fragmenting US state privacy law landscape (CCPA, VCDPA, CPA, CTDPA, UCPA, etc.) by adopting the IAB Tech Lab's <strong>Global Privacy Platform</strong> — one wire format that carries all jurisdictional consent strings in one URL parameter.
+</div>
+
+<div class="toc">
+  <a href="#why">📋 Why GPP</a>
+  <a href="#what">🔌 What it adds</a>
+  <a href="#e2e">🧪 End-to-end test</a>
+  <a href="#examples">📝 Examples</a>
+  <a href="#decision">✋ Your decision</a>
+</div>
+
+<h2 id="why">📋 Why GPP?</h2>
+
+<div class="card blue">
+  <p class="lede">In 2026, every US state is rolling its own privacy law. Publishers need ONE consent format that carries them all.</p>
+
+  <table>
+    <tr><th>Jurisdiction</th><th>Law</th><th>GPP Section ID</th></tr>
+    <tr><td>EU</td><td>TCF v2.2</td><td>Section 2</td></tr>
+    <tr><td>US National</td><td>USNAT (IAB Multi-State Privacy Agreement)</td><td>Section 7</td></tr>
+    <tr><td>California</td><td>CCPA / CPRA</td><td>Section 8 (USCA)</td></tr>
+    <tr><td>Virginia</td><td>VCDPA</td><td>Section 9 (USVA)</td></tr>
+    <tr><td>Colorado</td><td>CPA</td><td>Section 10 (USCO)</td></tr>
+    <tr><td>Utah</td><td>UCPA</td><td>Section 11 (USUT)</td></tr>
+    <tr><td>Connecticut</td><td>CTDPA</td><td>Section 12 (USCT)</td></tr>
+  </table>
+
+  <p style="margin-top:12px">A single GPP string like <code>DBABMA~CPXxRf...~BAAAAAABA.QA</code> can carry the user's consent for any combination of these. The publisher's CMP encodes; we just pass it through.</p>
+
+  <p>What we're <strong>not</strong> doing in this PR: parsing the GPP string. Parsing requires the full IAB GPP encoder/decoder library (variable-length integer encoding, etc.) — that lives publisher-side. Our job is to capture, store, and echo back. The result: zero risk of misinterpreting consent.</p>
+</div>
+
+<h2 id="what">🔌 What it adds</h2>
+
+<div class="card green">
+  <h3>1. New URL parameter on /track/click</h3>
+  <pre><code>https://track.apogeemobi.com/track/click/{token}
+  ?pid=38
+  &amp;clickid=abc123
+  &amp;consent=accepted              <span style="color:#6ee7b7">(existing — TCF v2.2 single jurisdiction)</span>
+  &amp;gpp=DBABMA~CPXxRf...~BAAAAA   <span style="color:#fcd34d">(NEW — multi-jurisdiction GPP)</span></code></pre>
+  <p>Either, both, or neither can be sent. Backward compatible — publishers that don't send GPP continue working exactly as before.</p>
+
+  <h3>2. New DB column</h3>
+  <pre><code>ALTER TABLE clicks ADD COLUMN gpp_string TEXT;</code></pre>
+  <p>Nullable, capped at 4096 chars on input. Typical real-world GPP strings are 200-1500 chars.</p>
+
+  <h3>3. New postback macros (4 added)</h3>
+  <table>
+    <tr><th>Macro</th><th>Resolves to</th></tr>
+    <tr><td><code>{consent}</code></td><td>TCF v2.2 consent string (alias)</td></tr>
+    <tr><td><code>{consent_state}</code></td><td>Same — preferred name</td></tr>
+    <tr><td><code>{gpp}</code></td><td>URL-encoded GPP string (alias)</td></tr>
+    <tr><td><code>{gpp_string}</code></td><td>Same — preferred name</td></tr>
+  </table>
+  <p>Works in both the click-redirect URL substitution (track.js inline map) AND the outbound postback URL substitution (utils/macroReplace.js).</p>
+
+  <h3>4. OpenAPI updated</h3>
+  <p>The spec at <code>/api/v1/openapi.yaml</code> now documents the <code>consent</code> and <code>gpp</code> query parameters under public-surfaces description.</p>
+</div>
+
+<h2 id="e2e">🧪 End-to-end test (already passed locally)</h2>
+
+<div class="card green">
+<pre><code><strong>Request:</strong>
+$ curl -i "http://localhost:3001/track/click/yRiop9cOjpI0
+    ?pid=99&amp;clickid=gpp_test_1
+    &amp;consent=accepted
+    &amp;gpp=DBABMA~CPXxRfAPXxRfAAfKABENB-CgAAAAAAAAAAAAAAAAAAA"
+
+<strong>Response:</strong>
+HTTP/1.1 302 Found
+Strict-Transport-Security: max-age=15552000; includeSubDomains
+X-Frame-Options: DENY
+(... redirect to destination ...)
+
+<strong>DB row stored:</strong>
+click_id        | YYWYiJJTH8bYddnF
+publisher_id    | gpp_test_1
+consent_state   | accepted
+gpp_preview     | DBABMA~CPXxRfAPXxRfAAfKABENB-CgAAAAAAAAA  ✓ stored verbatim
+status          | clicked
+
+<strong>Smoke test:</strong>
+$ npm run smoke:local
+✓ 28/28 checks passed — deploy looks healthy</code></pre>
+</div>
+
+<h2 id="examples">📝 Example postback URLs publishers can use</h2>
+
+<div class="card blue">
+  <h3>Privacy-aware postback (recommended for publishers serving multi-region traffic)</h3>
+<pre><code>https://network.example.com/postback
+  ?clickid={click_id}
+  &amp;payout={payout}
+  &amp;country={country}
+  &amp;consent={consent_state}
+  &amp;gpp={gpp}</code></pre>
+
+  <h3>When fired (substituted values)</h3>
+<pre><code>https://network.example.com/postback
+  ?clickid=mj8G8Gl5ssqnsvbo
+  &amp;payout=2.50
+  &amp;country=US
+  &amp;consent=accepted
+  &amp;gpp=DBABMA~CPXxRfAPXxRfAAfKABENB-CgAAAAAAAAAAAAAAAAAAA</code></pre>
+  <p>The GPP string is URL-encoded automatically so it's safe to drop into any URL.</p>
+</div>
+
+<h2 id="decision">✋ Your decision</h2>
+
+<div class="card amber">
+  <h3>What ships if you deploy</h3>
+  <table>
+    <tr><th>File</th><th>Change</th><th>Risk</th></tr>
+    <tr><td><code>backend/db/init.js</code></td><td>+1 idempotent ALTER COLUMN</td><td><span class="pill pill-green">none</span></td></tr>
+    <tr><td><code>backend/routes/track.js</code></td><td>capture <code>q.gpp</code> + include in INSERT + 4 new macros</td><td><span class="pill pill-green">none</span> — additive; no-op when not provided</td></tr>
+    <tr><td><code>backend/utils/macroReplace.js</code></td><td>+4 postback macros (<code>{consent}</code>, <code>{consent_state}</code>, <code>{gpp}</code>, <code>{gpp_string}</code>)</td><td><span class="pill pill-green">none</span></td></tr>
+    <tr><td><code>backend/utils/postbackHandler.js</code></td><td>+2 fields in macroData (consent_state, gpp_string)</td><td><span class="pill pill-green">none</span></td></tr>
+    <tr><td><code>backend/openapi.yaml</code></td><td>Description updated with GPP + consent docs</td><td><span class="pill pill-green">none</span></td></tr>
+  </table>
+
+  <h3>What's NOT in this PR (deferred)</h3>
+  <ul>
+    <li>JS SDK update to <code>sdk/v1/apogee.js</code> — the SDK doesn't yet read GPP from publisher CMPs and forward it as <code>?gpp=</code>. Publishers using the SDK can still provide GPP manually for now; SDK auto-forwarding is a follow-up.</li>
+    <li>GPP parsing on our side — we capture and forward the raw string only. Section parsing belongs to publishers (uses the IAB encoder/decoder).</li>
+    <li>Admin UI to view GPP/consent on click detail page — minor follow-up.</li>
+  </ul>
+
+  <h3>Reply with one of</h3>
+  <ul style="line-height:1.9">
+    <li><strong>"deploy"</strong> — single push to main, Render publishes (~30s)</li>
+    <li><strong>"hold"</strong> — leave local</li>
+    <li><strong>"revert"</strong> — discard</li>
+  </ul>
+
+  <p style="margin-top:14px"><strong>Recommendation: deploy.</strong> Zero risk additive change. The endpoint accepts the new param immediately; publishers can start sending GPP strings the moment Render finishes deploying. No code on the publisher side has to change unless they want to add GPP — and our SDK still works as before for everyone else.</p>
+</div>
+
+<p style="margin-top:40px;font-size:12px;color:#64748b;text-align:center">
+  Generated 2026-05-30 · static preview, no backend required · no login needed
+</p>
+
+</div>
+</body>
+</html>

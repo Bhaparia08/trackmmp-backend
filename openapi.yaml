@@ -16,6 +16,13 @@ info:
     - `GET  /pixel.gif` — 1x1 impression pixel
     - `GET  /sellers.json` — IAB v1.0 sellers identification
 
+    **Privacy & consent (since 2026-05-30):**
+    Click URLs accept two optional consent parameters:
+    - `?consent=<TCF_v2.2_string_or_accepted_or_rejected>` — single-jurisdiction TCF v2.2
+    - `?gpp=<URL_encoded_GPP_string>` — IAB Global Privacy Platform multi-section
+      consent (carries TCF EU + USNAT + USCA + USVA + other state sections in one
+      string). Stored verbatim; echoed back via the `{gpp}` postback macro.
+
     For the full publisher integration guide (with macros, examples, and
     troubleshooting), see <https://track.apogeemobi.com/sdk/preview-v2/publisher-guide.html>.
   version: "1.0.0"

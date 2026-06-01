@@ -453,6 +453,7 @@ function handlePostback(params, ip, io) {
     creative_id: click.creative_id, ad_id: click.ad_id,
     country: click.country, region: click.region, city: click.city, language: click.language,
     platform: click.platform, bundle_id: app?.bundle_id, app_name: app?.name,
+    consent_state: click.consent_state, gpp_string: click.gpp_string,
     is_retargeting: campaign?.is_retargeting,
     install_unix_ts: Math.floor(Date.now()/1000),
     advertising_id: deviceId,

@@ -376,6 +376,10 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       return Number.isInteger(n) && n > 0 ? n : null;
     })();
     const consent_state = (typeof q.consent === 'string' && q.consent.length < 256) ? q.consent : null;
+    // GPP (Global Privacy Platform) string — IAB Tech Lab multi-section consent.
+    // Stored verbatim (cap at 4096 chars to limit DB bloat from misuse).
+    // Typical real-world GPP strings are 200-1500 chars.
+    const gpp_string = (typeof q.gpp === 'string' && q.gpp.length > 0 && q.gpp.length <= 4096) ? q.gpp : null;
 
     db.prepare(`INSERT INTO clicks
       (click_id, campaign_id, publisher_id, user_id,
@@ -385,8 +389,8 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
        publisher_click_id, ip, user_agent, country, region, city, language,
        device_type, os, browser, advertising_id, platform, referrer,
        creative_id, ad_id, landing_page_id, inventory_id, placement_id,
-       cre_variant_id, consent_state)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+       cre_variant_id, consent_state, gpp_string)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(click_id, campaign.id, publisher_id, campaign.user_id,
            q.pid||null, q.af_c_id||null, q.af_siteid||null,
            q.af_sub1||q.sub1||null, q.af_sub2||q.sub2||null,
@@ -397,7 +401,7 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
            req.headers.referer||null,
            q.creative_id||q.creative||null, q.ad_id||null,
            landing_page_id, inventory_id, placement_id,
-           cre_variant_id, consent_state);
+           cre_variant_id, consent_state, gpp_string);
 
     // A/B testing: bump click counter on the creative variant that earned it.
     if (cre_variant_id) {
@@ -478,6 +482,11 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
       '{platform}':    platform || '',
       '{language}':    language || '',
       '{user_agent}':  encodeURIComponent(ua),
+      // Privacy / consent
+      '{consent}':       consent_state || '',
+      '{consent_state}': consent_state || '',
+      '{gpp}':           gpp_string ? encodeURIComponent(gpp_string) : '',
+      '{gpp_string}':    gpp_string ? encodeURIComponent(gpp_string) : '',
       // Campaign identifiers
       '{campaign_id}':    String(campaign.id),
       '{campaign_token}': campaign.campaign_token,

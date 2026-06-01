@@ -1054,6 +1054,14 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN allowed_browsers  TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE campaigns ADD COLUMN blocked_browsers  TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE clicks    ADD COLUMN region            TEXT`,
+
+  // ── GPP (Global Privacy Platform) support — IAB Tech Lab unified consent ──
+  // The GPP string is a multi-section consent payload that can carry TCF EU,
+  // USNAT (US national), USCA (California), USVA (Virginia), and other state
+  // consent strings in one wire format. We store the raw string verbatim and
+  // echo it back via the {gpp} macro on postback — no parsing on this end.
+  // Publishers parse on their side using the IAB GPP encoder/decoder.
+  `ALTER TABLE clicks ADD COLUMN gpp_string TEXT`,
 ];
 
 const IGNORABLE = [

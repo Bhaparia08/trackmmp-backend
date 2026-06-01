@@ -76,6 +76,15 @@ function macroReplace(url, data) {
     '{os}':            data.os || '',
     '{browser}':       data.browser || '',
 
+    // ── Privacy / consent ────────────────────────────────────────────────────
+    // {consent} / {consent_state} — TCF v2.2 string or 'accepted'/'rejected'
+    // {gpp} / {gpp_string}        — IAB Global Privacy Platform multi-section
+    //                                consent string (URL-encoded for safety)
+    '{consent}':       data.consent_state || '',
+    '{consent_state}': data.consent_state || '',
+    '{gpp}':           data.gpp_string ? encodeURIComponent(data.gpp_string) : '',
+    '{gpp_string}':    data.gpp_string ? encodeURIComponent(data.gpp_string) : '',
+
     // ── Timestamps ───────────────────────────────────────────────────────────
     '{install_unix_ts}': String(data.install_unix_ts || ''),
     '{click_unix_ts}':   String(data.click_unix_ts || ''),
