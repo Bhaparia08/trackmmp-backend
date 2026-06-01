@@ -36,10 +36,12 @@ const FRONTEND_SRC  = path.join(ROOT, 'frontend', 'src', 'pages');
 const STUB_PLATFORMS = new Set(['clickbank', 'lomadee', 'shareasale', 'rakuten']);
 const MMP_PLATFORMS  = new Set(['adjust', 'branch']);     // no offer fetch by design
 const WEBHOOK_ONLY   = new Set(['custom']);                // operator pushes, no UI tile needed
+const LEAD_GEN_PLATFORMS = new Set(['ojo7']);              // ping/post lead submission — no offer feed; no legacy adapter expected
 const EXEMPT_FROM_API_ACCESS_FORM = new Set();             // ones intentionally not in /api-access
 const EXEMPT_FROM_OFFER_IMPORT    = new Set([...MMP_PLATFORMS, ...WEBHOOK_ONLY]);
 const EXEMPT_FROM_INTEGRATION_TILE = new Set([...STUB_PLATFORMS]);   // stubs don't need full wizard
 const EXEMPT_FROM_NATIVE_REGISTRY  = new Set();            // bridge is sufficient
+const EXEMPT_FROM_LEGACY_ADAPTER   = new Set([...LEAD_GEN_PLATFORMS, ...MMP_PLATFORMS, ...STUB_PLATFORMS, ...WEBHOOK_ONLY]);
 
 function read(file) {
   try { return fs.readFileSync(file, 'utf8'); }
@@ -49,7 +51,8 @@ function read(file) {
 // ── 1. Discovery Hub native registry ────────────────────────────────────────
 function discoveryRegistry() {
   const src = read(path.join(BACKEND, 'utils/connectors/index.js'));
-  const re  = /^\s+([a-z]+):\s+[A-Z]/gm;
+  // Platform keys may contain digits (e.g. ojo7) but no underscores.
+  const re  = /^\s+([a-z][a-z0-9]*):\s+[A-Z]/gm;
   const out = new Set();
   let m; while ((m = re.exec(src)) !== null) out.add(m[1]);
   return out;
@@ -72,7 +75,7 @@ function apiAccessForm() {
   const match = src.match(/PLATFORM_OPTIONS\s*=\s*\[([\s\S]*?)\];/);
   if (!match) return new Set();
   const out = new Set();
-  const re  = /value:\s*['"]([a-z]+)['"]/g;
+  const re  = /value:\s*['"]([a-z][a-z0-9]*)['"]/g;
   let m; while ((m = re.exec(match[1])) !== null) out.add(m[1]);
   return out;
 }
@@ -84,7 +87,7 @@ function integrationTiles() {
   if (!match) return new Set();
   const out = new Set();
   // Top-level keys: name letters at line start with colon + opening brace
-  const re = /^\s{2}([a-z_]+):\s*\{/gm;
+  const re = /^\s{2}([a-z][a-z0-9]*):\s*\{/gm;
   let m; while ((m = re.exec(match[1])) !== null) out.add(m[1]);
   return out;
 }
@@ -95,7 +98,7 @@ function offerImportTiles() {
   const match = src.match(/const PLATFORMS\s*=\s*\[([\s\S]*?)^\];/m);
   if (!match) return new Set();
   const out = new Set();
-  const re = /key:\s*['"]([a-z]+)['"]/g;
+  const re = /key:\s*['"]([a-z][a-z0-9]*)['"]/g;
   let m; while ((m = re.exec(match[1])) !== null) out.add(m[1]);
   return out;
 }
@@ -120,9 +123,12 @@ function audit() {
     const isStub    = STUB_PLATFORMS.has(p);
     const isMmp     = MMP_PLATFORMS.has(p);
     const isWebhook = WEBHOOK_ONLY.has(p);
+    const isLeadGen = LEAD_GEN_PLATFORMS.has(p);
 
     const gaps = [];
-    if (!inReg && !EXEMPT_FROM_NATIVE_REGISTRY.has(p) && !inAdapt) {
+    // Lead-gen platforms have no legacy adapter (they're not offer-feed
+    // platforms), but they DO live in the native registry as a stub.
+    if (!inReg && !EXEMPT_FROM_NATIVE_REGISTRY.has(p) && !inAdapt && !isLeadGen) {
       gaps.push('Discovery Hub registry (utils/connectors/index.js) + no bridge fallback');
     }
     if (!inApiForm && !EXEMPT_FROM_API_ACCESS_FORM.has(p)) {
@@ -139,6 +145,7 @@ function audit() {
     if (isStub)    tags.push('STUB');
     if (isMmp)     tags.push('MMP');
     if (isWebhook) tags.push('WEBHOOK');
+    if (isLeadGen) tags.push('LEAD-GEN');
     const tagStr = tags.length ? `  [${tags.join(',')}]` : '';
 
     findings.push({ platform: p, gaps, tagStr, inReg, inAdapt, inApiForm, inIntTile, inOffTile });
@@ -157,10 +164,11 @@ function audit() {
     const isStub    = STUB_PLATFORMS.has(f.platform);
     const isMmp     = MMP_PLATFORMS.has(f.platform);
     const isWebhook = WEBHOOK_ONLY.has(f.platform);
+    const isLeadGen = LEAD_GEN_PLATFORMS.has(f.platform);
     console.log(
       f.platform.padEnd(16) + '  ' +
       '   ' + c(f.inReg, false) + '       ' +
-      c(f.inAdapt, false) + '       ' +
+      c(f.inAdapt, isLeadGen) + '       ' +
       c(f.inApiForm, EXEMPT_FROM_API_ACCESS_FORM.has(f.platform)) + '       ' +
       c(f.inIntTile, isMmp || isStub) + '       ' +
       c(f.inOffTile, isMmp || isWebhook || isStub) + '    ' +
