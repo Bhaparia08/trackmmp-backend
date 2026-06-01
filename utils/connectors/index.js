@@ -17,6 +17,7 @@ const Affise      = require('./affise');
 const ClickDealer = require('./clickdealer');
 const CAKE        = require('./cake');
 const Ojo7        = require('./ojo7');
+const Offer18     = require('./offer18');
 const {
   AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector,
 } = require('./stubs');
@@ -37,6 +38,7 @@ const connectors = {
   clickdealer: ClickDealer,
   cake:        CAKE,
   ojo7:        Ojo7,
+  offer18:     Offer18,
   adjust:      AdjustConnector,
   branch:     BranchConnector,
   cityads:    CityAdsConnector,
