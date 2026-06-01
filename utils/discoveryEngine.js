@@ -12,6 +12,7 @@ const registry = require('./connectors');
 const validator = require('./landingPageValidator');
 const matcher = require('./inventoryMatcher');
 const currencyConverter = require('./currencyConverter');
+const { toOurMacros } = require('./macroInjection');
 
 // Currency Phase 1: compute USD equivalent for any payout in any supported
 // currency. Returns { payout_usd, fx_rate_used } or nulls if conversion fails
@@ -87,6 +88,23 @@ function legacyOfferToNormalized(o, cred) {
 
 /** Insert or update one candidate row. Returns the row id. */
 function upsertCandidate(normalized, credentialId) {
+  // B1 fix (2026-05-31): route the tracking URL through toOurMacros at the
+  // single upsert chokepoint. Both the native connector path and the legacy
+  // bridge path land here, so this single call covers all 13+ platforms.
+  // Idempotent: re-applying on an already-translated URL is a no-op (the
+  // translation table won't match its own output, and the auto-inject is
+  // gated on `!includes('{click_id}')`). The legacy bridge path's URL was
+  // already translated upstream — re-running here just confirms.
+  // destination_url is left alone because for native connectors it carries
+  // the preview/landing URL (not the tracker), where macro injection would
+  // be wrong.
+  if (normalized.tracking_url_template) {
+    normalized.tracking_url_template = toOurMacros(
+      normalized.tracking_url_template,
+      normalized.source_platform,
+    );
+  }
+
   const existing = db.prepare(`
     SELECT id FROM campaign_candidates
     WHERE source_platform = ? AND source_offer_id = ?
