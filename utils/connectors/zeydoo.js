@@ -186,8 +186,14 @@ class ZeydooConnector extends BaseConnector {
     const r = await fetch(url, { headers: authHeaders(creds), timeout: 30_000 });
     if (!r.ok) throw new Error(`Zeydoo /get_my_offers/ HTTP ${r.status}`);
     const body = await r.json().catch(() => null);
-    if (!body) throw new Error('Zeydoo /get_my_offers/ returned non-JSON');
-    return Array.isArray(body.offers) ? body.offers : [];
+    if (body == null) throw new Error('Zeydoo /get_my_offers/ returned non-JSON');
+    // Spec-drift defensive: OpenAPI doc says { offers: [...] } envelope, but
+    // the live API (verified 2026-06-02) returns a top-level array directly.
+    // Accept either shape so the connector keeps working if Zeydoo changes
+    // their mind later.
+    if (Array.isArray(body)) return body;
+    if (Array.isArray(body.offers)) return body.offers;
+    return [];
   }
 
   // Single-offer GET isn't in the spec. Return null so the orchestrator falls
