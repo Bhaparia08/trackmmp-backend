@@ -167,13 +167,30 @@ function parseOfferFeedXML(xml) {
 
 // Parse a CAKE response body — auto-detects JSON vs XML, or honours
 // explicit responseFormat. Returns { offers: Array, rowCount: number|null }.
+//
+// H3 fix (2026-06-02): separate JSON parse failure (legitimate fall-through
+// to XML in auto mode) from API logic failure (success != true), which must
+// always propagate so operators see the real failure. Previously a single
+// try/catch swallowed both — leading to "Fetching offers…" hanging on the
+// frontend when the API actually said "Invalid api_key" or similar.
 function parseFeedResponse(text, format) {
   const trimmed = String(text || '').trimStart();
 
   // Try JSON if requested or if format is auto and looks JSON-shaped
   if (format === 'json' || (format !== 'xml' && trimmed.startsWith('{'))) {
+    let body = null;
     try {
-      const body = JSON.parse(text);
+      body = JSON.parse(text);
+    } catch (e) {
+      // JSON parse failed.  In explicit json mode → propagate.  In auto mode
+      // → leave body=null so we fall through to XML below.
+      if (format === 'json') throw e;
+    }
+
+    // If JSON parsed successfully, validate success OUTSIDE the parse catch.
+    // This throw must reach the caller — it's the operator-actionable signal
+    // (Invalid api_key, geo restricted, etc).
+    if (body) {
       if (String(body.success) !== 'true' && body.success !== true) {
         const errs = body['Possible errors:'];
         const msg = errs ? Object.keys(errs).join(', ') : 'API returned success != true';
@@ -183,13 +200,10 @@ function parseFeedResponse(text, format) {
         offers: Array.isArray(body.offers) ? body.offers : [],
         rowCount: Array.isArray(body.row_count) ? Number(body.row_count[0]) : Number(body.row_count) || null,
       };
-    } catch (e) {
-      if (format === 'json') throw e;
-      // auto mode: JSON parse failed, fall through to XML
     }
   }
 
-  // XML fallback
+  // XML fallback (auto mode JSON parse failed, or format=xml)
   const offers = parseOfferFeedXML(text);
   return { offers, rowCount: null };
 }
