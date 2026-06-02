@@ -203,6 +203,19 @@ function toOurMacros(url, platform, options = {}) {
       ['#affiliate_id#',      affiliateTarget],
       ['{affiliate_id}',      affiliateTarget],
     ],
+    zeydoo: [
+      // Zeydoo SSP — macro convention is NOT documented in the OpenAPI spec.
+      // Defaulting to common SSP convention (clickid) — UPDATE THIS once
+      // Zeydoo AM confirms the actual postback macro name.
+      ['{clickid}',     '{click_id}'],
+      ['{click_id}',    '{click_id}'],
+      ['{request_id}',  '{click_id}'],   // alt common SSP convention
+      ['{transaction_id}', '{click_id}'],
+      ['{zone_id}',     '{campaign_id}'],
+      ['{sub_id}',      '{sub1}'],
+      ['{sub1}',        '{sub1}'],
+      ['{country}',     '{country}'],
+    ],
   };
 
   const pairs = maps[platform] || [];
@@ -227,6 +240,7 @@ function toOurMacros(url, platform, options = {}) {
       affise:      'sub1={click_id}',         // Affise has no click_id macro; sub1 carries it
       clickdealer: 's2={click_id}',           // CAKE convention
       cake:        's2={click_id}',           // CAKE convention (any CAKE-powered network)
+      zeydoo:      'clickid={click_id}',      // DEFAULT — verify with Zeydoo AM / help.zeydoo.com
     };
     const param = clickIdParams[platform];
     if (param) {
@@ -886,7 +900,38 @@ async function fetchCAKE(cred) {
   });
 }
 
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx, trackier: fetchTrackier, affise: fetchAffise, clickdealer: fetchClickDealer, cake: fetchCAKE };
+async function fetchZeydoo(cred) {
+  if (!cred?.api_key) {
+    throw new Error('Zeydoo requires Bearer token (api_key)');
+  }
+  const Zeydoo = require('../utils/connectors/zeydoo');
+  const rawOffers = await Zeydoo.listOffers(cred);
+  return rawOffers.map(raw => {
+    const norm = Zeydoo.normalizeOffer(raw, cred);
+    const rawTracking = norm.tracking_url_template || '';
+    return {
+      external_id:       norm.source_offer_id,
+      name:              norm.name,
+      description:       norm.description || '',
+      payout:            norm.payout || 0,
+      payout_type:       norm.payout_type || 'cpa',
+      currency:          normCurrency(norm.payout_currency),
+      status:            norm.status === 'active' ? 'active' : 'paused',
+      // Zeydoo API doesn't return tracking URLs — toOurMacros will pass an
+      // empty string through unchanged. Operator must paste the tracking
+      // URL manually from the Zeydoo dashboard.
+      tracking_url:      toOurMacros(rawTracking, 'zeydoo'),
+      preview_url:       norm.preview_url || norm.destination_url || '',
+      allowed_countries: (norm.allowed_countries || []).join(','),
+      advertiser_name:   norm.advertiser_name || 'Zeydoo',
+      categories:        norm.vertical || '',
+      approval_status:   norm.approval_status || 'unknown',
+      raw,
+    };
+  });
+}
+
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx, trackier: fetchTrackier, affise: fetchAffise, clickdealer: fetchClickDealer, cake: fetchCAKE, zeydoo: fetchZeydoo };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {
