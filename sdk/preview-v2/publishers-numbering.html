@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Publishers numbering — preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .wrap { max-width: 1300px; margin: 0 auto; padding: 32px 24px 80px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .lede { color: #94a3b8; margin: 0 0 28px; font-size: 14px; }
+
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 1000px) { .compare { grid-template-columns: 1fr; } }
+    .panel { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 18px; }
+    .panel.before { border-left: 4px solid #ef4444; }
+    .panel.after  { border-left: 4px solid #10b981; }
+    .panel h2 { font-size: 14px; margin: 0 0 4px; }
+    .panel .sub { font-size: 11px; color: #94a3b8; margin-bottom: 14px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    th, td { padding: 7px 8px; border-bottom: 1px solid #ffffff10; text-align: left; vertical-align: middle; }
+    th { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; border-bottom: 1px solid #ffffff20; }
+    td .pub-name { font-weight: 500; }
+    td .pub-url { display: block; color: #818cf8; font-size: 10px; opacity: 0.7; }
+    td.center { text-align: center; }
+
+    .pid-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 22px; border-radius: 11px; background: rgba(99,102,241,.15); color: #818cf8; font-size: 11.5px; font-weight: 700; padding: 0 6px; }
+    .num-cell { color: #64748b; font-size: 12px; }
+
+    .status { display: inline-block; padding: 2px 7px; border-radius: 9px; font-size: 10px; font-weight: 600; }
+    .status.active { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .status.paused { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .pb { font-size: 10px; }
+    .pb.set { color: #6ee7b7; }
+    .pb.notset { color: #64748b; }
+    .actions { font-size: 10px; color: #64748b; }
+
+    .summary { background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.25); border-radius: 8px; padding: 14px 18px; margin-top: 26px; font-size: 13px; color: #c7d2fe; }
+    .summary strong { color: #fff; }
+    code { background: rgba(99,102,241,.15); color: #a5f3fc; padding: 1px 5px; border-radius: 4px; font-size: 11.5px; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Publishers table — before vs after</h1>
+<p class="lede">Sequential <code>#</code> column added at the start, matching how Campaigns / Users / Advertisers already number. The real <code>PID</code> is kept because publishers use it in tracking URLs.</p>
+
+<div class="compare">
+
+  <!-- ─────────────── BEFORE ─────────────── -->
+  <div class="panel before">
+    <h2>Before — what you see now</h2>
+    <div class="sub">PID column directly shows database id with gaps (deleted publishers leave holes)</div>
+    <table>
+      <thead><tr>
+        <th>PID</th>
+        <th>Publisher</th>
+        <th>Postback</th>
+        <th>Status</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="center"><span class="pid-badge">99</span></td><td><span class="pub-name">Groei Media LLC</span><span class="pub-url">damgomedia.com</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center"><span class="pid-badge">79</span></td><td><span class="pub-name">Leadid co</span><span class="pub-url">leadid.net</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center"><span class="pid-badge">78</span></td><td><span class="pub-name">QA</span><span class="pub-url">t.com</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center"><span class="pid-badge">77</span></td><td><span class="pub-name">E2E Publisher</span><span class="pub-url">e2e-test.com</span></td><td class="pb set">Configured</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center"><span class="pid-badge">75</span></td><td><span class="pub-name">Rej</span><span class="pub-url">x.com</span></td><td class="pb notset">Not set</td><td><span class="status paused">PAUSED</span></td></tr>
+        <tr><td class="center"><span class="pid-badge">74</span></td><td><span class="pub-name">Full Audit Pub</span><span class="pub-url">audit.com</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center"><span class="pid-badge">73</span></td><td><span class="pub-name">Galaksion</span><span class="pub-url">galaksion.com</span></td><td class="pb set">Configured</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr style="opacity:.5"><td colspan="4" style="text-align:center;color:#64748b;font-size:11px;font-style:italic">… (72 down to 66) …</td></tr>
+        <tr style="opacity:.5"><td colspan="4" style="text-align:center;color:#fca5a5;font-size:11px;font-style:italic;background:rgba(239,68,68,.05);">⚠ jumps from PID 66 → PID 10 (56 IDs missing from deletions)</td></tr>
+        <tr><td class="center"><span class="pid-badge">10</span></td><td><span class="pub-name">Test Pub Check</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center"><span class="pid-badge">3</span></td><td><span class="pub-name">Test User</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center"><span class="pid-badge">2</span></td><td><span class="pub-name">PropellerAds</span></td><td class="pb set">Configured</td><td><span class="status active">ACTIVE</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ─────────────── AFTER ─────────────── -->
+  <div class="panel after">
+    <h2>After — what it'll look like</h2>
+    <div class="sub">New <code>#</code> column at start = clean 1–N sequential. <code>PID</code> column kept (needed for tracking URLs).</div>
+    <table>
+      <thead><tr>
+        <th>#</th>
+        <th>PID</th>
+        <th>Publisher</th>
+        <th>Postback</th>
+        <th>Status</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="center num-cell">21</td><td class="center"><span class="pid-badge">99</span></td><td><span class="pub-name">Groei Media LLC</span><span class="pub-url">damgomedia.com</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center num-cell">20</td><td class="center"><span class="pid-badge">79</span></td><td><span class="pub-name">Leadid co</span><span class="pub-url">leadid.net</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center num-cell">19</td><td class="center"><span class="pid-badge">78</span></td><td><span class="pub-name">QA</span><span class="pub-url">t.com</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center num-cell">18</td><td class="center"><span class="pid-badge">77</span></td><td><span class="pub-name">E2E Publisher</span><span class="pub-url">e2e-test.com</span></td><td class="pb set">Configured</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center num-cell">17</td><td class="center"><span class="pid-badge">75</span></td><td><span class="pub-name">Rej</span><span class="pub-url">x.com</span></td><td class="pb notset">Not set</td><td><span class="status paused">PAUSED</span></td></tr>
+        <tr><td class="center num-cell">16</td><td class="center"><span class="pid-badge">74</span></td><td><span class="pub-name">Full Audit Pub</span><span class="pub-url">audit.com</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center num-cell">15</td><td class="center"><span class="pid-badge">73</span></td><td><span class="pub-name">Galaksion</span><span class="pub-url">galaksion.com</span></td><td class="pb set">Configured</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr style="opacity:.5"><td colspan="5" style="text-align:center;color:#64748b;font-size:11px;font-style:italic">… # 14 down to # 9 …</td></tr>
+        <tr style="opacity:.5"><td colspan="5" style="text-align:center;color:#6ee7b7;font-size:11px;font-style:italic;background:rgba(16,185,129,.05);">✓ no visual gap in the # column — counts down cleanly</td></tr>
+        <tr><td class="center num-cell">8</td><td class="center"><span class="pid-badge">10</span></td><td><span class="pub-name">Test Pub Check</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center num-cell">2</td><td class="center"><span class="pid-badge">3</span></td><td><span class="pub-name">Test User</span></td><td class="pb notset">Not set</td><td><span class="status active">ACTIVE</span></td></tr>
+        <tr><td class="center num-cell">1</td><td class="center"><span class="pid-badge">2</span></td><td><span class="pub-name">PropellerAds</span></td><td class="pb set">Configured</td><td><span class="status active">ACTIVE</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<div class="summary">
+  <strong>What changed:</strong> one frontend file (<code>Publishers.jsx</code>). Added a <code>#</code> column at the start showing sequential row position (<code>publishers.length - idx</code>), 1-to-N descending so newest is highest. The <code>PID</code> column stays exactly as it was — same database id, same value publishers use in their <code>?pid=…</code> tracking URLs.
+  <br><br>
+  <strong>What didn't change:</strong> backend (zero edits), database (zero edits), publisher IDs themselves, URLs, postback macros (<code>{pid}</code> still resolves to the DB id), audit log. No publisher's existing tracking links break.
+</div>
+
+</div>
+</body>
+</html>
