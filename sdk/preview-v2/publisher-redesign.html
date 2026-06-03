@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TrackMMP — Publisher panel redesign preview</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-card: #131a31;
+    --bg-2: #1a2240;
+    --border: #232c4d;
+    --text: #e4e8f5;
+    --muted: #94a3b8;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red:  #ef4444;
+    --pink: #ec4899;
+    --pur:  #8b5cf6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 36px 24px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 0; }
+  .lead { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .pill.recommend { background: rgba(99,102,241,.18); color: var(--accent-2); }
+  .pill.green { background: rgba(16,185,129,.15); color: var(--green); }
+  .pill.amber { background: rgba(245,158,11,.15); color: var(--amber); }
+  .pill.red   { background: rgba(239,68,68,.15);  color: var(--red); }
+  .pill.pur   { background: rgba(139,92,246,.18); color: #a78bfa; }
+  .pill.pink  { background: rgba(236,72,153,.15); color: var(--pink); }
+  .pill.muted { background: rgba(148,163,184,.15); color: var(--muted); }
+
+  .section {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    margin: 28px 0; overflow: hidden;
+  }
+  .section-head {
+    padding: 18px 22px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .section-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .section-body { padding: 22px; }
+
+  .ba {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;
+  }
+  @media (max-width: 880px) { .ba { grid-template-columns: 1fr; } }
+  .ba > div {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; overflow: hidden;
+  }
+  .ba .label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin-bottom: 12px;
+  }
+  .ba .label.before { color: #fca5a5; }
+  .ba .label.after  { color: #6ee7b7; }
+
+  .mini-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .strong { font-weight: 700; }
+
+  /* Mock dashboard */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+  .kpi {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  }
+  .kpi h4 { margin: 0 0 8px; font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  .kpi-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+  .kpi-cell { text-align: center; }
+  .kpi-cell .v { font-size: 14px; font-weight: 700; }
+  .kpi-cell .l { font-size: 9px; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+
+  /* Mock chart */
+  .chart-mock {
+    height: 140px; border: 1px dashed var(--border); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, rgba(99,102,241,.08), transparent);
+    position: relative; overflow: hidden;
+  }
+  .chart-svg { width: 100%; height: 100%; }
+  .chart-label {
+    position: absolute; top: 8px; left: 12px; font-size: 11px; color: var(--muted); font-weight: 600;
+  }
+  .chart-legend {
+    position: absolute; bottom: 6px; left: 0; right: 0; display: flex; justify-content: center; gap: 14px;
+    font-size: 10px; color: var(--muted);
+  }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+  /* Mock tabs */
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; padding: 0; margin: 0 0 12px; list-style: none; }
+  .tab { padding: 6px 14px; border-radius: 18px; font-size: 11px; font-weight: 600; border: 1px solid var(--border); color: var(--muted); cursor: default; }
+  .tab.on { background: rgba(99,102,241,.12); color: var(--accent-2); border-color: var(--accent); }
+
+  /* Mock table */
+  table.mock { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.mock th { text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; border-bottom: 1px solid var(--border); }
+  table.mock td { padding: 6px 8px; border-bottom: 1px dashed rgba(148,163,184,.12); }
+  table.mock tr:last-child td { border-bottom: 0; }
+  .flag { display: inline-block; padding: 1px 5px; border-radius: 4px; background: rgba(99,102,241,.12); color: var(--accent-2); font-size: 10px; font-weight: 700; margin-right: 4px; }
+
+  /* Specific badges */
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .b-cpa { background: rgba(99,102,241,.18); color: var(--accent-2); }
+  .b-cps { background: rgba(236,72,153,.18); color: var(--pink); }
+  .b-cpl { background: rgba(245,158,11,.18); color: var(--amber); }
+  .b-active { background: rgba(16,185,129,.18); color: var(--green); }
+  .b-approval { background: rgba(245,158,11,.18); color: var(--amber); }
+
+  /* Setup card / before screenshot */
+  .setup-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  .checklist { padding-left: 22px; margin: 14px 0 0; }
+  .checklist li { margin: 4px 0; }
+  .checklist li::marker { color: var(--accent-2); }
+
+  .footer-card {
+    background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(16,185,129,.08));
+    border: 1px solid var(--accent);
+    border-radius: 12px; padding: 22px; margin-top: 32px;
+  }
+  code { background: var(--bg-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+  .doesnt-change {
+    background: rgba(148,163,184,.06);
+    border-left: 3px solid var(--muted);
+    padding: 10px 14px; margin-top: 14px; border-radius: 4px;
+    font-size: 12px; color: var(--muted);
+  }
+  .doesnt-change strong { color: var(--text); }
+
+  /* Goals table look */
+  table.goals {
+    width: 100%; border-collapse: collapse; margin-top: 10px;
+    background: var(--bg); border-radius: 8px; overflow: hidden;
+  }
+  table.goals th, table.goals td { padding: 8px 12px; text-align: left; font-size: 12px; border-bottom: 1px solid var(--border); }
+  table.goals th { color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; background: var(--bg-2); }
+  table.goals tr:last-child td { border-bottom: 0; }
+
+  /* Form */
+  textarea.mock {
+    width: 100%; height: 70px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px; color: var(--text); font-family: inherit; font-size: 12px; resize: none;
+  }
+  .btn-mock {
+    display: inline-block; padding: 8px 18px; border-radius: 6px;
+    background: var(--accent); color: #fff; font-size: 12px; font-weight: 600;
+    border: none; cursor: default; margin-top: 10px;
+  }
+  .req-banner {
+    background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3); border-radius: 6px;
+    padding: 8px 12px; font-size: 11px; color: var(--amber); margin-bottom: 12px;
+  }
+
+  .verdict {
+    background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.25);
+    border-radius: 8px; padding: 14px 18px; margin-top: 18px;
+    font-size: 13px;
+  }
+  .verdict .row { gap: 10px; align-items: baseline; }
+  .verdict .row strong { font-size: 14px; }
+
+  .legend { font-size: 12px; color: var(--muted); margin: 6px 0 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p style="margin:0 0 6px;color:var(--muted);font-size:12px">Preview deck · 2026-06-03 · TrackMMP</p>
+  <h1>Publisher panel redesign</h1>
+  <p class="lead">
+    4 changes derived from comparing TrackMMP's publisher panel to Trackier's
+    (priya.t@apogeemobi.com, the51.trackier.io). All changes are publisher-facing.
+    Admin pages untouched. Nothing is shipped yet — this is a mockup for your review.
+  </p>
+
+  <div class="verdict">
+    <div class="row" style="flex-wrap:wrap;">
+      <strong>Scope</strong>
+      <span class="pill recommend">4 changes</span>
+      <span class="pill muted">~16 hours of work</span>
+      <span class="pill green">no admin-page risk</span>
+      <span class="pill amber">~30-60s deploy blip (unchanged)</span>
+    </div>
+  </div>
+
+  <!-- ========== 1 ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">1</div>
+      <h2>Rebuild publisher landing page — performance-first, not setup-first</h2>
+      <span class="pill recommend" style="margin-left:auto">~6h · highest impact</span>
+    </div>
+    <div class="section-body">
+      <p class="legend">
+        Today: when a publisher logs in, they see API keys, tracking-link templates, traffic-source pickers — setup material.
+        They have to navigate to <code>/publisher/reports</code> just to check today's revenue.
+        Industry standard (Trackier, Affise, HasOffers) is to land on a performance dashboard.
+      </p>
+
+      <div class="ba">
+        <div>
+          <div class="label before">▼ Now — setup-first landing</div>
+          <div class="setup-card" style="margin-bottom:8px">
+            <div class="row" style="margin-bottom:6px"><span style="font-size:16px">⌗</span><strong style="font-size:13px">API Keys</strong></div>
+            <div class="muted">Pull your campaigns and conversion data programmatically</div>
+            <div class="setup-card" style="background:var(--bg);margin-top:8px;padding:8px"><code style="font-size:11px">tmpk_a1b2c3...•••••...x9y0</code></div>
+          </div>
+          <div class="setup-card" style="margin-bottom:8px">
+            <div class="row" style="margin-bottom:6px"><span style="font-size:16px">🔗</span><strong style="font-size:13px">Tracking Link Generator</strong></div>
+            <div class="muted">Build a deep link with sub IDs and traffic source macros</div>
+          </div>
+          <div class="setup-card">
+            <div class="row" style="margin-bottom:6px"><span style="font-size:16px">📡</span><strong style="font-size:13px">Postback URL</strong></div>
+            <div class="muted">One global postback URL with macros</div>
+          </div>
+          <div class="muted" style="margin-top:14px;font-style:italic">
+            Where's today's revenue? → navigate to Reports
+          </div>
+        </div>
+
+        <div>
+          <div class="label after">▲ After — performance-first landing</div>
+
+          <!-- KPI Row -->
+          <div class="kpi-grid" style="margin-bottom:10px">
+            <div class="kpi">
+              <h4>🖱️ Clicks</h4>
+              <div class="kpi-row">
+                <div class="kpi-cell"><div class="v">247</div><div class="l">Today</div></div>
+                <div class="kpi-cell"><div class="v">183</div><div class="l">Yest</div></div>
+                <div class="kpi-cell"><div class="v" style="color:var(--accent-2)">3,184</div><div class="l">MTD</div></div>
+              </div>
+            </div>
+            <div class="kpi">
+              <h4>✓ Conversions</h4>
+              <div class="kpi-row">
+                <div class="kpi-cell"><div class="v">12</div><div class="l">Today</div></div>
+                <div class="kpi-cell"><div class="v">9</div><div class="l">Yest</div></div>
+                <div class="kpi-cell"><div class="v" style="color:var(--amber)">158</div><div class="l">MTD</div></div>
+              </div>
+            </div>
+            <div class="kpi">
+              <h4>👁 Impressions</h4>
+              <div class="kpi-row">
+                <div class="kpi-cell"><div class="v">1.2k</div><div class="l">Today</div></div>
+                <div class="kpi-cell"><div class="v">0.9k</div><div class="l">Yest</div></div>
+                <div class="kpi-cell"><div class="v" style="color:var(--pink)">15.8k</div><div class="l">MTD</div></div>
+              </div>
+            </div>
+            <div class="kpi">
+              <h4>💰 Payout</h4>
+              <div class="kpi-row">
+                <div class="kpi-cell"><div class="v" style="color:var(--green)">$84.60</div><div class="l">Today</div></div>
+                <div class="kpi-cell"><div class="v" style="color:var(--green)">$63.40</div><div class="l">Yest</div></div>
+                <div class="kpi-cell"><div class="v" style="color:var(--green)">$2,134</div><div class="l">MTD</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart -->
+          <div class="chart-mock" style="height:140px">
+            <div class="chart-label">Performance Report · 2026-05-28 → 2026-06-03</div>
+            <svg class="chart-svg" viewBox="0 0 400 140" preserveAspectRatio="none">
+              <polyline fill="rgba(99,102,241,.18)" stroke="none"
+                points="0,140 40,100 80,90 120,72 160,68 200,55 240,42 280,38 320,30 360,28 400,22 400,140" />
+              <polyline fill="none" stroke="#818cf8" stroke-width="2"
+                points="0,140 40,100 80,90 120,72 160,68 200,55 240,42 280,38 320,30 360,28 400,22" />
+              <polyline fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4 3"
+                points="0,135 40,128 80,122 120,116 160,108 200,100 240,92 280,84 320,76 360,68 400,60" />
+              <polyline fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="2 4"
+                points="0,138 40,134 80,128 120,118 160,108 200,98 240,90 280,82 320,74 360,66 400,58" />
+            </svg>
+            <div class="chart-legend">
+              <span><span class="dot" style="background:#818cf8"></span>Clicks</span>
+              <span><span class="dot" style="background:#f59e0b"></span>Conversions</span>
+              <span><span class="dot" style="background:#10b981"></span>Payout</span>
+            </div>
+          </div>
+
+          <!-- Collapsed setup -->
+          <details style="margin-top:10px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;font-size:12px">
+            <summary style="cursor:default;color:var(--muted);font-weight:600">⚙ Setup & API Keys (collapsed by default)</summary>
+            <div style="margin-top:6px;color:var(--muted);font-size:11px">API Keys · Tracking Link Generator · Postback URL · Traffic Source Templates</div>
+          </details>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>Hero chart at top with date range (default last 7 days, hover shows per-day breakdown)</li>
+        <li>4 KPI cards: Clicks / Conversions / Impressions / Payout — each shows Today / Yesterday / MTD</li>
+        <li>Setup section (API Keys, tracking link, postback URL, traffic source templates) collapses into a single expandable card below — still accessible, no longer dominant</li>
+        <li>Powered by existing endpoints (<code>/publisher/stats/by-day</code>) — no new backend work</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> All existing setup features stay one click away.
+        Tracking link generator, postback URL, traffic source templates, API keys — same code, same URLs, just relocated below the performance hero.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 2 ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">2</div>
+      <h2>Reports — add SubID, Geo-wise, Conversion-level breakdown tabs</h2>
+      <span class="pill recommend" style="margin-left:auto">~6h · enables optimisation</span>
+    </div>
+    <div class="section-body">
+      <p class="legend">
+        Today's report is a single by-day table. Publishers running serious traffic can't see <em>which sub-source</em>, <em>which country</em>, or <em>which conversion</em> is performing best — so they can't optimise.
+        Trackier offers 5 tabs; we offer 1.
+      </p>
+
+      <div class="ba">
+        <div>
+          <div class="label before">▼ Now — Reports</div>
+          <ul class="tabs">
+            <li class="tab on">Daily</li>
+          </ul>
+          <table class="mock">
+            <thead><tr><th>Date</th><th>Clicks</th><th>Conv</th><th>Revenue</th></tr></thead>
+            <tbody>
+              <tr><td>2026-06-03</td><td>247</td><td>12</td><td>$84.60</td></tr>
+              <tr><td>2026-06-02</td><td>183</td><td>9</td><td>$63.40</td></tr>
+              <tr><td>2026-06-01</td><td>164</td><td>7</td><td>$49.10</td></tr>
+            </tbody>
+          </table>
+          <div class="muted" style="margin-top:14px;font-style:italic">
+            Which sub-source is converting? Which country? Can't tell from this.
+          </div>
+        </div>
+        <div>
+          <div class="label after">▲ After — Reports with 5 breakdowns</div>
+          <ul class="tabs">
+            <li class="tab on">Daily</li>
+            <li class="tab">SubID</li>
+            <li class="tab">Geo</li>
+            <li class="tab">Conversions</li>
+            <li class="tab">Exports</li>
+          </ul>
+
+          <div class="muted" style="margin-bottom:6px;font-size:11px;font-weight:600">▸ SubID tab preview</div>
+          <table class="mock">
+            <thead><tr><th>Sub ID</th><th>Clicks</th><th>Conv</th><th>CR%</th><th>Revenue</th></tr></thead>
+            <tbody>
+              <tr><td><code>fb-camp-1</code></td><td>94</td><td>7</td><td style="color:var(--green)">7.4%</td><td>$42.00</td></tr>
+              <tr><td><code>tt-creative-3</code></td><td>72</td><td>3</td><td style="color:var(--amber)">4.2%</td><td>$18.50</td></tr>
+              <tr><td><code>email-blast-jun</code></td><td>48</td><td>1</td><td style="color:var(--red)">2.1%</td><td>$6.00</td></tr>
+              <tr><td><code>(none)</code></td><td>33</td><td>1</td><td class="muted">3.0%</td><td>$5.10</td></tr>
+            </tbody>
+          </table>
+
+          <div class="muted" style="margin:14px 0 6px;font-size:11px;font-weight:600">▸ Geo tab preview</div>
+          <table class="mock">
+            <thead><tr><th>Country</th><th>Clicks</th><th>Conv</th><th>CR%</th><th>Revenue</th></tr></thead>
+            <tbody>
+              <tr><td><span class="flag">US</span> United States</td><td>156</td><td>9</td><td style="color:var(--green)">5.8%</td><td>$63.00</td></tr>
+              <tr><td><span class="flag">IN</span> India</td><td>52</td><td>2</td><td style="color:var(--amber)">3.8%</td><td>$11.20</td></tr>
+              <tr><td><span class="flag">GB</span> United Kingdom</td><td>39</td><td>1</td><td class="muted">2.6%</td><td>$10.40</td></tr>
+            </tbody>
+          </table>
+
+          <div class="muted" style="margin:14px 0 6px;font-size:11px;font-weight:600">▸ Conversions tab preview (every conversion as a row)</div>
+          <table class="mock">
+            <thead><tr><th>Time</th><th>Campaign</th><th>Sub ID</th><th>Geo</th><th>Payout</th></tr></thead>
+            <tbody>
+              <tr><td class="muted">14:32</td><td>PerkSurge Amazon</td><td><code>fb-camp-1</code></td><td><span class="flag">US</span></td><td>$7.00</td></tr>
+              <tr><td class="muted">13:18</td><td>Hello Genius</td><td><code>tt-creative-3</code></td><td><span class="flag">US</span></td><td>$7.00</td></tr>
+              <tr><td class="muted">12:04</td><td>Bingo Plus</td><td><code>fb-camp-1</code></td><td><span class="flag">PH</span></td><td>$5.00</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>Tabs: <strong>Daily</strong> (existing) · <strong>SubID</strong> (new) · <strong>Geo</strong> (new) · <strong>Conversions</strong> (new) · <strong>Exports</strong> (new — list of past CSV downloads)</li>
+        <li>Each tab uses the same date picker + campaign filter as Daily today</li>
+        <li>New backend endpoints: <code>/publisher/stats/by-sub</code>, <code>/publisher/stats/by-geo</code>, <code>/publisher/conversions</code></li>
+        <li>CSV export per-tab (the by-sub CSV becomes a row in Exports)</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> The Daily tab keeps its current chart + summary cards exactly as they are.
+        Existing CSV export button keeps working from the Daily tab.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 3 ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">3</div>
+      <h2>Multi-goal payout table on offer detail</h2>
+      <span class="pill recommend" style="margin-left:auto">~2h · cheap win</span>
+    </div>
+    <div class="section-body">
+      <p class="legend">
+        Offers can have multiple goals (e.g. install $0.50, FTD $25, deposit $50), each with its own geo coverage.
+        Today we show a single payout figure even when the campaign has goals[]; this confuses publishers about what they actually earn for each event.
+      </p>
+
+      <div class="ba">
+        <div>
+          <div class="label before">▼ Now</div>
+          <div class="setup-card">
+            <div class="muted" style="font-size:11px">PAYOUT</div>
+            <div style="font-size:24px;color:var(--green);font-weight:700">$7.00</div>
+            <div class="muted" style="font-size:10px">CPA</div>
+          </div>
+          <div class="muted" style="margin-top:14px;font-style:italic">If this campaign has 3 goals → publisher can't see them.</div>
+        </div>
+        <div>
+          <div class="label after">▲ After — Payout & Goals table</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px">Payout &amp; Goals</div>
+          <table class="goals">
+            <thead><tr><th>Goal Name</th><th>Coverage</th><th>Payout</th></tr></thead>
+            <tbody>
+              <tr><td>Default (install)</td><td><span class="flag">US</span><span class="flag">CA</span></td><td><span style="color:var(--green);font-weight:700">$0.50</span> <span class="muted">CPI</span></td></tr>
+              <tr><td>First Deposit</td><td><span class="flag">US</span></td><td><span style="color:var(--green);font-weight:700">$25.00</span> <span class="muted">CPA</span></td></tr>
+              <tr><td>$50+ Deposit</td><td><span class="flag">US</span><span class="flag">CA</span><span class="flag">GB</span></td><td><span style="color:var(--green);font-weight:700">$50.00</span> <span class="muted">CPA</span></td></tr>
+            </tbody>
+          </table>
+          <div class="muted" style="font-size:11px;margin-top:6px">Single-goal offers still show as one row (same data, just consistent layout).</div>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>If the campaign has <code>goals[]</code> in its config, render every goal as a row</li>
+        <li>If it doesn't, render a single "Default" row using the existing <code>payout</code> field</li>
+        <li>Adds a <code>goal_count</code> badge on the campaigns list ("Goals: 3") so it's visible before clicking in</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> No DB migration. We already store goals on campaigns; we just render them properly.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 4 ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">4</div>
+      <h2>Custom questionnaire on access request</h2>
+      <span class="pill recommend" style="margin-left:auto">~2h · anti-fraud signal</span>
+    </div>
+    <div class="section-body">
+      <p class="legend">
+        When publishers request access to an approval-required campaign, advertisers want to know <em>how the publisher plans to run it</em> —
+        for fraud prevention and traffic-source vetting. Today we accept a request with no context; Trackier and every major MMP collects this.
+      </p>
+
+      <div class="ba">
+        <div>
+          <div class="label before">▼ Now — Request Access button</div>
+          <div class="setup-card">
+            <div class="row"><span style="font-size:16px">🔐</span><strong>Hello Genius — June'26</strong></div>
+            <div class="muted" style="font-size:11px;margin:6px 0 10px">Approval required · $7.00 CPA · US</div>
+            <button class="btn-mock" style="background:rgba(99,102,241,.15);color:var(--accent-2);border:1px solid var(--accent)">Request Access</button>
+          </div>
+          <div class="muted" style="margin-top:14px;font-style:italic">Click → request fires. Advertiser gets no context.</div>
+        </div>
+        <div>
+          <div class="label after">▲ After — Request Access form</div>
+          <div class="setup-card">
+            <div class="row" style="margin-bottom:6px"><strong>Request campaign access</strong></div>
+            <div class="req-banner">⚠ You need approval to run this campaign.</div>
+            <div style="font-size:12px;margin-bottom:6px"><span class="muted">Questionnaire (optional):</span> <strong>How will you run this campaign?</strong></div>
+            <textarea class="mock" placeholder="e.g. Facebook in-feed video to US 25-45 men, primary creative is a 15s vertical with a $1k cash hook."></textarea>
+            <button class="btn-mock">✈ Send Request</button>
+          </div>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>New <code>note</code> field on the access-request form (already exists in DB schema — just unused)</li>
+        <li>Note shown to admin in the "Pending Access Requests" panel on the admin Campaigns page</li>
+        <li>Admin can configure a custom questionnaire per campaign (default: "How will you run this campaign?")</li>
+        <li>Free-text — no validation, no required field (keeps friction low)</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> Open and Private campaigns still skip this form.
+        Existing access-request endpoint already accepts a <code>note</code> — wiring this is mostly frontend.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Decide ========== -->
+  <div class="footer-card">
+    <h2 style="margin:0 0 8px">Decision</h2>
+    <p style="margin:0 0 12px;color:var(--muted);font-size:13px">
+      All 4 changes are publisher-side only. Admin pages untouched.
+      Each is independently shippable — you can approve any subset.
+    </p>
+    <ul class="checklist" style="margin:0 0 14px">
+      <li><code>ship all 4</code> — I implement #1, #2, #3, #4 (~16h, one deploy when ready)</li>
+      <li><code>ship 1,2</code> — Just the two biggest gaps (dashboard + reports tabs, ~12h)</li>
+      <li><code>ship only X</code> — Any subset, e.g. <code>ship only 3,4</code> for the cheap wins (~4h)</li>
+      <li><code>change X — &lt;what&gt;</code> — Revise this mockup before I touch code</li>
+      <li><code>hold</code> — Park it</li>
+    </ul>
+    <p style="margin:0;color:var(--muted);font-size:12px">
+      Reminder of the standing constraint: each deploy still carries a ~30-60s blip until the SQLite→Postgres migration. Holding multiple ships into one deploy is cheaper than 4 separate deploys.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
