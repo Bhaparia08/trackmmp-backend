@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Campaigns page redesign — preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font: 14px/1.55 Inter, system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    .wrap { max-width: 1400px; margin: 0 auto; padding: 32px 24px 80px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .lede { color: #94a3b8; font-size: 14px; margin: 0 0 28px; }
+    h2 { font-size: 16px; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #ffffff14; }
+
+    .panel { background: #1a1a2e; border: 1px solid #ffffff14; border-radius: 12px; padding: 16px; margin-bottom: 18px; }
+    .panel.before { border-left: 4px solid #ef4444; }
+    .panel.after  { border-left: 4px solid #10b981; }
+    .panel h3 { font-size: 14px; margin: 0 0 4px; }
+    .panel .sub { font-size: 11px; color: #94a3b8; margin-bottom: 12px; }
+
+    /* simulate the "before" page — wider than viewport so it triggers a horizontal scroll */
+    .scroller-before { overflow-x: auto; border: 1px dashed #ef4444; padding: 4px; }
+    .scroller-before .scroll-hint { font-size: 10px; color: #fca5a5; padding: 4px 8px; background: rgba(239,68,68,0.08); }
+    .scroller-after { overflow-x: hidden; border: 1px dashed #10b981; padding: 4px; position: relative; }
+    .scroller-after .scroll-hint { font-size: 10px; color: #6ee7b7; padding: 4px 8px; background: rgba(16,185,129,0.08); }
+
+    table { border-collapse: collapse; font-size: 11.5px; }
+    .before-table { min-width: 1600px; }   /* cramps it to force horizontal scroll */
+    .after-table  { width: 100%; table-layout: fixed; }
+
+    th, td { padding: 6px 8px; border-bottom: 1px solid #ffffff10; text-align: left; vertical-align: middle; }
+    th { font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: .03em; font-weight: 600; border-bottom: 1px solid #ffffff20; background: #0a0a14; }
+    td.center { text-align: center; }
+
+    .name { font-weight: 500; max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .name-after { font-weight: 500; line-height: 1.35; }
+    .name-after .domain { display: block; font-size: 10px; color: #818cf8; opacity: 0.7; margin-top: 2px; }
+    .num-cell { color: #64748b; font-size: 11px; }
+    .pid-badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+    .pid-badge.cpa { background: rgba(99,102,241,.15); color: #818cf8; }
+    .pid-badge.cpi { background: rgba(14,165,233,.15); color: #7dd3fc; }
+    .pid-badge.cpl { background: rgba(168,85,247,.15); color: #d8b4fe; }
+
+    .status { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .status.active { background: rgba(16,185,129,.18); color: #6ee7b7; }
+    .status.paused { background: rgba(245,158,11,.18); color: #fcd34d; }
+    .visibility { font-size: 10px; color: #94a3b8; }
+
+    /* AFTER: sticky right edge */
+    .sticky-right { position: sticky; right: 0; background: #1a1a2e; box-shadow: -8px 0 12px -8px rgba(0,0,0,0.4); }
+    .sticky-right-2 { position: sticky; background: #1a1a2e; }
+    .sticky-right.status-col { right: 90px; }
+
+    /* AFTER: color-coded row left border */
+    .row-active   { border-left: 3px solid #10b981; }
+    .row-paused   { border-left: 3px solid #f59e0b; }
+    .row-archived { border-left: 3px solid #64748b; }
+
+    .actions a { color: #818cf8; font-size: 10px; text-decoration: none; margin: 0 3px; }
+    .actions a:hover { text-decoration: underline; }
+
+    .payout { font-size: 10.5px; line-height: 1.3; }
+    .payout .pub { color: #6ee7b7; font-weight: 600; }
+    .payout .adv { color: #94a3b8; }
+    .payout .sep { color: #475569; margin: 0 2px; }
+
+    .show-more { font-size: 11px; color: #818cf8; background: none; border: 1px solid #ffffff20; border-radius: 6px; padding: 4px 10px; cursor: pointer; margin-top: 8px; }
+
+    .change-list { background: rgba(99,102,241,.06); border: 1px solid rgba(99,102,241,.25); border-radius: 8px; padding: 14px 18px; font-size: 13px; color: #c7d2fe; }
+    .change-list h3 { color: #fff; margin: 0 0 10px; font-size: 14px; }
+    .change-list ol { margin: 0; padding-left: 20px; }
+    .change-list li { margin-bottom: 6px; line-height: 1.5; }
+    .change-list strong { color: #fff; }
+    .change-list code { background: rgba(99,102,241,.15); color: #a5f3fc; padding: 1px 5px; border-radius: 3px; font-size: 11px; font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace; }
+
+    .col-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+    @media (max-width: 900px) { .col-comparison { grid-template-columns: 1fr; } }
+    .col-card { background: #0a0a14; border: 1px solid #ffffff14; border-radius: 8px; padding: 14px 16px; }
+    .col-card h4 { margin: 0 0 8px; font-size: 12px; color: #fff; }
+    .col-card .col-list { margin: 0; padding: 0; list-style: none; font-size: 11px; }
+    .col-card .col-list li { padding: 4px 0; color: #cbd5e1; display: flex; justify-content: space-between; }
+    .col-card .col-list li.dropped { color: #64748b; text-decoration: line-through; }
+    .col-card .col-list li .tag { font-size: 9px; padding: 1px 6px; border-radius: 8px; }
+    .col-card .col-list li .tag.kept   { background: rgba(16,185,129,.15); color: #6ee7b7; }
+    .col-card .col-list li .tag.merged { background: rgba(245,158,11,.15); color: #fcd34d; }
+    .col-card .col-list li .tag.hidden { background: rgba(99,102,241,.15); color: #c7d2fe; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Campaigns page redesign — preview</h1>
+<p class="lede">Fixes the "I have to scroll right to see Status and Edit" complaint. 14 columns → 8 visible (5 hidden behind "Show more"), with sticky Status + Actions on the right edge so they never disappear regardless of scroll. Plus color-coded status borders and a merged payout column.</p>
+
+<!-- ─────────────── BEFORE ─────────────── -->
+<h2 id="before">⛔ Before — what you see now (14 columns)</h2>
+
+<div class="panel before">
+  <h3>Current Campaigns list</h3>
+  <div class="sub">Scroll the box below sideways → notice how Status and Edit/Clone/Archive only appear after horizontal scroll</div>
+  <div class="scroller-before">
+    <div class="scroll-hint">⚠ scroll → to see Status + Actions</div>
+    <table class="before-table">
+      <thead><tr>
+        <th>#</th><th>Campaign</th><th>Vertical</th><th>Advertiser</th>
+        <th>Adv. Payout 🔒</th><th>Pub. Payout 📤</th>
+        <th>Clicks</th><th>Installs</th><th>CR%</th><th>EPC</th><th>Revenue</th>
+        <th>Visibility</th><th>Status</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="num-cell">38</td>
+          <td class="name">PerkSurge CashApp Voucher $1000 USA SOI…</td>
+          <td>—</td>
+          <td>DigiNature</td>
+          <td>$1.00 CPA</td>
+          <td>$0.70 CPA</td>
+          <td>1</td><td>0</td><td>—</td><td>—</td><td>$0.00</td>
+          <td><span class="visibility">🌐 Open</span></td>
+          <td><span class="status active">ACTIVE</span></td>
+          <td class="actions"><a>Edit</a><a>Clone</a><a>Archive</a></td>
+        </tr>
+        <tr>
+          <td class="num-cell">36</td>
+          <td class="name">NORDVPN_CPI_WW</td>
+          <td>Display</td>
+          <td>NORDVPN</td>
+          <td>$0.50 CPI</td>
+          <td>$0.60 CPI</td>
+          <td>4</td><td>0</td><td>—</td><td>—</td><td>$0.00</td>
+          <td><span class="visibility">🌐 Open</span></td>
+          <td><span class="status active">ACTIVE</span></td>
+          <td class="actions"><a>Edit</a><a>Clone</a><a>Archive</a></td>
+        </tr>
+        <tr>
+          <td class="num-cell">21</td>
+          <td class="name">ID - xlWin - SOI - USD | DO NOT use these links…</td>
+          <td>—</td>
+          <td>xlWin Media</td>
+          <td>$0.10 CPI</td>
+          <td>$0.08 CPI</td>
+          <td>9</td><td>5</td><td>55.56%</td><td>$5.5556</td><td>$50.00</td>
+          <td><span class="visibility">🔐 Approval</span></td>
+          <td><span class="status active">ACTIVE</span></td>
+          <td class="actions"><a>Edit</a><a>Clone</a><a>Archive</a></td>
+        </tr>
+        <tr>
+          <td class="num-cell">7</td>
+          <td class="name">World of Tanks [SOI, Premium] WW</td>
+          <td>—</td>
+          <td>Admitad</td>
+          <td>$10.00 CPL</td>
+          <td>$8.00 CPL</td>
+          <td>5</td><td>1</td><td>20%</td><td>—</td><td>$0.00</td>
+          <td><span class="visibility">🌐 Open</span></td>
+          <td><span class="status paused">PAUSED</span></td>
+          <td class="actions"><a>Edit</a><a>Clone</a><a>Archive</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ─────────────── AFTER ─────────────── -->
+<h2 id="after">✅ After — 8 columns visible, no horizontal scroll needed</h2>
+
+<div class="panel after">
+  <h3>Redesigned Campaigns list</h3>
+  <div class="sub">Same data, fits on a 14" laptop screen. Status badge + Edit/Clone/Archive stay pinned to the right edge.</div>
+  <div class="scroller-after">
+    <div class="scroll-hint">✓ fits without horizontal scroll · Status + Actions always visible</div>
+    <table class="after-table">
+      <colgroup>
+        <col style="width: 38px">
+        <col>
+        <col style="width: 110px">
+        <col style="width: 90px">
+        <col style="width: 56px">
+        <col style="width: 56px">
+        <col style="width: 70px">
+        <col style="width: 90px">
+        <col style="width: 130px">
+      </colgroup>
+      <thead><tr>
+        <th>#</th>
+        <th>Campaign</th>
+        <th>Advertiser</th>
+        <th>Payout</th>
+        <th>Clicks</th>
+        <th>CR%</th>
+        <th>Visibility</th>
+        <th class="sticky-right status-col">Status</th>
+        <th class="sticky-right">Actions</th>
+      </tr></thead>
+      <tbody>
+        <tr class="row-active">
+          <td class="num-cell">38</td>
+          <td>
+            <div class="name-after">PerkSurge CashApp Voucher $1000 USA SOI - May'26</div>
+            <span class="domain">🏪 trk.trckyperky.com</span>
+          </td>
+          <td>DigiNature</td>
+          <td class="payout">
+            <span class="pub">$0.70</span> <span class="sep">/</span> <span class="adv">$1.00</span>
+            <span class="pid-badge cpa">CPA</span>
+          </td>
+          <td class="center">1</td>
+          <td class="center">—</td>
+          <td><span class="visibility">🌐 Open</span></td>
+          <td class="sticky-right status-col"><span class="status active">ACTIVE</span></td>
+          <td class="sticky-right actions"><a>Edit</a><a>Clone</a><a>Archive</a></td>
+        </tr>
+        <tr class="row-active">
+          <td class="num-cell">36</td>
+          <td>
+            <div class="name-after">NORDVPN_CPI_WW</div>
+            <span class="domain">📱 Display · mobile</span>
+          </td>
+          <td>NORDVPN</td>
+          <td class="payout">
+            <span class="pub">$0.60</span> <span class="sep">/</span> <span class="adv">$0.50</span>
+            <span class="pid-badge cpi">CPI</span>
+          </td>
+          <td class="center">4</td>
+          <td class="center">—</td>
+          <td><span class="visibility">🌐 Open</span></td>
+          <td class="sticky-right status-col"><span class="status active">ACTIVE</span></td>
+          <td class="sticky-right actions"><a>Edit</a><a>Clone</a><a>Archive</a></td>
+        </tr>
+        <tr class="row-active">
+          <td class="num-cell">21</td>
+          <td>
+            <div class="name-after">ID - xlWin - SOI - USD | DO NOT use these links, request from AM instead</div>
+            <span class="domain">🏪 id.kumpulan-voucher.com</span>
+          </td>
+          <td>xlWin Media</td>
+          <td class="payout">
+            <span class="pub">$0.08</span> <span class="sep">/</span> <span class="adv">$0.10</span>
+            <span class="pid-badge cpi">CPI</span>
+          </td>
+          <td class="center">9</td>
+          <td class="center">55.56%</td>
+          <td><span class="visibility">🔐 Approval</span></td>
+          <td class="sticky-right status-col"><span class="status active">ACTIVE</span></td>
+          <td class="sticky-right actions"><a>Edit</a><a>Clone</a><a>Archive</a></td>
+        </tr>
+        <tr class="row-paused">
+          <td class="num-cell">7</td>
+          <td>
+            <div class="name-after">World of Tanks [SOI, Premium] WW</div>
+            <span class="domain">🏪 worldoftanks.com</span>
+          </td>
+          <td>Admitad</td>
+          <td class="payout">
+            <span class="pub">$8.00</span> <span class="sep">/</span> <span class="adv">$10.00</span>
+            <span class="pid-badge cpl">CPL</span>
+          </td>
+          <td class="center">5</td>
+          <td class="center">20%</td>
+          <td><span class="visibility">🌐 Open</span></td>
+          <td class="sticky-right status-col"><span class="status paused">PAUSED</span></td>
+          <td class="sticky-right actions"><a>Edit</a><a>Clone</a><a>Archive</a></td>
+        </tr>
+      </tbody>
+    </table>
+    <button class="show-more">+ Show more columns (Vertical · Installs · EPC · Revenue)</button>
+  </div>
+</div>
+
+<!-- ─────────────── COLUMN COMPARISON ─────────────── -->
+<h2 id="cols">📊 Column-by-column comparison</h2>
+
+<div class="col-comparison">
+  <div class="col-card">
+    <h4>BEFORE — 14 columns (forces horizontal scroll)</h4>
+    <ul class="col-list">
+      <li>#</li>
+      <li>Campaign</li>
+      <li>Vertical <span class="tag hidden">→ hidden</span></li>
+      <li>Advertiser</li>
+      <li>Adv. Payout 🔒 <span class="tag merged">→ merged</span></li>
+      <li>Pub. Payout 📤 <span class="tag merged">→ merged</span></li>
+      <li>Clicks</li>
+      <li>Installs <span class="tag hidden">→ hidden</span></li>
+      <li>CR%</li>
+      <li>EPC <span class="tag hidden">→ hidden</span></li>
+      <li>Revenue <span class="tag hidden">→ hidden</span></li>
+      <li>Visibility</li>
+      <li>Status</li>
+      <li>Actions</li>
+    </ul>
+  </div>
+  <div class="col-card">
+    <h4>AFTER — 9 visible (4 toggleable behind "Show more")</h4>
+    <ul class="col-list">
+      <li># <span class="tag kept">kept</span></li>
+      <li>Campaign (wider, with domain underneath) <span class="tag kept">improved</span></li>
+      <li>Advertiser <span class="tag kept">kept</span></li>
+      <li>Payout (pub / adv + CPA/CPI/CPL badge) <span class="tag kept">merged 2→1</span></li>
+      <li>Clicks <span class="tag kept">kept</span></li>
+      <li>CR% <span class="tag kept">kept</span></li>
+      <li>Visibility <span class="tag kept">kept</span></li>
+      <li>Status — sticky right <span class="tag kept">sticky</span></li>
+      <li>Actions — sticky right <span class="tag kept">sticky</span></li>
+    </ul>
+    <p style="font-size: 10px; color: #94a3b8; margin: 10px 0 0">"Show more" toggle reveals: Vertical, Installs, EPC, Revenue</p>
+  </div>
+</div>
+
+<!-- ─────────────── THE 5 FIXES ─────────────── -->
+<h2 id="changes">🔧 The 5 specific changes</h2>
+
+<div class="change-list">
+  <ol>
+    <li><strong>Fix 1 — Drop 4 columns from default view.</strong> Vertical, Installs, EPC, Revenue hidden behind a "<code>+ Show more columns</code>" toggle. They're still accessible, just not always taking up screen width. Most of those columns were empty for most rows anyway.</li>
+
+    <li><strong>Fix 2 — Sticky right edge for Status + Actions.</strong> Even if Show More is on and the table goes wider than the viewport, the Status badge and Edit/Clone/Archive buttons stay pinned to the right. <code>position: sticky; right: 0</code> with a subtle box-shadow on the left edge so users can see they're pinned.</li>
+
+    <li><strong>Fix 3 — Merge Adv. Payout + Pub. Payout into one Payout column.</strong> Shown as <code>$0.70 / $1.00 CPA</code> — publisher payout in green (what we pay), advertiser payout in muted color (what we charge). The payout type (CPA/CPI/CPL) becomes a colored badge instead of inline text. Net effect: 2 columns → 1.</li>
+
+    <li><strong>Fix 4 — Wider Campaign name column with domain on second line.</strong> Currently long names like "ID - xlWin - SOI - USD | DO NOT use these links…" get truncated mid-warning. With more horizontal room AND the domain on a second line, the warning stays readable. <code>table-layout: fixed</code> + flex column width.</li>
+
+    <li><strong>Fix 5 — Color-coded row left borders by status.</strong> 3px solid left border per row: <strong style="color:#10b981">green</strong> = active, <strong style="color:#f59e0b">amber</strong> = paused, gray = archived. Scannable at a glance — you can see which campaigns are running without reading the Status column.</li>
+  </ol>
+</div>
+
+<!-- ─────────────── WHAT DOESN'T CHANGE ─────────────── -->
+<h2 id="not">⚙ What doesn't change</h2>
+
+<div class="panel">
+  <ul>
+    <li><strong>Backend untouched</strong> — no schema change, no query change, no API change. Same campaign rows, same data, just rendered differently.</li>
+    <li><strong>All 14 columns are still available</strong> — 4 of them are just behind the "Show more" toggle by default. Click it and they appear inline.</li>
+    <li><strong>Sorting / filtering behavior</strong> — unchanged. The existing channel / archived / featured filters at the top of the page work the same.</li>
+    <li><strong>The Pending Access Requests box</strong> at the top — unchanged.</li>
+    <li><strong>Numbering</strong> — # column still shows sequential 1..N descending (already deployed yesterday).</li>
+    <li><strong>URLs</strong> — clicking a campaign name still goes to <code>/campaigns/{id}</code>. Edit goes to <code>/campaigns/{id}/edit</code>. Same as today.</li>
+  </ul>
+</div>
+
+<!-- ─────────────── DECISION ─────────────── -->
+<h2 id="decide">✋ Your decision</h2>
+
+<div class="panel">
+  <p><strong>Reply with one of:</strong></p>
+  <ul>
+    <li><strong><code>ship</code></strong> — go ahead with all 5 fixes as previewed above. I make the changes to <code>Campaigns.jsx</code> locally, build the bundle, run smoke tests, ask for explicit deploy consent before pushing.</li>
+    <li><strong><code>ship only X</code></strong> — pick a subset (e.g. "<code>ship only 2, 3, 5</code>" for sticky right + merged payout + colored borders, skip the column-hide).</li>
+    <li><strong><code>change X</code></strong> — tell me what to adjust in the design before coding (e.g. "make the payout column wider", "use blue not green for active border", "show 9 columns by default not 8", etc.).</li>
+    <li><strong><code>hold</code></strong> — leave page as-is for now, revisit later.</li>
+  </ul>
+  <p style="margin-top: 14px; font-size: 12px; color: #94a3b8">
+    Estimated implementation: ~3-4 hours of code work + the usual local smoke + deploy cycle. Frontend-only change, zero backend risk. The platform stability hold from yesterday only blocks architecture-class changes (Postgres migration, uncaughtException handler) — this UI fix is not in that scope.
+  </p>
+</div>
+
+<p style="margin-top: 40px; font-size: 12px; color: #64748b; text-align: center">
+  Generated 2026-06-03 · static preview, no backend required · no login needed
+</p>
+
+</div>
+</body>
+</html>
