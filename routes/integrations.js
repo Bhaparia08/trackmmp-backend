@@ -1162,7 +1162,13 @@ router.post('/import', (req, res, next) => {
 
     for (const offer of offers) {
       const advName = batchAdvName || offer.advertiser_name || credAdvertiserName || platformFallback || null;
-      const destUrl = offer.tracking_url || null;   // tracking URL only — never fall back to preview
+      // destination_url has a NOT NULL constraint in the schema (default '').
+      // Use empty string when offer.tracking_url is missing so INSERT doesn't
+      // fail with "NOT NULL constraint failed: campaigns.destination_url".
+      // Operators can later fill the tracking URL via the campaign edit UI
+      // (this matters for SSP/lead-gen platforms like Zeydoo and Ojo7 that
+      // don't expose per-offer tracking links via API).
+      const destUrl = offer.tracking_url || '';   // empty string — never fall back to preview
       const prevUrl = offer.preview_url || null;
       const advPayout = offer.payout || 0;
 
