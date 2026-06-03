@@ -24,6 +24,15 @@ function getOwnerId(req) {
   return req.user.id;
 }
 
+// Single-tenant network: admins manage any campaign regardless of creator.
+// AMs only manage campaigns owned by their admin (resolved via getOwnerId).
+// `entity` may be a campaign row or a join row that exposes user_id.
+function canManage(req, entity, ownerId) {
+  if (!entity) return false;
+  if (req.user.role === 'admin') return true;
+  return entity.user_id === ownerId;
+}
+
 // Publisher: request access to a campaign
 router.post('/request/:campaign_id', (req, res, next) => {
   try {
@@ -93,7 +102,7 @@ router.get('/campaign/:campaign_id', requireRole('admin', 'account_manager'), (r
   try {
     const ownerId = getOwnerId(req);
     const campaign = db.prepare('SELECT id, user_id, visibility FROM campaigns WHERE id = ?').get(req.params.campaign_id);
-    if (!campaign || campaign.user_id !== ownerId) return res.status(404).json({ error: 'Campaign not found' });
+    if (!canManage(req, campaign, ownerId)) return res.status(404).json({ error: 'Campaign not found' });
 
     // All active publishers across the network, LEFT JOIN access requests so we
     // see everyone regardless of request status.  For open campaigns, access_status
@@ -120,7 +129,7 @@ router.post('/grant', requireRole('admin', 'account_manager'), (req, res, next) 
 
     const ownerId = getOwnerId(req);
     const campaign = db.prepare('SELECT id, user_id FROM campaigns WHERE id = ?').get(campaign_id);
-    if (!campaign || campaign.user_id !== ownerId) return res.status(404).json({ error: 'Campaign not found' });
+    if (!canManage(req, campaign, ownerId)) return res.status(404).json({ error: 'Campaign not found' });
 
     // Upsert: create if not exists, or update existing to approved
     const existing = db.prepare('SELECT id FROM campaign_access_requests WHERE campaign_id = ? AND publisher_id = ?')
@@ -145,7 +154,7 @@ router.put('/:id/revoke', requireRole('admin', 'account_manager'), (req, res, ne
   try {
     const ownerId = getOwnerId(req);
     const row = db.prepare('SELECT r.*, c.user_id FROM campaign_access_requests r JOIN campaigns c ON c.id = r.campaign_id WHERE r.id = ?').get(req.params.id);
-    if (!row || row.user_id !== ownerId) return res.status(404).json({ error: 'Not found' });
+    if (!canManage(req, row, ownerId)) return res.status(404).json({ error: 'Not found' });
     db.prepare("UPDATE campaign_access_requests SET status='rejected', reviewed_by=?, reviewed_at=unixepoch() WHERE id=?")
       .run(req.user.id, row.id);
     res.json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(row.id));
@@ -157,14 +166,15 @@ router.get('/requests', requireRole('admin', 'account_manager'), (req, res, next
   try {
     const ownerId = getOwnerId(req);
     const { status } = req.query;
+    const isAdmin = req.user.role === 'admin';
     let sql = `
       SELECT r.*, c.name AS campaign_name, p.name AS publisher_name, p.pub_token
       FROM campaign_access_requests r
       JOIN campaigns c ON c.id = r.campaign_id
       JOIN publishers p ON p.id = r.publisher_id
-      WHERE c.user_id = ?
+      WHERE ${isAdmin ? '1=1' : 'c.user_id = ?'}
     `;
-    const params = [ownerId];
+    const params = isAdmin ? [] : [ownerId];
     if (status) { sql += ' AND r.status = ?'; params.push(status); }
     sql += ' ORDER BY r.created_at DESC LIMIT 200';
     res.json(db.prepare(sql).all(...params));
@@ -176,7 +186,7 @@ router.put('/:id/approve', requireRole('admin', 'account_manager'), (req, res, n
   try {
     const ownerId = getOwnerId(req);
     const row = db.prepare('SELECT r.*, c.user_id FROM campaign_access_requests r JOIN campaigns c ON c.id = r.campaign_id WHERE r.id = ?').get(req.params.id);
-    if (!row || row.user_id !== ownerId) return res.status(404).json({ error: 'Not found' });
+    if (!canManage(req, row, ownerId)) return res.status(404).json({ error: 'Not found' });
     db.prepare("UPDATE campaign_access_requests SET status='approved', reviewed_by=?, reviewed_at=unixepoch() WHERE id=?")
       .run(req.user.id, row.id);
     res.json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(row.id));
@@ -188,7 +198,7 @@ router.put('/:id/reject', requireRole('admin', 'account_manager'), (req, res, ne
   try {
     const ownerId = getOwnerId(req);
     const row = db.prepare('SELECT r.*, c.user_id FROM campaign_access_requests r JOIN campaigns c ON c.id = r.campaign_id WHERE r.id = ?').get(req.params.id);
-    if (!row || row.user_id !== ownerId) return res.status(404).json({ error: 'Not found' });
+    if (!canManage(req, row, ownerId)) return res.status(404).json({ error: 'Not found' });
     db.prepare("UPDATE campaign_access_requests SET status='rejected', reviewed_by=?, reviewed_at=unixepoch() WHERE id=?")
       .run(req.user.id, row.id);
     res.json(db.prepare('SELECT * FROM campaign_access_requests WHERE id = ?').get(row.id));
@@ -209,7 +219,7 @@ router.post('/bulk', requireRole('admin', 'account_manager'), (req, res, next) =
     }
 
     const campaign = db.prepare('SELECT id, user_id FROM campaigns WHERE id = ?').get(campaign_id);
-    if (!campaign || campaign.user_id !== ownerId) return res.status(404).json({ error: 'Campaign not found' });
+    if (!canManage(req, campaign, ownerId)) return res.status(404).json({ error: 'Campaign not found' });
 
     const newStatus = (action === 'approve' || action === 'grant') ? 'approved' : 'rejected';
     let affected = 0;
