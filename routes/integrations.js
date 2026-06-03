@@ -813,8 +813,16 @@ async function fetchTrackier(cred) {
 }
 
 async function fetchAffise(cred) {
-  if (!cred?.api_key || !cred?.base_url) {
-    throw new Error('Affise requires API Key and API URL (base_url)');
+  if (!cred?.api_key) {
+    throw new Error('Affise requires API Key');
+  }
+  // base_url may be stored either at the top level (legacy) or in the `extra`
+  // JSON blob (current — buildExtra packs custom fields there). Hoist into the
+  // top-level cred so the connector class can read it uniformly.
+  const extra = cred.extra ? (typeof cred.extra === 'string' ? (() => { try { return JSON.parse(cred.extra); } catch { return {}; } })() : cred.extra) : {};
+  if (!cred.base_url && extra.base_url) cred.base_url = extra.base_url;
+  if (!cred.base_url) {
+    throw new Error('Affise requires API URL (base_url) — re-save the credential with API URL field filled in');
   }
   const Affise = require('../utils/connectors/affise');
   const rawOffers = await Affise.listOffers(cred);
