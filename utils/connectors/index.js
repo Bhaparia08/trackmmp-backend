@@ -18,6 +18,7 @@ const ClickDealer = require('./clickdealer');
 const CAKE        = require('./cake');
 const Ojo7        = require('./ojo7');
 const Zeydoo     = require('./zeydoo');
+const Mobidea    = require('./mobidea');
 const {
   AdjustConnector, BranchConnector, CityAdsConnector, RakutenConnector, CustomConnector,
 } = require('./stubs');
@@ -39,6 +40,7 @@ const connectors = {
   cake:        CAKE,
   ojo7:        Ojo7,
   zeydoo:      Zeydoo,
+  mobidea:     Mobidea,
   adjust:      AdjustConnector,
   branch:     BranchConnector,
   cityads:    CityAdsConnector,

@@ -216,6 +216,19 @@ function toOurMacros(url, platform, options = {}) {
       ['{sub1}',        '{sub1}'],
       ['{country}',     '{country}'],
     ],
+    mobidea: [
+      // Mobidea uses LITERAL placeholder strings, not curly-brace macros:
+      //   ADD_CLICK_ID_HERE      — our click_id passthrough (pub_click_id param)
+      //   ADD_PUBLISHER_ID_HERE  — our publisher token (pub_sub_id param)
+      ['ADD_CLICK_ID_HERE',      '{click_id}'],
+      ['ADD_PUBLISHER_ID_HERE',  '{pid}'],
+      // Also accept curly-brace forms in case Mobidea returns those in the future
+      ['{click_id}',             '{click_id}'],
+      ['{pub_click_id}',         '{click_id}'],
+      ['{pub_sub_id}',           '{pid}'],
+      ['{publisher_id}',         '{pid}'],
+      ['{sub_id}',               '{sub1}'],
+    ],
   };
 
   const pairs = maps[platform] || [];
@@ -241,6 +254,7 @@ function toOurMacros(url, platform, options = {}) {
       clickdealer: 's2={click_id}',           // CAKE convention
       cake:        's2={click_id}',           // CAKE convention (any CAKE-powered network)
       zeydoo:      'clickid={click_id}',      // DEFAULT — verify with Zeydoo AM / help.zeydoo.com
+      mobidea:     'pub_click_id={click_id}', // Mobidea's documented click-id parameter
     };
     const param = clickIdParams[platform];
     if (param) {
@@ -939,7 +953,35 @@ async function fetchZeydoo(cred) {
   });
 }
 
-const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx, trackier: fetchTrackier, affise: fetchAffise, clickdealer: fetchClickDealer, cake: fetchCAKE, zeydoo: fetchZeydoo };
+async function fetchMobidea(cred) {
+  if (!cred?.api_key) {
+    throw new Error('Mobidea requires API Key');
+  }
+  const Mobidea = require('../utils/connectors/mobidea');
+  const rawOffers = await Mobidea.listOffers(cred);
+  return rawOffers.map(raw => {
+    const norm = Mobidea.normalizeOffer(raw, cred);
+    const rawTracking = norm.tracking_url_template || '';
+    return {
+      external_id:       norm.source_offer_id,
+      name:              norm.name,
+      description:       norm.description || '',
+      payout:            norm.payout || 0,
+      payout_type:       norm.payout_type || 'cpa',
+      currency:          normCurrency(norm.payout_currency),
+      status:            norm.status === 'active' ? 'active' : 'paused',
+      tracking_url:      toOurMacros(rawTracking, 'mobidea'),
+      preview_url:       norm.preview_url || norm.destination_url || '',
+      allowed_countries: (norm.allowed_countries || []).join(','),
+      advertiser_name:   norm.advertiser_name || 'Mobidea',
+      categories:        norm.vertical || '',
+      approval_status:   norm.approval_status || 'unknown',
+      raw,
+    };
+  });
+}
+
+const ADAPTERS = { everflow: fetchEverflow, tune: fetchTune, appsflyer: fetchAppsFlyer, cityads: fetchCityAds, impact: fetchImpact, swaarm: fetchSwaarm, admitad: fetchAdmitad, insparx: fetchInsparx, trackier: fetchTrackier, affise: fetchAffise, clickdealer: fetchClickDealer, cake: fetchCAKE, zeydoo: fetchZeydoo, mobidea: fetchMobidea };
 
 /* ─── POST /api/integrations/fetch-offers ───────────────────────────────────── */
 router.post('/fetch-offers', async (req, res, next) => {
