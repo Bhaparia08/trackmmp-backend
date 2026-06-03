@@ -80,22 +80,34 @@ router.get('/check/:campaign_id', (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Admin: list ALL publishers with their access status for a specific campaign
+// Admin / AM: list ALL active publishers with their access status for a specific campaign.
+//
+// 2026-06-02 fix: single-tenant network model (matches Affise / Trackier convention).
+// Removed the legacy `p.user_id = ownerId` filter which was fragmenting publishers
+// across admin user_ids and causing the Publisher Access tab to render "No
+// publishers found" even when the network had 20+ active publishers. Campaign
+// ownership is still enforced (the 404 check above) so AMs only see campaigns
+// they manage; once they're on a campaign page, they see the full publisher
+// universe (which is correct — there's one set of publishers in the network).
 router.get('/campaign/:campaign_id', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
     const ownerId = getOwnerId(req);
     const campaign = db.prepare('SELECT id, user_id, visibility FROM campaigns WHERE id = ?').get(req.params.campaign_id);
     if (!campaign || campaign.user_id !== ownerId) return res.status(404).json({ error: 'Campaign not found' });
 
-    // All active publishers for this account, LEFT JOIN so we see everyone regardless of request status
+    // All active publishers across the network, LEFT JOIN access requests so we
+    // see everyone regardless of request status.  For open campaigns, access_status
+    // will be NULL for publishers who haven't explicitly requested (all of them can
+    // run it anyway).  For approval/private campaigns, the access_status field
+    // tells the operator which publishers are pending/approved/rejected.
     const rows = db.prepare(`
       SELECT p.id AS publisher_id, p.name AS publisher_name, p.pub_token, p.email,
              r.id, r.status AS access_status, r.created_at, r.reviewed_at
       FROM publishers p
       LEFT JOIN campaign_access_requests r ON r.campaign_id = ? AND r.publisher_id = p.id
-      WHERE p.user_id = ? AND p.status != 'deleted'
+      WHERE p.status != 'deleted'
       ORDER BY r.status ASC, p.name ASC
-    `).all(campaign.id, ownerId);
+    `).all(campaign.id);
     res.json(rows);
   } catch (err) { next(err); }
 });
