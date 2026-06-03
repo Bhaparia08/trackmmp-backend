@@ -20,7 +20,7 @@ const { Server } = require('socket.io');
 const { errorHandler } = require('./middleware/errorHandler');
 
 // Initialize DB (creates tables on first run)
-require('./db/init');
+const db = require('./db/init');
 
 const app = express();
 app.disable('x-powered-by');                          // suppress Express fingerprint
@@ -225,8 +225,17 @@ app.use('/sdk', express.static(path.join(__dirname, 'sdk'), {
   },
 }));
 
-// Health check
-app.get('/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
+// Readiness health check — returns 200 only when the DB actually answers.
+// Placed above the SPA catch-all (which is mounted later) and before
+// server.listen() so the catch-all cannot swallow it.
+app.get('/health', (req, res) => {
+  try {
+    db.prepare('SELECT 1').get();
+    res.status(200).json({ status: 'ok' });
+  } catch (e) {
+    res.status(503).json({ status: 'unavailable' });
+  }
+});
 
 // ── Automation Rules Engine — runs every 60 seconds ───────────────────────
 const { runAutomationRules } = require('./utils/automationEngine');
@@ -383,6 +392,30 @@ server.listen(PORT, () => {
     console.log(`Keep-alive pinging ${pingUrl} every 4 minutes`);
   }
 });
+
+// ── Graceful shutdown — drain in-flight requests before exiting ─────────────
+// On SIGTERM (Render's deploy/restart signal) or SIGINT (Ctrl-C), stop
+// accepting new connections, wait for in-flight requests to finish (up to
+// 25 s), checkpoint the SQLite WAL, then exit cleanly. Prevents half-killed
+// requests during deploys and reduces WAL bloat across restarts.
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received — shutting down gracefully`);
+  server.close(() => {
+    try {
+      io.close();
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      db.close();
+    } catch (e) { console.error('cleanup error', e); }
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 25000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('unhandledRejection', (err) => console.error('unhandledRejection', err));
 
 // deploy trigger Wed Apr 16 2026 — Publishers tab + campaign access routes
 // deploy trigger 2026-05-16T01:34:55Z — Phase 3a routes
