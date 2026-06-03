@@ -64,7 +64,11 @@ function baseUrl(creds) {
 }
 
 function buildUrl(creds, path) {
-  return `${baseUrl(creds)}${path}?api_key=${encodeURIComponent(creds.api_key)}`;
+  // Trim api_key defensively — Mobidea returns HTTP 400 (empty body, no
+  // error message) for keys with any leading/trailing whitespace or
+  // newline. Copy-paste from chat/email commonly brings these.
+  const key = String(creds.api_key || '').trim();
+  return `${baseUrl(creds)}${path}?api_key=${encodeURIComponent(key)}`;
 }
 
 // Defensive: accept both top-level array AND {ads:[...]} envelope.
@@ -142,17 +146,17 @@ class MobideaConnector extends BaseConnector {
   };
 
   static async authenticate(creds) {
-    if (!creds?.api_key) {
+    if (!creds?.api_key || !String(creds.api_key).trim()) {
       return { ok: false, error: 'Missing api_key' };
     }
     try {
-      // Cheap probe: /adsp typically returns a small list. If the key is bad
-      // Mobidea returns HTTP 401/403 with an error body.
       const r = await fetch(buildUrl(creds, '/adsp'), { timeout: 15_000 });
+      // Mobidea returns 400 with empty body for ANY invalid api_key
+      // (wrong, empty, with whitespace, with newline). Translate to
+      // a useful message instead of "HTTP 400".
+      if (r.status === 400) return { ok: false, error: 'Invalid api_key (HTTP 400 from Mobidea — check for typos, whitespace, or newlines in the saved credential)' };
       if (r.status === 401 || r.status === 403) return { ok: false, error: 'Invalid api_key' };
       if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
-      // 200 is success regardless of how many offers come back — even an
-      // empty array means the key is valid but no approvals yet.
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
@@ -160,11 +164,14 @@ class MobideaConnector extends BaseConnector {
   }
 
   static async listOffers(creds, _opts = {}) {
-    if (!creds?.api_key) return [];
+    if (!creds?.api_key || !String(creds.api_key).trim()) return [];
     // Primary: /adsp (approved offers with tracking URLs — the actionable set).
     // Mobidea returns the full list in one shot (no pagination needed per
     // their feed API design).
     const r = await fetch(buildUrl(creds, '/adsp'), { timeout: 30_000 });
+    if (r.status === 400) {
+      throw new Error('Mobidea /adsp HTTP 400 — likely invalid api_key. Delete the saved credential and re-paste your key (check for trailing whitespace or newlines).');
+    }
     if (!r.ok) throw new Error(`Mobidea /adsp HTTP ${r.status}`);
     const body = await r.json().catch(() => null);
     if (body == null) throw new Error('Mobidea /adsp returned non-JSON');
