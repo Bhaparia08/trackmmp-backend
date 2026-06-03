@@ -182,18 +182,53 @@ class ZeydooConnector extends BaseConnector {
 
   static async listOffers(creds, _opts = {}) {
     if (!creds?.api_key) return [];
-    const url = `${baseUrl(creds)}/get_my_offers/`;
-    const r = await fetch(url, { headers: authHeaders(creds), timeout: 30_000 });
-    if (!r.ok) throw new Error(`Zeydoo /get_my_offers/ HTTP ${r.status}`);
-    const body = await r.json().catch(() => null);
-    if (body == null) throw new Error('Zeydoo /get_my_offers/ returned non-JSON');
-    // Spec-drift defensive: OpenAPI doc says { offers: [...] } envelope, but
-    // the live API (verified 2026-06-02) returns a top-level array directly.
-    // Accept either shape so the connector keeps working if Zeydoo changes
-    // their mind later.
-    if (Array.isArray(body)) return body;
-    if (Array.isArray(body.offers)) return body.offers;
-    return [];
+    // Two-endpoint strategy (updated 2026-06-03):
+    //   /get_offers/    — OPEN marketplace catalog (no payout rates,
+    //                     but visible regardless of assignment status)
+    //   /get_my_offers/ — offers SPECIFICALLY ASSIGNED to the publisher
+    //                     (includes rates[] per geo when assigned)
+    //
+    // Previously the connector only called /get_my_offers/ — which is empty
+    // for publishers without explicitly-assigned offers, hiding all the
+    // open offers they could pick from. Now we fetch both in parallel and
+    // merge: assigned offers (with rates) win when present; open offers
+    // surface even without assignment so operators see the full catalog.
+    //
+    // Trade-off: offers visible only via /get_offers/ have payout=0 (no
+    // rates field). Operators see them but need to negotiate rates with
+    // the Zeydoo AM before promoting.
+    const base = baseUrl(creds);
+    const opts = { headers: authHeaders(creds), timeout: 30_000 };
+    const [openR, myR] = await Promise.all([
+      fetch(`${base}/get_offers/`, opts).catch(e => ({ ok: false, _err: e.message })),
+      fetch(`${base}/get_my_offers/`, opts).catch(e => ({ ok: false, _err: e.message })),
+    ]);
+    if (!openR.ok && !myR.ok) {
+      throw new Error(`Zeydoo both endpoints failed (open: ${openR._err || openR.status}, my: ${myR._err || myR.status})`);
+    }
+    // Parse defensively — Zeydoo's OpenAPI spec says envelope {offers:[...]}
+    // but live API (verified 2026-06-02) returns top-level array. Accept both.
+    const parseList = async (r) => {
+      if (!r || !r.ok) return [];
+      const body = await r.json().catch(() => null);
+      if (body == null) return [];
+      if (Array.isArray(body)) return body;
+      if (Array.isArray(body.offers)) return body.offers;
+      return [];
+    };
+    const [openOffers, myOffers] = await Promise.all([parseList(openR), parseList(myR)]);
+    // Index assigned offers by id — they have rates[], so they take priority.
+    const myMap = new Map(myOffers.map(o => [String(o.id), o]));
+    // Start from the open catalog so operators see ALL pickable offers;
+    // replace any open offer with its assigned counterpart (has rates).
+    const merged = openOffers.map(o => myMap.get(String(o.id)) || o);
+    // Add any assigned offers that weren't in the open catalog (unusual but
+    // safe — preserves the strict /get_my_offers/ behavior as a subset).
+    const openIds = new Set(openOffers.map(o => String(o.id)));
+    for (const o of myOffers) {
+      if (!openIds.has(String(o.id))) merged.push(o);
+    }
+    return merged;
   }
 
   // Single-offer GET isn't in the spec. Return null so the orchestrator falls
