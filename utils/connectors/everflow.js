@@ -43,14 +43,27 @@ class EverflowConnector extends BaseConnector {
 
   static async listOffers(creds, _opts = {}) {
     if (!creds?.api_key || !creds?.network_id) return [];
-    const url = `${BASE}/networks/${creds.network_id}/offerstable?page=1&page_size=200&filters[offer_status]=active`;
-    const r = await fetch(url, {
-      headers: { 'X-Eflow-API-Key': creds.api_key, 'Accept': 'application/json' },
-      timeout: 30000,
-    });
-    if (!r.ok) throw new Error(`Everflow listOffers HTTP ${r.status}`);
-    const data = await r.json();
-    return Array.isArray(data?.offers) ? data.offers : (Array.isArray(data?.data) ? data.data : []);
+    // Pagination loop (added 2026-06-03): previously fetched page 1 only,
+    // silently truncating catalogs >200 offers. Loop breaks naturally when
+    // a page returns < PAGE_SIZE rows (final page). MAX_PAGES is a safety
+    // cap for runaway scenarios (50 pages × 200 = 10k offers).
+    const PAGE_SIZE = 200;
+    const MAX_PAGES = 50;
+    const all = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const url = `${BASE}/networks/${creds.network_id}/offerstable?page=${page}&page_size=${PAGE_SIZE}&filters[offer_status]=active`;
+      const r = await fetch(url, {
+        headers: { 'X-Eflow-API-Key': creds.api_key, 'Accept': 'application/json' },
+        timeout: 30000,
+      });
+      if (!r.ok) throw new Error(`Everflow listOffers HTTP ${r.status} (page ${page})`);
+      const data = await r.json();
+      const batch = Array.isArray(data?.offers) ? data.offers : (Array.isArray(data?.data) ? data.data : []);
+      all.push(...batch);
+      if (batch.length < PAGE_SIZE) break;
+      await new Promise(r => setTimeout(r, 250));
+    }
+    return all;
   }
 
   static async getOffer(creds, externalId) {

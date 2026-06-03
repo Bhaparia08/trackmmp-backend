@@ -45,14 +45,26 @@ class TuneConnector extends BaseConnector {
     if (!creds?.api_key || !creds?.network_id) return [];
     const fields = ['id','name','status','description','preview_url','default_payout','payout_type','revenue','currency','expiration_date','default_goal_name'];
     const fieldQs = fields.map(f => `fields[]=${f}`).join('&');
-    const url = `${this.endpoint(creds)}?NetworkId=${creds.network_id}&Target=Offer&Method=findAll&filters[status]=active&limit=500&${fieldQs}&api_key=${encodeURIComponent(creds.api_key)}`;
-    const r = await fetch(url, { timeout: 30000 });
-    if (!r.ok) throw new Error(`TUNE listOffers HTTP ${r.status}`);
-    const j = await r.json();
-    if (j?.response?.status !== 1) return [];
-    const data = j.response.data || {};
-    // TUNE returns an object keyed by offer id — convert to array
-    return Object.values(data).map(row => row.Offer || row).filter(Boolean);
+    // Pagination loop (added 2026-06-03): previously single-page limit=500,
+    // silently truncating large catalogs. TUNE uses `page=N` (1-indexed).
+    // TUNE returns data as an OBJECT keyed by offer ID, not an array —
+    // hence the Object.values flip. Loop breaks when batch < LIMIT.
+    const LIMIT = 500;
+    const MAX_PAGES = 50;
+    const all = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const url = `${this.endpoint(creds)}?NetworkId=${creds.network_id}&Target=Offer&Method=findAll&filters[status]=active&limit=${LIMIT}&page=${page}&${fieldQs}&api_key=${encodeURIComponent(creds.api_key)}`;
+      const r = await fetch(url, { timeout: 30000 });
+      if (!r.ok) throw new Error(`TUNE listOffers HTTP ${r.status} (page ${page})`);
+      const j = await r.json();
+      if (j?.response?.status !== 1) break;
+      const data = j.response.data || {};
+      const batch = Object.values(data).map(row => row.Offer || row).filter(Boolean);
+      all.push(...batch);
+      if (batch.length < LIMIT) break;
+      await new Promise(r => setTimeout(r, 250));
+    }
+    return all;
   }
 
   static async getOffer(creds, externalId) {

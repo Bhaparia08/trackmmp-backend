@@ -47,14 +47,31 @@ class ImpactConnector extends BaseConnector {
 
   static async listOffers(creds, _opts = {}) {
     if (!(creds.network_id || creds.account_sid)) return [];
-    const url = `${this.endpoint(creds)}/Campaigns?PageSize=200`;
-    const r = await fetch(url, {
-      headers: { 'Authorization': basicAuth(creds), 'Accept': 'application/json' },
-      timeout: 30000,
-    });
-    if (!r.ok) throw new Error(`Impact listOffers HTTP ${r.status}`);
-    const j = await r.json();
-    return Array.isArray(j?.Campaigns) ? j.Campaigns : [];
+    // Pagination loop (added 2026-06-03): previously fetched page 1 only,
+    // silently truncating catalogs >200 campaigns. Impact uses @nextPageUri
+    // (a relative path) as its documented pagination signal — follow it
+    // until null. MAX_PAGES is a safety cap (50 pages × 200 = 10k).
+    const MAX_PAGES = 50;
+    const all = [];
+    let nextPath = '/Campaigns?PageSize=200';
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      if (!nextPath) break;
+      // nextPath may be absolute (Impact returns full URLs sometimes) or
+      // relative — handle both.
+      const url = nextPath.startsWith('http') ? nextPath : `${this.endpoint(creds)}${nextPath}`;
+      const r = await fetch(url, {
+        headers: { 'Authorization': basicAuth(creds), 'Accept': 'application/json' },
+        timeout: 30000,
+      });
+      if (!r.ok) throw new Error(`Impact listOffers HTTP ${r.status} (page ${page})`);
+      const j = await r.json();
+      const batch = Array.isArray(j?.Campaigns) ? j.Campaigns : [];
+      all.push(...batch);
+      nextPath = j['@nextPageUri'] || null;
+      if (batch.length === 0) break;
+      if (nextPath) await new Promise(r => setTimeout(r, 250));
+    }
+    return all;
   }
 
   static async getOffer(creds, externalId) {
