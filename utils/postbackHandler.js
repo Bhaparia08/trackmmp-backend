@@ -12,6 +12,38 @@ function logFraud(click, type, details, action = 'flagged') {
   } catch {}
 }
 
+// Affise / Trackier convention: default the postback event based on campaign payout type.
+// Until 2026-06-04 the handler always defaulted to 'install' — that misclassified CPL/CPS
+// campaigns whose advertisers forgot to add &event= to their postback URL.
+function defaultEventForPayoutType(payoutType) {
+  switch ((payoutType || '').toLowerCase()) {
+    case 'cpi': return 'install';
+    case 'cpa': return 'install';   // CPA = install anchor + N post-install events with explicit event names
+    case 'cpl': return 'lead';
+    case 'cps': return 'purchase';
+    case 'cpc': return null;         // CPC pays on click — no postback expected
+    default:    return 'install';    // safe fallback (current behaviour)
+  }
+}
+
+// Mobile-campaign detection — used to gate the install-first attribution rule.
+// A campaign is mobile when any of the following signals matches:
+//   1. allowed_devices is ios / android / mobile
+//   2. preview_url / destination_url points to an app store or MMP click tracker
+//   3. an app row is linked (apps.platform = ios|android)
+function isMobileCampaign(campaign) {
+  if (!campaign) return false;
+  const dev = (campaign.allowed_devices || '').toLowerCase();
+  if (dev === 'ios' || dev === 'android' || dev === 'mobile') return true;
+  const urls = [campaign.preview_url, campaign.destination_url].filter(Boolean);
+  for (const u of urls) {
+    if (/apps\.apple\.com|itunes\.apple\.com|play\.google\.com/i.test(u)) return true;
+    if (/app\.appsflyer\.com|app\.adjust\.com|app\.link|kochava\.com|singular\.net/i.test(u)) return true;
+  }
+  if (campaign.app_id) return true;
+  return false;
+}
+
 /**
  * Core postback attribution logic.
  * Accepts normalised params (all ad-network aliases already resolved by the caller).
@@ -51,7 +83,12 @@ function handlePostback(params, ip, io) {
     security_token,
   } = params;
 
-  const eventType = event || 'install';
+  // Capture whether advertiser sent an explicit event= parameter — if not, we
+  // re-resolve the default after the campaign loads (so CPL/CPS don't get
+  // misclassified as installs). Early reject paths below still need a value,
+  // so seed with 'install' until we know the campaign type.
+  const explicitEvent = event;
+  let eventType = event || 'install';
   // Resolve GAID: support Everflow's google_aid / google_advertiser_id alongside standard names
   const deviceId  = advertising_id || gps_adid || gaid || google_aid || google_advertiser_id || idfa || null;
   // Resolve revenue/payout: support Everflow's amount/sale_amount/payout_amount aliases
@@ -181,6 +218,18 @@ function handlePostback(params, ip, io) {
   }
 
   const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(click.campaign_id);
+
+  // ── Smart event-type default (post-campaign-load) ──────────────────────────
+  // If the advertiser didn't pass an explicit event= parameter, infer it from
+  // the campaign's payout_type rather than always defaulting to 'install'.
+  // This is the Affise / Trackier convention:
+  //   CPI → install         CPL → lead
+  //   CPA → install (+ post-install events fire with their own explicit event names)
+  //   CPS → purchase        CPC → no postback expected
+  if (!explicitEvent && campaign) {
+    const inferred = defaultEventForPayoutType(campaign.payout_type);
+    if (inferred) eventType = inferred;
+  }
 
   // ── Lookback check ─────────────────────────────────────────────────────────
   const lookbackSecs = (campaign?.click_lookback_days || 7) * 86400;
