@@ -438,6 +438,88 @@ router.post('/create-admin', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/admin/test-pub-postback — fire a test publisher postback on demand
+//
+// This is the reusable test-system harness for verifying publisher integrations
+// (Galaksion, Mobupps, anyone). Doesn't modify the publisher record — uses an
+// override URL just for this fire.
+//
+// Body:
+//   publisher_id    (required)  — the publisher whose context we borrow
+//   click_id        (optional)  — specific click to use; otherwise picks publisher's most recent
+//   override_url    (optional)  — fire this URL instead of publisher's saved global_postback_url
+//   event           (optional)  — install | lead | purchase | custom (default: install)
+//   payout          (optional)  — payout value to send (default: 1.00)
+//   event_name      (optional)  — for custom events
+//
+// Returns { fired_url, status, response_body, response_time_ms, click_used }
+router.post('/test-pub-postback', requireAdmin, async (req, res, next) => {
+  try {
+    const { publisher_id, click_id: reqClickId, override_url, event = 'install', payout = '1.00', event_name } = req.body || {};
+    if (!publisher_id) return res.status(400).json({ error: 'publisher_id required' });
+
+    // Pick a click — caller-specified or the publisher's most recent
+    const click = reqClickId
+      ? db.prepare('SELECT * FROM clicks WHERE click_id = ?').get(reqClickId)
+      : db.prepare('SELECT * FROM clicks WHERE publisher_id = ? ORDER BY created_at DESC LIMIT 1').get(publisher_id);
+    if (!click) return res.status(404).json({ error: 'No click found for this publisher (or specified click_id)' });
+
+    // Resolve URL — caller override wins; otherwise saved global_postback_url
+    let url = (override_url || '').trim();
+    if (!url) {
+      const pub = db.prepare('SELECT global_postback_url FROM publishers WHERE id = ?').get(publisher_id);
+      url = (pub?.global_postback_url || '').trim();
+    }
+    if (!url) return res.status(400).json({ error: 'No postback URL provided (override_url empty + publisher has no saved global_postback_url)' });
+
+    const campaign = click.campaign_id ? db.prepare('SELECT id, name FROM campaigns WHERE id = ?').get(click.campaign_id) : null;
+    const { macroReplace } = require('../utils/macroReplace');
+    const macroData = {
+      click_id: click.click_id,
+      publisher_click_id: click.publisher_click_id,
+      payout: String(payout),
+      revenue: String(payout),
+      currency: 'USD',
+      event_name: event_name || event,
+      campaign_name: campaign?.name,
+      campaign_id: campaign?.id,
+      af_c_id: click.af_c_id,
+      af_siteid: click.af_siteid,
+      af_sub1: click.af_sub1, af_sub2: click.af_sub2, af_sub3: click.af_sub3,
+      advertising_id: click.advertising_id,
+      gps_adid: click.advertising_id,
+      idfa: click.idfa,
+      country: click.country,
+      ip: click.ip,
+      goal_name: event_name || event,
+      status: 'attributed',
+      install_unix_ts: Math.floor(Date.now()/1000),
+    };
+    const firedUrl = macroReplace(url, macroData);
+
+    // Fire synchronously so the caller sees the response
+    const fetch = require('node-fetch');
+    const start = Date.now();
+    let status = null, body = '', error = null;
+    try {
+      const resp = await fetch(firedUrl, { method: 'GET', timeout: 10000, headers: { 'User-Agent': 'TrackMMP-TestPostback/1.0' } });
+      status = resp.status;
+      body = (await resp.text()).slice(0, 1000);
+    } catch (e) { error = e.message; }
+
+    res.json({
+      ok: !error && status >= 200 && status < 400,
+      publisher_id,
+      click_used: { click_id: click.click_id, campaign_id: click.campaign_id, created_at: click.created_at },
+      fired_url: firedUrl,
+      status,
+      response_body: body,
+      response_time_ms: Date.now() - start,
+      error,
+    });
+  } catch (err) { next(err); }
+});
+
 // GET /api/admin/stats  — platform-wide overview
 router.get('/stats', requireAdmin, (req, res) => {
   const advertisers = db.prepare("SELECT COUNT(*) as n FROM users WHERE role = 'advertiser'").get().n;
