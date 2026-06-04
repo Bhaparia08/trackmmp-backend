@@ -1062,6 +1062,12 @@ const migrations = [
   // echo it back via the {gpp} macro on postback — no parsing on this end.
   // Publishers parse on their side using the IAB GPP encoder/decoder.
   `ALTER TABLE clicks ADD COLUMN gpp_string TEXT`,
+
+  // Smart links can be auto-populated from an inventory's approved campaigns.
+  // When inventory_id is set, the populator endpoint refreshes smart_link_rules
+  // from campaign_inventory_approvals for that inventory.
+  `ALTER TABLE smart_links ADD COLUMN inventory_id INTEGER REFERENCES owned_inventory(id) ON DELETE SET NULL`,
+  `ALTER TABLE smart_links ADD COLUMN rules_regenerated_at INTEGER`,
 ];
 
 const IGNORABLE = [
@@ -1367,6 +1373,37 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
       db.prepare("INSERT INTO migrations (name) VALUES ('create_leelam_admin_v1')").run();
     } catch (e) {
       console.error('[migration] create_leelam_admin_v1 failed:', e.message);
+    }
+  }
+}
+
+// ── Migration: create priya.t@apogeemobi.com as admin ────────────────────────
+// Mirrors create_leelam_admin_v1. Creates the account if missing with the temp
+// password "Welcome@2026" (forced change on first login expected). If the
+// account exists, ensures role = admin and status = active.
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'create_priya_admin_v1'").get();
+  if (!done) {
+    try {
+      const bcrypt = require('bcrypt');
+      const existing = db.prepare("SELECT id FROM users WHERE email = 'priya.t@apogeemobi.com'").get();
+      if (!existing) {
+        const hash  = bcrypt.hashSync('Welcome@2026', 12);
+        const token = nanoid20hex();
+        const maxSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
+        db.prepare(
+          `INSERT INTO users (email, password, name, role, status, email_verified, postback_token, seq_num)
+           VALUES (?, ?, 'Priya T', 'admin', 'active', 1, ?, ?)`
+        ).run('priya.t@apogeemobi.com', hash, token, maxSeq);
+        console.log('[migration] create_priya_admin_v1: priya.t@apogeemobi.com created as admin (temp pwd Welcome@2026)');
+      } else {
+        db.prepare("UPDATE users SET role = 'admin', status = 'active' WHERE email = 'priya.t@apogeemobi.com'").run();
+        console.log('[migration] create_priya_admin_v1: priya.t@apogeemobi.com role set to admin');
+      }
+      db.prepare("INSERT INTO migrations (name) VALUES ('create_priya_admin_v1')").run();
+    } catch (e) {
+      console.error('[migration] create_priya_admin_v1 failed:', e.message);
     }
   }
 }

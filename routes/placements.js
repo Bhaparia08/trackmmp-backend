@@ -24,6 +24,10 @@ function getOwnerId(req) {
   return req.user.id;
 }
 
+// Single-tenant network: admins see/edit every placement regardless of which
+// admin user_id created it. Non-admins stay scoped to their owner.
+const isAdmin = (req) => req.user.role === 'admin';
+
 const VALID_TYPES   = ['comparison_table', 'offer_card', 'cta', 'banner', 'interstitial'];
 const VALID_FORMATS = ['html', 'json', 'image_link'];
 const SLUG_RE       = /^[a-z0-9][a-z0-9_-]{0,63}$/;
@@ -70,8 +74,9 @@ function checkSlugUniqueForPublisher(slug, publisherId, excludeId = null) {
 
 router.get('/', (req, res) => {
   const ownerId = getOwnerId(req);
-  const conditions = ['p.user_id = ?', "p.status != 'deleted'"];
-  const params = [ownerId];
+  const conditions = ["p.status != 'deleted'"];
+  const params = [];
+  if (!isAdmin(req)) { conditions.push('p.user_id = ?'); params.push(ownerId); }
 
   if (req.query.inventory_id)   { conditions.push('p.inventory_id = ?');   params.push(Number(req.query.inventory_id)); }
   if (req.query.status)         { conditions.push('p.status = ?');         params.push(req.query.status); }
@@ -121,7 +126,9 @@ router.post('/', (req, res, next) => {
     }
 
     const ownerId = getOwnerId(req);
-    const inv = db.prepare("SELECT id, publisher_id FROM owned_inventory WHERE id = ? AND user_id = ? AND status != 'deleted'").get(inventory_id, ownerId);
+    const inv = isAdmin(req)
+      ? db.prepare("SELECT id, publisher_id FROM owned_inventory WHERE id = ? AND status != 'deleted'").get(inventory_id)
+      : db.prepare("SELECT id, publisher_id FROM owned_inventory WHERE id = ? AND user_id = ? AND status != 'deleted'").get(inventory_id, ownerId);
     if (!inv) return res.status(404).json({ error: 'Inventory not found' });
 
     // Publisher-scoped slug uniqueness check. The /api/v1/serve endpoint
@@ -155,14 +162,23 @@ router.post('/', (req, res, next) => {
 
 router.get('/:id', (req, res) => {
   const ownerId = getOwnerId(req);
-  const row = db.prepare(`
-    SELECT p.*,
-           i.name AS inventory_name, i.vertical AS inventory_vertical,
-           i.geo AS inventory_geo, i.type AS inventory_type
-    FROM placements p
-    LEFT JOIN owned_inventory i ON i.id = p.inventory_id
-    WHERE p.id = ? AND p.user_id = ?
-  `).get(req.params.id, ownerId);
+  const row = isAdmin(req)
+    ? db.prepare(`
+        SELECT p.*,
+               i.name AS inventory_name, i.vertical AS inventory_vertical,
+               i.geo AS inventory_geo, i.type AS inventory_type
+        FROM placements p
+        LEFT JOIN owned_inventory i ON i.id = p.inventory_id
+        WHERE p.id = ?
+      `).get(req.params.id)
+    : db.prepare(`
+        SELECT p.*,
+               i.name AS inventory_name, i.vertical AS inventory_vertical,
+               i.geo AS inventory_geo, i.type AS inventory_type
+        FROM placements p
+        LEFT JOIN owned_inventory i ON i.id = p.inventory_id
+        WHERE p.id = ? AND p.user_id = ?
+      `).get(req.params.id, ownerId);
   if (!row) return res.status(404).json({ error: 'Placement not found' });
   res.json(row);
 });
@@ -170,7 +186,9 @@ router.get('/:id', (req, res) => {
 router.put('/:id', (req, res, next) => {
   try {
     const ownerId = getOwnerId(req);
-    const row = db.prepare('SELECT * FROM placements WHERE id = ? AND user_id = ?').get(req.params.id, ownerId);
+    const row = isAdmin(req)
+      ? db.prepare('SELECT * FROM placements WHERE id = ?').get(req.params.id)
+      : db.prepare('SELECT * FROM placements WHERE id = ? AND user_id = ?').get(req.params.id, ownerId);
     if (!row) return res.status(404).json({ error: 'Placement not found' });
 
     const b = req.body;
@@ -246,7 +264,9 @@ router.put('/:id', (req, res, next) => {
 router.delete('/:id', (req, res, next) => {
   try {
     const ownerId = getOwnerId(req);
-    const row = db.prepare('SELECT * FROM placements WHERE id = ? AND user_id = ?').get(req.params.id, ownerId);
+    const row = isAdmin(req)
+      ? db.prepare('SELECT * FROM placements WHERE id = ?').get(req.params.id)
+      : db.prepare('SELECT * FROM placements WHERE id = ? AND user_id = ?').get(req.params.id, ownerId);
     if (!row) return res.status(404).json({ error: 'Placement not found' });
     db.prepare("UPDATE placements SET status='deleted', updated_at=unixepoch() WHERE id = ?").run(row.id);
     audit.log(req, 'delete', 'placement', row.id, row.name);

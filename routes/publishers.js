@@ -16,6 +16,10 @@ function getOwnerId(req) {
   return req.user.id;
 }
 
+// Single-tenant network: admins see/edit every publisher regardless of which
+// admin user_id created it. AMs and other roles stay scoped to their owner.
+const isAdmin = (req) => req.user.role === 'admin';
+
 router.get('/', (req, res) => {
   const ownerId = getOwnerId(req);
 
@@ -34,6 +38,14 @@ router.get('/', (req, res) => {
         )
       GROUP BY p.id ORDER BY p.created_at DESC
     `).all(am.id);
+  } else if (isAdmin(req)) {
+    // Admins see every publisher in the network
+    rows = db.prepare(`
+      SELECT p.*, COUNT(c.id) AS click_count
+      FROM publishers p
+      LEFT JOIN clicks c ON c.publisher_id = p.id
+      WHERE p.status != 'deleted' GROUP BY p.id ORDER BY p.created_at DESC
+    `).all();
   } else {
     rows = db.prepare(`
       SELECT p.*, COUNT(c.id) AS click_count
@@ -81,14 +93,18 @@ router.post('/', requireRole('admin', 'account_manager'), (req, res, next) => {
 });
 
 router.get('/:id', (req, res) => {
-  const p = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  const p = isAdmin(req)
+    ? db.prepare('SELECT * FROM publishers WHERE id = ?').get(req.params.id)
+    : db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!p) return res.status(404).json({ error: 'Publisher not found' });
   res.json(p);
 });
 
 router.put('/:id', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
-    const p = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const p = isAdmin(req)
+      ? db.prepare('SELECT * FROM publishers WHERE id = ?').get(req.params.id)
+      : db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!p) return res.status(404).json({ error: 'Publisher not found' });
     const body = req.body;
     // FIX #6: explicit field resolution so empty string correctly clears a field
@@ -110,7 +126,9 @@ router.put('/:id', requireRole('admin', 'account_manager'), (req, res, next) => 
 
 router.delete('/:id', requireRole('admin', 'account_manager'), (req, res, next) => {
   try {
-    const p = db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const p = isAdmin(req)
+      ? db.prepare('SELECT * FROM publishers WHERE id = ?').get(req.params.id)
+      : db.prepare('SELECT * FROM publishers WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!p) return res.status(404).json({ error: 'Publisher not found' });
     // FIX #3: soft-delete — preserve click history, just hide from UI
     db.prepare("UPDATE publishers SET status='deleted' WHERE id = ?").run(p.id);

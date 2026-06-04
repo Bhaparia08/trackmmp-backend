@@ -11,6 +11,10 @@ const { nanoid10 } = require('../utils/clickId');
 const router = express.Router();
 router.use(requireAuth);
 
+// Single-tenant network: admins see/edit every row regardless of which admin
+// user_id created it. Non-admins stay scoped to their own user_id.
+const isAdmin = (req) => req.user.role === 'admin';
+
 // OneLink helper: resolve the public link host. In dev the API is :3001, in
 // prod it's the configured tracking domain.
 function trackingDomain(req) {
@@ -201,10 +205,10 @@ router.get('/payouts', (req, res) => {
     FROM publishers p
     LEFT JOIN clicks cl ON cl.publisher_id = p.id
     LEFT JOIN postbacks pb ON pb.click_id = cl.click_id ${dateFilter}
-    WHERE p.user_id = ?
+    WHERE ${isAdmin(req) ? '1=1' : 'p.user_id = ?'}
     GROUP BY p.id
     ORDER BY total_earned DESC
-  `).all(...params, req.user.id);
+  `).all(...params, ...(isAdmin(req) ? [] : [req.user.id]));
 
   // Top campaign per publisher
   const result = rows.map(pub => {
@@ -228,8 +232,8 @@ router.get('/payouts', (req, res) => {
 // All goals across all campaigns with performance stats
 // ─────────────────────────────────────────────
 router.get('/goals', (req, res) => {
-  let userClause = 'cg.user_id = ?';
-  const params = [req.user.id];
+  const userClause = isAdmin(req) ? '1=1' : 'cg.user_id = ?';
+  const params = isAdmin(req) ? [] : [req.user.id];
 
   const goals = db.prepare(`
     SELECT cg.*,
@@ -265,18 +269,22 @@ router.post('/goals', (req, res, next) => {
 // PUT goal
 router.put('/goals/:id', (req, res, next) => {
   try {
-    const existing = db.prepare('SELECT * FROM campaign_goals WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
+    const existing = isAdmin(req)
+      ? db.prepare('SELECT * FROM campaign_goals WHERE id=?').get(req.params.id)
+      : db.prepare('SELECT * FROM campaign_goals WHERE id=? AND user_id=?').get(req.params.id, req.user.id);
     if (!existing) return res.status(404).json({ error: 'Goal not found' });
     const { name, event_name, payout, revenue, payout_type, postback_url, is_default, status } = req.body;
+    const whereOwner = isAdmin(req) ? '' : ' AND user_id=?';
+    const ownerParams = isAdmin(req) ? [] : [req.user.id];
     db.prepare(`UPDATE campaign_goals SET
       name=COALESCE(?,name), event_name=COALESCE(?,event_name),
       payout=COALESCE(?,payout), revenue=COALESCE(?,revenue),
       payout_type=COALESCE(?,payout_type), postback_url=COALESCE(?,postback_url),
       is_default=COALESCE(?,is_default), status=COALESCE(?,status)
-      WHERE id=? AND user_id=?`)
+      WHERE id=?${whereOwner}`)
       .run(name||null, event_name||null, payout??null, revenue??null,
            payout_type||null, postback_url||null, is_default??null, status||null,
-           req.params.id, req.user.id);
+           req.params.id, ...ownerParams);
     res.json(db.prepare('SELECT * FROM campaign_goals WHERE id=?').get(req.params.id));
   } catch(err) { next(err); }
 });
@@ -284,7 +292,11 @@ router.put('/goals/:id', (req, res, next) => {
 // DELETE goal
 router.delete('/goals/:id', (req, res, next) => {
   try {
-    db.prepare('DELETE FROM campaign_goals WHERE id=? AND user_id=?').run(req.params.id, req.user.id);
+    if (isAdmin(req)) {
+      db.prepare('DELETE FROM campaign_goals WHERE id=?').run(req.params.id);
+    } else {
+      db.prepare('DELETE FROM campaign_goals WHERE id=? AND user_id=?').run(req.params.id, req.user.id);
+    }
     res.json({ success: true });
   } catch(err) { next(err); }
 });
@@ -344,9 +356,9 @@ router.get('/bulk/publishers', (req, res) => {
     FROM publishers p
     LEFT JOIN clicks cl ON cl.publisher_id = p.id
     LEFT JOIN postbacks pb ON pb.click_id = cl.click_id
-    WHERE p.user_id = ?
+    WHERE ${isAdmin(req) ? '1=1' : 'p.user_id = ?'}
     GROUP BY p.id ORDER BY p.created_at DESC
-  `).all(req.user.id);
+  `).all(...(isAdmin(req) ? [] : [req.user.id]));
   res.json(rows);
 });
 
@@ -483,12 +495,19 @@ router.get('/ltv', (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/onelinks', async (req, res, next) => {
   try {
-    const rows = db.prepare(
-      `SELECT id, name, slug, ios_store_url, android_store_url, web_fallback_url,
-              ios_deep_link, android_deep_link, total_clicks, status, expires_at,
-              created_at, updated_at
-       FROM onelinks WHERE user_id = ? ORDER BY created_at DESC`
-    ).all(req.user.id);
+    const rows = isAdmin(req)
+      ? db.prepare(
+          `SELECT id, name, slug, ios_store_url, android_store_url, web_fallback_url,
+                  ios_deep_link, android_deep_link, total_clicks, status, expires_at,
+                  created_at, updated_at
+           FROM onelinks ORDER BY created_at DESC`
+        ).all()
+      : db.prepare(
+          `SELECT id, name, slug, ios_store_url, android_store_url, web_fallback_url,
+                  ios_deep_link, android_deep_link, total_clicks, status, expires_at,
+                  created_at, updated_at
+           FROM onelinks WHERE user_id = ? ORDER BY created_at DESC`
+        ).all(req.user.id);
     const withQr = req.query.with_qr === '1';
     const decorated = await Promise.all(rows.map(r => decorateOnelink(r, req, { withQr })));
     res.json(decorated);
@@ -527,7 +546,8 @@ router.post('/onelinks', async (req, res, next) => {
 router.put('/onelinks/:id', (req, res, next) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const ol = db.prepare('SELECT * FROM onelinks WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    // All admins can edit any onelink in the single-tenant network
+    const ol = db.prepare('SELECT * FROM onelinks WHERE id = ?').get(req.params.id);
     if (!ol) return res.status(404).json({ error: 'Not found' });
     const f = req.body || {};
     db.prepare(
@@ -553,7 +573,8 @@ router.put('/onelinks/:id', (req, res, next) => {
 router.delete('/onelinks/:id', (req, res, next) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const ol = db.prepare('SELECT * FROM onelinks WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    // All admins can archive any onelink in the single-tenant network
+    const ol = db.prepare('SELECT * FROM onelinks WHERE id = ?').get(req.params.id);
     if (!ol) return res.status(404).json({ error: 'Not found' });
     db.prepare("UPDATE onelinks SET status = 'archived', updated_at = unixepoch() WHERE id = ?").run(ol.id);
     res.json({ success: true });

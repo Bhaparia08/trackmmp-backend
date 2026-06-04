@@ -450,6 +450,12 @@ router.get('/me', requireAuth, (req, res) => {
     LEFT JOIN account_managers am ON am.id = u.account_manager_id
     WHERE u.id = ?`).get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
+  // Invoice visibility flag — drives the sidebar and any inline UI checks.
+  // Driven by the same INVOICE_ADMINS allowlist as routes/invoices.js. Until
+  // per-user invoice customisation ships, only listed emails see invoices.
+  const allowRaw = process.env.INVOICE_ADMINS || 'integration@apogeemobi.com';
+  const allowSet = new Set(allowRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+  user.canViewInvoices = allowSet.has((user.email || '').toLowerCase());
   res.json(user);
 });
 

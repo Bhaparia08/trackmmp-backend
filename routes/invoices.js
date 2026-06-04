@@ -23,11 +23,34 @@ router.get('/:id/pdf', (req, res, next) => {
     }
   } catch {}
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  // Gate PDF download with the same allowlist as the rest of the routes
+  const allowRaw = process.env.INVOICE_ADMINS || 'integration@apogeemobi.com';
+  const allow = new Set(allowRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+  if (!allow.has((user.email || '').toLowerCase())) {
+    return res.status(403).json({ error: 'Invoice access restricted' });
+  }
   req.user = user;
   _generatePDF(req, res, next);
 });
 
 router.use(requireAuth);
+
+// ── Invoice access allowlist ─────────────────────────────────────────────────
+// Until per-user invoice customisation is built, invoices are restricted to a
+// specific set of admin emails. Configured via INVOICE_ADMINS env var (comma-
+// separated). Default: integration@apogeemobi.com only. Set the env var to
+// re-enable visibility for other admins or advertisers without a code change.
+function invoiceAllowlist() {
+  const raw = process.env.INVOICE_ADMINS || 'integration@apogeemobi.com';
+  return new Set(raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+}
+router.use((req, res, next) => {
+  const allow = invoiceAllowlist();
+  if (!allow.has((req.user.email || '').toLowerCase())) {
+    return res.status(403).json({ error: 'Invoice access restricted to authorised admins. Contact integration@apogeemobi.com to request access.' });
+  }
+  next();
+});
 
 // ── Entity definitions ────────────────────────────────────────────────────────
 const ENTITIES = {
