@@ -1517,6 +1517,99 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
+// ── Migration: bootstrap BetMGM advertiser + 3 campaigns (Casino, Sportsbook, Poker) ────
+// Spec confirmed 2026-06-08. CPA, USD, $0 payout placeholders. Created paused
+// with placeholder geo 'US' — operator MUST update state list, payout amounts,
+// and postback URL via admin UI before flipping status to 'active'.
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'bootstrap_betmgm_v1'").get();
+  if (!done) {
+    try {
+      const bcrypt = require('bcrypt');
+      const { customAlphabet } = require('nanoid');
+      const tokenGen = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', 12);
+
+      // 1. Find super-admin to own the campaigns
+      const superAdmin = db.prepare("SELECT id FROM users WHERE email = 'integration@apogeemobi.com' AND role = 'admin'").get();
+      if (!superAdmin) throw new Error('integration@apogeemobi.com not found as admin');
+
+      // 2. Find or create BetMGM advertiser
+      let advertiser = db.prepare("SELECT id FROM users WHERE email = 'partners@betmgm.com'").get();
+      if (!advertiser) {
+        const pw = bcrypt.hashSync('BetMGM@Welcome2026', 12);
+        const token = nanoid20hex();
+        const seq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
+        const r = db.prepare(
+          `INSERT INTO users (email, password, name, company_name, role, status, email_verified, postback_token, seq_num)
+           VALUES (?, ?, 'BetMGM Partners', 'BetMGM Partners', 'advertiser', 'active', 1, ?, ?)`
+        ).run('partners@betmgm.com', pw, token, seq);
+        advertiser = { id: r.lastInsertRowid };
+        console.log('[migration] bootstrap_betmgm_v1: BetMGM advertiser CREATED (id=' + advertiser.id + ', temp pwd BetMGM@Welcome2026)');
+      } else {
+        console.log('[migration] bootstrap_betmgm_v1: BetMGM advertiser already exists (id=' + advertiser.id + ')');
+      }
+
+      // 3. Assign Leelam as AM for BetMGM (junction table user_account_managers)
+      const leelamAm = db.prepare("SELECT id FROM account_managers WHERE email = 'leelam.s@apogeemobi.com'").get();
+      if (leelamAm) {
+        const existsAssign = db.prepare('SELECT 1 FROM user_account_managers WHERE user_id = ? AND account_manager_id = ?').get(advertiser.id, leelamAm.id);
+        if (!existsAssign) {
+          db.prepare('INSERT INTO user_account_managers (user_id, account_manager_id) VALUES (?, ?)').run(advertiser.id, leelamAm.id);
+          console.log('[migration] bootstrap_betmgm_v1: Leelam assigned as AM for BetMGM');
+        } else {
+          console.log('[migration] bootstrap_betmgm_v1: Leelam AM assignment already exists');
+        }
+      } else {
+        console.warn('[migration] bootstrap_betmgm_v1: Leelam account_manager record not found - skipping AM assignment');
+      }
+
+      // 4. Create 3 campaigns (idempotent on external_offer_id)
+      const campaignSpecs = [
+        { name: "BetMGM Casino - June'26",     zone: 1750387, tracker: '7156138' },
+        { name: "BetMGM Sportsbook - June'26", zone: 1750388, tracker: '7156139' },
+        { name: "BetMGM Poker - June'26",      zone: 1750389, tracker: '7156140' },
+      ];
+      for (const c of campaignSpecs) {
+        const existing = db.prepare("SELECT id, campaign_token FROM campaigns WHERE external_offer_id = ? AND advertiser_id = ?").get(c.tracker, advertiser.id);
+        if (existing) {
+          console.log('[migration] bootstrap_betmgm_v1: ' + c.name + ' already exists (id=' + existing.id + ', token=' + existing.campaign_token + ')');
+          continue;
+        }
+        const tok = tokenGen();
+        const result = db.prepare(
+          `INSERT INTO campaigns (
+             user_id, advertiser_id, name, advertiser_name, campaign_token,
+             payout, payout_type, publisher_payout, publisher_payout_type,
+             destination_url, postback_url, status, visibility, vertical,
+             allowed_countries, allowed_devices, click_lookback_days,
+             external_offer_id, description
+           ) VALUES (?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?, ?, ?)`
+        ).run(
+          superAdmin.id, advertiser.id, c.name, 'BetMGM Partners', tok,
+          0, 'cpa', 0, 'cpa',
+          'https://mediaserver.betmgmpartners.com/renderBanner.do?zoneId=' + c.zone,
+          '',                  // postback_url empty - MUST be set before launch
+          'paused',            // not live until operator flips it
+          'approval_required', // safe default for gambling
+          'betting',
+          'US',                // placeholder - replace with state list before launch
+          'all',
+          7,
+          c.tracker,
+          'BetMGM CPA — placeholder values. Set state list, payout amounts, and postback URL before activating.'
+        );
+        console.log('[migration] bootstrap_betmgm_v1: ' + c.name + ' CREATED (id=' + result.lastInsertRowid + ', token=' + tok + ', tracker=' + c.tracker + ')');
+      }
+
+      db.prepare("INSERT INTO migrations (name) VALUES ('bootstrap_betmgm_v1')").run();
+      console.log('[migration] bootstrap_betmgm_v1: complete');
+    } catch (e) {
+      console.error('[migration] bootstrap_betmgm_v1 failed:', e.message);
+    }
+  }
+}
+
 // ── Ensure: ApogeeMobi House publisher under the operator's primary admin ───
 // Phase 0 (owned-inventory monetization): all owned websites/apps register as
 // inventory under this single house publisher; reporting is sliced by
