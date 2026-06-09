@@ -1610,6 +1610,77 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
   }
 }
 
+// ── Migration: align BetMGM campaigns with owned betting inventory ──────────
+// Creates campaign_inventory_approvals so the smart-link engine can route
+// traffic from our betting sites to BetMGM offers once the campaigns are
+// activated. Skips draftkingspromocode.us (competitor conflict).
+// Branded site (betmgmbonuscode.us) gets priority=1; generic sites get priority=2.
+// Idempotent via UNIQUE(campaign_id, inventory_id) constraint; INSERT OR IGNORE.
+{
+  db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
+  const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'align_betmgm_to_betting_inv_v1'").get();
+  if (!done) {
+    try {
+      const advertiser = db.prepare("SELECT id FROM users WHERE email = 'partners@betmgm.com'").get();
+      if (!advertiser) throw new Error('BetMGM advertiser not found - run bootstrap_betmgm_v1 first');
+
+      const superAdmin = db.prepare("SELECT id FROM users WHERE email = 'integration@apogeemobi.com' AND role = 'admin'").get();
+      if (!superAdmin) throw new Error('integration@apogeemobi.com not found as admin');
+
+      const campaigns = db.prepare(
+        "SELECT id, external_offer_id, name FROM campaigns WHERE advertiser_id = ? AND external_offer_id IN ('7156138','7156139','7156140')"
+      ).all(advertiser.id);
+      if (campaigns.length === 0) throw new Error('No BetMGM campaigns found');
+
+      // Sites to align — DraftKings competitor site (draftkingspromocode.us) intentionally excluded.
+      const sites = [
+        { domain: 'betmgmbonuscode.us', priority: 1, weight: 150, note: 'branded — preferred' },
+        { domain: 'top10betting.us',    priority: 2, weight: 100, note: 'generic' },
+        { domain: 'top20betting.us',    priority: 2, weight: 100, note: 'generic' },
+      ];
+
+      const insert = db.prepare(
+        `INSERT OR IGNORE INTO campaign_inventory_approvals
+           (user_id, campaign_id, inventory_id, status, priority, weight, reviewed_by, reviewed_at, notes)
+         VALUES (?, ?, ?, 'approved', ?, ?, ?, unixepoch(), ?)`
+      );
+
+      let approvedCount = 0;
+      let skippedCount = 0;
+
+      for (const campaign of campaigns) {
+        for (const site of sites) {
+          // Match by domain across BOTH vertical taxonomies (some prod rows use 'betting',
+          // some use 'us-betting' — historic migration artifact). Approve all matching rows.
+          const invRows = db.prepare(
+            "SELECT id FROM owned_inventory WHERE domain = ? AND geo = 'US' AND vertical IN ('betting','us-betting') AND status = 'active'"
+          ).all(site.domain);
+          if (invRows.length === 0) {
+            console.warn(`[migration] align_betmgm_to_betting_inv_v1: ${site.domain} not found as active US betting inventory — skipping`);
+            skippedCount++;
+            continue;
+          }
+          for (const inv of invRows) {
+            const r = insert.run(
+              superAdmin.id, campaign.id, inv.id, site.priority, site.weight, superAdmin.id,
+              `BetMGM × ${site.domain} (${site.note})`
+            );
+            if (r.changes > 0) {
+              approvedCount++;
+              console.log(`[migration] align_betmgm_to_betting_inv_v1: APPROVED ${campaign.name} × ${site.domain} (inv #${inv.id}, priority ${site.priority})`);
+            }
+          }
+        }
+      }
+
+      db.prepare("INSERT INTO migrations (name) VALUES ('align_betmgm_to_betting_inv_v1')").run();
+      console.log(`[migration] align_betmgm_to_betting_inv_v1: complete (${approvedCount} approvals created, ${skippedCount} skipped)`);
+    } catch (e) {
+      console.error('[migration] align_betmgm_to_betting_inv_v1 failed:', e.message);
+    }
+  }
+}
+
 // ── Ensure: ApogeeMobi House publisher under the operator's primary admin ───
 // Phase 0 (owned-inventory monetization): all owned websites/apps register as
 // inventory under this single house publisher; reporting is sliced by
