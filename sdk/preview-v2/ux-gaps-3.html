@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TrackMMP — 3 UX gaps preview</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-card: #131a31;
+    --bg-2: #1a2240;
+    --border: #232c4d;
+    --text: #e4e8f5;
+    --muted: #94a3b8;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red:  #ef4444;
+    --pink: #ec4899;
+    --pur:  #8b5cf6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 36px 24px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 0; }
+  .lead { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+  .pill.recommend { background: rgba(99,102,241,.18); color: var(--accent-2); }
+  .pill.green { background: rgba(16,185,129,.15); color: var(--green); }
+  .pill.amber { background: rgba(245,158,11,.15); color: var(--amber); }
+  .pill.red   { background: rgba(239,68,68,.15);  color: var(--red); }
+  .pill.muted { background: rgba(148,163,184,.15); color: var(--muted); }
+  .pill.pink  { background: rgba(236,72,153,.15); color: var(--pink); }
+  .pill.pur   { background: rgba(139,92,246,.18); color: #a78bfa; }
+
+  .section {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    margin: 28px 0; overflow: hidden;
+  }
+  .section-head {
+    padding: 18px 22px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .section-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .section-body { padding: 22px; }
+
+  .ba {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;
+  }
+  @media (max-width: 880px) { .ba { grid-template-columns: 1fr; } }
+  .ba > div {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; overflow: hidden;
+  }
+  .ba .label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin-bottom: 12px;
+  }
+  .ba .label.before { color: #fca5a5; }
+  .ba .label.after  { color: #6ee7b7; }
+
+  .legend { font-size: 12px; color: var(--muted); margin: 6px 0 16px; }
+  .checklist { padding-left: 22px; margin: 14px 0 0; }
+  .checklist li { margin: 4px 0; }
+  .checklist li::marker { color: var(--accent-2); }
+  code { background: var(--bg-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; font-family: 'Monaco', 'Menlo', monospace; }
+  pre { background: var(--bg-2); padding: 10px 14px; border-radius: 6px; font-size: 11px; overflow-x: auto; margin: 8px 0; font-family: 'Monaco', 'Menlo', monospace; }
+
+  .footer-card {
+    background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(16,185,129,.08));
+    border: 1px solid var(--accent);
+    border-radius: 12px; padding: 22px; margin-top: 32px;
+  }
+
+  /* Mock form elements */
+  .field-mock { margin: 12px 0; }
+  .field-mock label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .field-mock select, .field-mock input {
+    width: 100%; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 12px; font-family: inherit;
+  }
+  .field-mock .url-preview {
+    background: var(--bg-2); border-radius: 4px; padding: 6px 10px; font-size: 10px; font-family: 'Monaco', monospace; word-break: break-all;
+    margin-top: 4px; color: var(--accent-2);
+  }
+
+  /* Validation banners */
+  .banner {
+    border-radius: 6px; padding: 10px 14px; font-size: 12px; margin: 8px 0;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .banner.warn { background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.35); color: var(--amber); }
+  .banner.error { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.35); color: #fca5a5; }
+  .banner.ok { background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.35); color: #6ee7b7; }
+  .banner .icon { font-size: 14px; line-height: 1; }
+
+  /* Postback table */
+  table.pb-mock {
+    width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px;
+  }
+  table.pb-mock th { text-align: left; padding: 6px 8px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .03em; border-bottom: 1px solid var(--border); }
+  table.pb-mock td { padding: 6px 8px; border-bottom: 1px dashed rgba(148,163,184,.12); font-family: 'Monaco', monospace; font-size: 11px; }
+  table.pb-mock tr.row-attr { background: rgba(16,185,129,.04); }
+  table.pb-mock tr.row-rej  { background: rgba(239,68,68,.04); }
+  table.pb-mock tr.row-dup  { background: rgba(245,158,11,.04); }
+  .status-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  }
+  .status-badge.attr { background: rgba(16,185,129,.15); color: var(--green); }
+  .status-badge.rej  { background: rgba(239,68,68,.15); color: var(--red); }
+  .status-badge.dup  { background: rgba(245,158,11,.15); color: var(--amber); }
+  .status-badge.live { background: rgba(99,102,241,.18); color: var(--accent-2); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .5 } }
+
+  .verdict {
+    background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.25);
+    border-radius: 8px; padding: 14px 18px; margin-top: 18px;
+    font-size: 13px;
+  }
+  .verdict .row { gap: 10px; align-items: baseline; }
+  .verdict .row strong { font-size: 14px; }
+
+  .doesnt-change {
+    background: rgba(148,163,184,.06);
+    border-left: 3px solid var(--muted);
+    padding: 10px 14px; margin-top: 14px; border-radius: 4px;
+    font-size: 12px; color: var(--muted);
+  }
+  .doesnt-change strong { color: var(--text); }
+
+  .network-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px;
+    margin: 6px 0; font-size: 11px;
+  }
+  .network-card .name { color: var(--accent-2); font-weight: 700; font-size: 12px; }
+  .network-card .macro { color: var(--amber); font-family: 'Monaco', monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p style="margin:0 0 6px;color:var(--muted);font-size:12px">Preview deck · 2026-06-11 · TrackMMP</p>
+  <h1>3 UX gaps — postback config polish</h1>
+  <p class="lead">
+    Three additive features that prevent the kind of integration time-sink we hit with Click Dealer. Core platform engine is unchanged — these only affect campaign-form UX, postback URL validation on save, and add a new inspector page. Nothing in click-tracking, attribution, or fraud logic is touched.
+  </p>
+
+  <div class="verdict">
+    <div class="row" style="flex-wrap:wrap;">
+      <strong>Scope</strong>
+      <span class="pill recommend">3 features</span>
+      <span class="pill muted">~16 hours of work</span>
+      <span class="pill green">zero engine risk</span>
+      <span class="pill amber">~30-60s deploy blip (unchanged)</span>
+    </div>
+  </div>
+
+  <!-- ========== 1 ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">1</div>
+      <h2>Advertiser network preset on campaign create</h2>
+      <span class="pill recommend" style="margin-left:auto">~6h · prevents 80% of config bugs</span>
+    </div>
+    <div class="section-body">
+      <p class="legend">
+        When admin creates a campaign, pick the advertiser's network from a dropdown. Postback URL template auto-fills with the right macro format. Destination URL gets a hint about where to inject `{click_id}`. No more guessing whether to use `{event}` or `#status#`.
+      </p>
+
+      <div class="ba">
+        <div>
+          <div class="label before">▼ Now</div>
+          <div class="field-mock">
+            <label>Advertiser Tracking URL</label>
+            <input value="(admin pastes whatever URL CD gives them — no validation)" disabled style="color:var(--muted)" />
+          </div>
+          <div class="field-mock">
+            <label>Postback URL</label>
+            <input value="(admin pastes — could be {event} or #status# or mixed)" disabled style="color:var(--muted)" />
+          </div>
+          <div class="banner error">
+            <span class="icon">✗</span>
+            <div>Admin paste <code>event={event}</code> for Click Dealer — fails because CD doesn't substitute curly braces. Bug undetected until first real conversion.</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="label after">▲ After — network preset dropdown</div>
+          <div class="field-mock">
+            <label>Advertiser Network</label>
+            <select disabled style="color:var(--accent-2);font-weight:600">
+              <option>Click Dealer</option>
+            </select>
+            <div class="url-preview" style="margin-top:8px;color:var(--muted);font-size:10px">
+              Auto-fills postback URL + suggests destination URL pattern
+            </div>
+          </div>
+
+          <div class="field-mock">
+            <label>Postback URL (auto-filled, editable)</label>
+            <div class="url-preview">https://track.apogeemobi.com/acquisition?click_id=<span style="color:var(--amber)">#s2#</span>&security_token=<span style="color:var(--green)">{auto_user_token}</span>&event=install&payout=<span style="color:var(--amber)">#price#</span>&currency=<span style="color:var(--amber)">#currency#</span>&disposition=<span style="color:var(--amber)">#status#</span>&transaction_id=<span style="color:var(--amber)">#tid#</span>&udid=<span style="color:var(--amber)">#udid#</span></div>
+          </div>
+
+          <div class="field-mock">
+            <label>Destination URL (hint shown)</label>
+            <input value="https://[click-dealer-offer-url]?s2={click_id}&s1={publisher_id}" disabled style="color:var(--accent-2);font-size:11px" />
+            <div class="url-preview" style="color:var(--muted);font-size:10px">Click Dealer reads our click_id from <code>s2</code>. Place <code>{click_id}</code> there.</div>
+          </div>
+
+          <div class="banner ok">
+            <span class="icon">✓</span>
+            <div>Click Dealer's macros are correct from day 1. Admin can edit any field but the default is correct.</div>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:24px;font-size:14px;color:var(--accent-2)">Networks included in v1</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div class="network-card">
+          <div class="name">Click Dealer</div>
+          <div>click_id slot: <span class="macro">#s2#</span> · payout: <span class="macro">#price#</span> · event: hardcoded <code>install</code> (or lead/purchase per payout_type)</div>
+        </div>
+        <div class="network-card">
+          <div class="name">Trackier</div>
+          <div>click_id: <span class="macro">{click_id}</span> · goal: <span class="macro">{goal_value}</span> · payout: <span class="macro">{payout}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">HasOffers / TUNE</div>
+          <div>click_id: <span class="macro">{transaction_id}</span> · event: <span class="macro">{goal_name}</span> · payout: <span class="macro">{payout}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Affise</div>
+          <div>click_id: <span class="macro">{click_id}</span> · status: <span class="macro">{status}</span> · payout: <span class="macro">{sum}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Adjust</div>
+          <div>click_id: <span class="macro">{reftag}</span> · event: <span class="macro">{activity_kind}</span> · payout: <span class="macro">{revenue_float}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">AppsFlyer</div>
+          <div>click_id: <span class="macro">{clickid}</span> · event: <span class="macro">{af_event_name}</span> · payout: <span class="macro">{payout}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Branch</div>
+          <div>click_id: <span class="macro">{~click_id}</span> · event: <span class="macro">{customer_event_alias}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Everflow</div>
+          <div>click_id: <span class="macro">{transaction_id}</span> · payout: <span class="macro">{payout}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Impact Radius</div>
+          <div>click_id: <span class="macro">{irclickid}</span> · payout: <span class="macro">{payout}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Admitad</div>
+          <div>click_id: <span class="macro">{subid}</span> · payout: <span class="macro">{price}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Generic (custom)</div>
+          <div>Admin pastes their own. Validator (Feature 2) still catches mixed formats.</div>
+        </div>
+        <div class="network-card" style="border-color:rgba(245,158,11,.4)">
+          <div class="name" style="color:var(--amber)">Add more</div>
+          <div>Each new network = ~30 min to add a preset row. Cake, Voluum, Binom, etc.</div>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>New <code>advertiser_network</code> column on campaigns table (TEXT, default <code>'generic'</code>)</li>
+        <li>Backend: <code>utils/networkTemplates.js</code> with macro maps per network</li>
+        <li>Frontend: campaign create/edit form gets a "Advertiser Network" dropdown. Pick → auto-fills postback URL + destination URL hint. Admin can still edit.</li>
+        <li>Per-network test fire: extends the 🧪 Test Postback button to validate against the picked network's expected response</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> Existing campaigns keep working as-is (default to <code>generic</code>). Admin can edit any auto-filled URL. The smart-event-default we shipped 2026-06-03 still drives event_type inference at the handler.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 2 ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">2</div>
+      <h2>Postback URL validator on save</h2>
+      <span class="pill recommend" style="margin-left:auto">~3h · catches what slipped past Feature 1</span>
+    </div>
+    <div class="section-body">
+      <p class="legend">
+        When admin saves a campaign (any path — preset, manual paste, edit) the postback URL is validated. Warnings appear inline. Doesn't BLOCK save — just surfaces obvious mistakes. Same idea on destination URL.
+      </p>
+
+      <div class="ba">
+        <div>
+          <div class="label before">▼ Now — silent acceptance</div>
+          <pre style="font-size:10px">postback_url = "https://track.apogeemobi.com/acquisition?
+  click_id=#s2#
+  &event={event}      ← BROKEN, never substituted
+  &payout=#price#
+  &currency={currency} ← BROKEN
+  &idfa={idfa}        ← BROKEN
+  &gaid={gaid}"       ← BROKEN
+
+[ Save ] ← accepted with no warning</pre>
+          <div class="banner error" style="margin-top:14px">
+            <span class="icon">✗</span>
+            <div>Campaign saves. First real conversion gets recorded as <code>status='rejected'</code>. Operators only notice when revenue reports look wrong.</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="label after">▲ After — validator at save time</div>
+          <pre style="font-size:10px">postback_url = "https://track.apogeemobi.com/acquisition?
+  click_id=#s2#
+  &event={event}
+  &payout=#price#
+  &currency={currency}
+  &idfa={idfa}
+  &gaid={gaid}"</pre>
+
+          <div class="banner warn">
+            <span class="icon">⚠</span>
+            <div><strong>Mixed macro formats detected.</strong> URL uses both <code>#x#</code> and <code>{x}</code> formats. Click Dealer will only substitute its own <code>#x#</code> macros. Convert <code>{event}</code>, <code>{currency}</code>, <code>{idfa}</code>, <code>{gaid}</code> to either Click Dealer macros or hardcoded values.</div>
+          </div>
+
+          <div class="banner warn">
+            <span class="icon">⚠</span>
+            <div><strong>Click Dealer doesn't track <code>idfa</code> or <code>gaid</code></strong> — they use <code>#udid#</code> instead. Consider removing the unsupported fields.</div>
+          </div>
+
+          <div class="banner warn">
+            <span class="icon">⚠</span>
+            <div><strong><code>{event}</code> is not a Click Dealer macro.</strong> Hardcode <code>event=install</code> or remove (handler will infer from <code>payout_type</code>).</div>
+          </div>
+
+          <button style="margin-top:10px;padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Save with warnings</button>
+          <button style="margin-top:10px;margin-left:8px;padding:6px 16px;background:rgba(99,102,241,.12);color:var(--accent-2);border:1px solid var(--accent);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Auto-fix and save</button>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>Validation rules: (1) no mixed <code>#x#</code> + <code>{x}</code> formats, (2) macros must be in the picked network's known set, (3) URL must contain a click_id macro, (4) destination URL must contain <code>{click_id}</code></li>
+        <li>Warnings are surfaced inline next to the field, not as modal popups (less intrusive)</li>
+        <li>"Auto-fix and save" button: converts to the picked network's macros where possible, hardcodes where no macro exists</li>
+        <li>Admin can override and save anyway — validator is advisory, not blocking</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> Existing campaigns aren't re-validated. Validator runs on save only. Backend accepts any URL the admin saves (no API-level block).
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 3 ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">3</div>
+      <h2>Live postback inspector — real-time stream</h2>
+      <span class="pill recommend" style="margin-left:auto">~8h · 10× faster integration debugging</span>
+    </div>
+    <div class="section-body">
+      <p class="legend">
+        New admin page at <code>/admin/postback-inspector</code>. Real-time table of incoming postbacks (auto-refresh every 3s). When integration breaks, you see in real-time what advertisers are firing. Drill into any row for full diagnostics.
+      </p>
+
+      <div class="ba">
+        <div>
+          <div class="label before">▼ Now — check Reports → Postbacks page</div>
+          <ul style="font-size:12px;padding-left:20px;color:var(--muted);line-height:1.7">
+            <li>Manual refresh required (no auto-update)</li>
+            <li>Shows postbacks but not raw incoming URL params</li>
+            <li>Doesn't show <em>why</em> something was rejected — just the status</li>
+            <li>No filter by IP, no real-time tail</li>
+          </ul>
+          <div class="banner warn" style="margin-top:14px">
+            <span class="icon">i</span>
+            <div>When Click Dealer integration broke, we couldn't see what they were firing without asking Summer to share screenshots. With this we'd see it live.</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="label after">▲ After — live inspector</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <input style="flex:1;min-width:120px;padding:5px 9px;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--text)" placeholder="filter by IP or click_id…" disabled />
+            <select style="padding:5px 9px;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--text)" disabled>
+              <option>All campaigns</option>
+            </select>
+            <select style="padding:5px 9px;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--text)" disabled>
+              <option>All statuses</option>
+            </select>
+            <span class="status-badge live">● LIVE</span>
+          </div>
+
+          <table class="pb-mock">
+            <thead>
+              <tr><th>Time</th><th>Source</th><th>Campaign</th><th>click_id</th><th>Event</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr class="row-attr">
+                <td>16:54:21</td><td>104.18.x.x</td><td>NORDVPN_CPI</td><td>OYGPEsH...</td><td>install</td><td><span class="status-badge attr">attributed</span></td>
+              </tr>
+              <tr class="row-rej">
+                <td>16:54:18</td><td>54.169.x.x (CD)</td><td>(unmatched)</td><td><em>empty</em></td><td>{event}</td><td><span class="status-badge rej">rejected</span></td>
+              </tr>
+              <tr class="row-dup">
+                <td>16:54:12</td><td>104.18.x.x</td><td>NORDVPN_CPI</td><td>OYGPEsH...</td><td>install</td><td><span class="status-badge dup">duplicate</span></td>
+              </tr>
+              <tr class="row-attr">
+                <td>16:54:08</td><td>176.31.x.x (CD)</td><td>SuperMainstream</td><td>3Tu2...gV</td><td>install</td><td><span class="status-badge attr">attributed</span></td>
+              </tr>
+              <tr class="row-rej">
+                <td>16:54:01</td><td>54.169.x.x (CD)</td><td>(unmatched)</td><td>fake_test</td><td>install</td><td><span class="status-badge rej">rejected</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-top:14px;font-size:11px">
+            <div style="font-weight:700;color:var(--accent-2);margin-bottom:6px">▸ Selected: rejected postback at 16:54:18 (drill-down)</div>
+            <table style="width:100%;font-size:11px">
+              <tr><td style="color:var(--muted);padding:2px 8px 2px 0;width:140px">Raw URL</td><td><code style="font-size:10px">/acquisition?click_id=&security_token=6f2d098...&event={event}&payout=100.0000&currency={currency}&idfa={idfa}&gaid={gaid}</code></td></tr>
+              <tr><td style="color:var(--muted);padding:2px 8px 2px 0">click_id received</td><td><code>"" (empty)</code></td></tr>
+              <tr><td style="color:var(--muted);padding:2px 8px 2px 0">event received</td><td><code style="color:var(--red)">"{event}" (literal — not substituted)</code></td></tr>
+              <tr><td style="color:var(--muted);padding:2px 8px 2px 0">Reject reason</td><td><code style="color:var(--red)">click_id_empty</code></td></tr>
+              <tr><td style="color:var(--muted);padding:2px 8px 2px 0">Likely cause</td><td>Advertiser's test wizard didn't pass SubID 2 value AND postback URL has wrong macro format</td></tr>
+              <tr><td style="color:var(--muted);padding:2px 8px 2px 0">Fix</td><td>(1) In CD's wizard, paste a real click_id in SubID 2 field. (2) Update postback URL to use <code>#s2#</code> + remove <code>{event}</code> etc.</td></tr>
+            </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>New table <code>postback_inbound_log</code>: every incoming hit recorded with full URL, IP, all params, response status, processing time</li>
+        <li>Endpoint: <code>GET /api/admin/postback-inspector?since=X&campaign_id=Y&status=Z</code> with SSE / polling</li>
+        <li>Frontend: new page <code>/admin/postback-inspector</code> in nav under Analytics</li>
+        <li>Auto-suggests fixes per failure mode (empty click_id, mismatch macro, unknown token, etc.)</li>
+        <li>Click any row for full diagnostic drill-down (raw URL, params, reject reason, suggested fix)</li>
+        <li>Filter by campaign, status, IP, time range</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> Existing <code>postbacks</code> table (the attributed ones) is unchanged. The new <code>postback_inbound_log</code> is a separate write-ahead log for debugging. Retention 30 days then purged (configurable).
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Decide ========== -->
+  <div class="footer-card">
+    <h2 style="margin:0 0 8px">Decision</h2>
+    <p style="margin:0 0 12px;color:var(--muted);font-size:13px">
+      All 3 features are additive. Existing campaigns and integrations continue to work unchanged. Each is independently shippable — you can approve any subset.
+    </p>
+
+    <h3 style="margin:14px 0 6px;font-size:14px">Implementation order (if shipping all 3)</h3>
+    <ol style="margin:0;padding-left:22px;color:var(--text);font-size:13px;line-height:1.8">
+      <li><strong>Feature 1 — Network presets</strong> (~6h) — biggest impact, fewest dependencies. Click Dealer + 10 other networks pre-loaded.</li>
+      <li><strong>Feature 2 — Validator</strong> (~3h) — small. Builds on Feature 1's network definitions to validate macros.</li>
+      <li><strong>Feature 3 — Live inspector</strong> (~8h) — biggest scope but independent. Can be done first if you want to debug current integrations sooner.</li>
+    </ol>
+
+    <ul class="checklist" style="margin:14px 0 14px">
+      <li><code>ship all 3</code> — Implement #1+#2+#3 in one sprint (~16h). One bundled deploy when all ready.</li>
+      <li><code>ship 1+2</code> — Just the campaign-create improvements (~9h). Skip the inspector for now.</li>
+      <li><code>ship 3 first</code> — Build the inspector first (~8h) so you can debug Click Dealer in real time. Then come back for 1+2.</li>
+      <li><code>change X</code> — Tell me which feature to tweak before I build it.</li>
+    </ul>
+    <p style="margin:0;color:var(--muted);font-size:12px">
+      Per the SOP: I build locally first (in the new <code>./dev.sh</code> environment), verify all flows manually, then push to prod in one bundled commit. No partial state on prod.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
