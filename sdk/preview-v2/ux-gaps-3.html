@@ -149,19 +149,27 @@
 <body>
 <div class="wrap">
 
-  <p style="margin:0 0 6px;color:var(--muted);font-size:12px">Preview deck · 2026-06-11 · TrackMMP</p>
+  <p style="margin:0 0 6px;color:var(--muted);font-size:12px">Preview deck · 2026-06-11 · TrackMMP · revised for CPL/CPS coverage</p>
   <h1>3 UX gaps — postback config polish</h1>
   <p class="lead">
-    Three additive features that prevent the kind of integration time-sink we hit with Click Dealer. Core platform engine is unchanged — these only affect campaign-form UX, postback URL validation on save, and add a new inspector page. Nothing in click-tracking, attribution, or fraud logic is touched.
+    Three additive features that prevent the kind of integration time-sink we hit with Click Dealer. Now covers <strong>mobile (CPI/CPA), web lead (CPL), and web sale (CPS)</strong> networks. Core platform engine is unchanged — these only affect campaign-form UX, postback URL validation on save, and add a new inspector page. Nothing in click-tracking, attribution, or fraud logic is touched.
   </p>
 
   <div class="verdict">
     <div class="row" style="flex-wrap:wrap;">
       <strong>Scope</strong>
       <span class="pill recommend">3 features</span>
-      <span class="pill muted">~16 hours of work</span>
+      <span class="pill muted">~21 hours of work (was 16, +5 for CPL/CPS)</span>
       <span class="pill green">zero engine risk</span>
+      <span class="pill pink">covers mobile + CPL + CPS</span>
       <span class="pill amber">~30-60s deploy blip (unchanged)</span>
+    </div>
+  </div>
+
+  <div class="banner warn" style="margin-top:14px">
+    <span class="icon">📝</span>
+    <div>
+      <strong>What changed since v1 of this deck:</strong> expanded from 11 to ~20 network presets to include 7-8 web CPL/CPS networks (Rakuten, CJ Affiliate, Awin, ShareASale, Pepperjam, CAKE, Generic CPL/CPS). Validator now also catches CPL/CPS-specific mistakes (idfa on web, missing order_id on sale, event type mismatch with payout_type). Inspector now shows event-type badges (install / lead / purchase / custom) and surfaces CPS-specific fields like order_id + revenue.
     </div>
   </div>
 
@@ -270,9 +278,50 @@
           <div class="name">Generic (custom)</div>
           <div>Admin pastes their own. Validator (Feature 2) still catches mixed formats.</div>
         </div>
+      </div>
+
+      <h3 style="margin-top:24px;font-size:14px;color:var(--pink)">Web CPL / CPS networks (NEW in v2)</h3>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 12px">These networks track lead generation (CPL) or sales (CPS) on web traffic — no app store, no device IDs (no <code>idfa</code>/<code>gaid</code>). Validator now treats device-ID macros as warnings on these.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div class="network-card">
+          <div class="name">Rakuten LinkShare <span class="pill pink" style="margin-left:6px">CPS</span></div>
+          <div>click_id: <span class="macro">{u1}</span> · amount: <span class="macro">{amt}</span> · site: <span class="macro">{siteid}</span> · order: <span class="macro">{order}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">CJ Affiliate (CJ.com) <span class="pill pink" style="margin-left:6px">CPL/CPS</span></div>
+          <div>click_id: <span class="macro">{CID}</span> · commission: <span class="macro">{commission}</span> · order: <span class="macro">{order_id}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Awin (Affiliate Window) <span class="pill pink" style="margin-left:6px">CPS</span></div>
+          <div>click_id: <span class="macro">{clickref}</span> · commission: <span class="macro">{commission}</span> · order: <span class="macro">{orderref}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">ShareASale <span class="pill pink" style="margin-left:6px">CPS</span></div>
+          <div>click_id: <span class="macro">{afftrack}</span> · commission: <span class="macro">{commission}</span> · order: <span class="macro">{orderid}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Pepperjam (Ascend) <span class="pill pink" style="margin-left:6px">CPL/CPS</span></div>
+          <div>click_id: <span class="macro">{clickid}</span> · payout: <span class="macro">{payout}</span> · order: <span class="macro">{order_id}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">CAKE <span class="pill pink" style="margin-left:6px">CPL/CPS</span></div>
+          <div>click_id: <span class="macro">{aff_sub}</span> · revenue: <span class="macro">{revenue}</span> · event: <span class="macro">{goal_name}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">CityAds <span class="pill pink" style="margin-left:6px">Mixed</span></div>
+          <div>click_id: <span class="macro">{click_id}</span> · payout: <span class="macro">{payout}</span> · order: <span class="macro">{order_id}</span></div>
+        </div>
+        <div class="network-card">
+          <div class="name">Generic web CPL <span class="pill pink" style="margin-left:6px">CPL</span></div>
+          <div>Hardcoded <code>event=lead</code> · click_id: <span class="macro">{click_id}</span> · payout: <span class="macro">{payout}</span> · NO device IDs (web traffic)</div>
+        </div>
+        <div class="network-card">
+          <div class="name">Generic web CPS <span class="pill pink" style="margin-left:6px">CPS</span></div>
+          <div>Hardcoded <code>event=purchase</code> · click_id: <span class="macro">{click_id}</span> · payout: <span class="macro">{payout}</span> · order: <span class="macro">{order_id}</span> (for dedup)</div>
+        </div>
         <div class="network-card" style="border-color:rgba(245,158,11,.4)">
           <div class="name" style="color:var(--amber)">Add more</div>
-          <div>Each new network = ~30 min to add a preset row. Cake, Voluum, Binom, etc.</div>
+          <div>Each new network = ~30 min to add a preset row. TradeDoubler, Skimlinks, Voluum, Binom, etc.</div>
         </div>
       </div>
 
@@ -356,6 +405,27 @@
         <li>Admin can override and save anyway — validator is advisory, not blocking</li>
       </ul>
 
+      <h3 style="margin-top:24px;font-size:14px;color:var(--pink)">Additional rules for CPL / CPS campaigns (NEW in v2)</h3>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 12px">The validator knows the campaign's <code>payout_type</code> and applies type-specific rules:</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div class="banner warn">
+          <span class="icon">⚠</span>
+          <div><strong>CPL campaign with <code>idfa</code> or <code>gaid</code> macro.</strong> Web lead campaigns don't have mobile device IDs. Either remove or confirm this is a hybrid mobile-lead offer.</div>
+        </div>
+        <div class="banner warn">
+          <span class="icon">⚠</span>
+          <div><strong>CPS campaign without <code>order_id</code> macro.</strong> Without order_id, repeat purchases from the same click look like duplicates and get rejected. Add a unique-per-order macro.</div>
+        </div>
+        <div class="banner warn">
+          <span class="icon">⚠</span>
+          <div><strong>Hardcoded <code>event=install</code> on a CPL/CPS campaign.</strong> This was the bug pattern we already shipped a smart-default for. Either remove (handler infers from payout_type) or change to <code>lead</code>/<code>purchase</code>.</div>
+        </div>
+        <div class="banner warn">
+          <span class="icon">⚠</span>
+          <div><strong><code>commission</code> macro on a CPI campaign.</strong> CPI is per-install (fixed amount), not commission-based. This looks like the postback URL was copied from a CPS template.</div>
+        </div>
+      </div>
+
       <div class="doesnt-change">
         <strong>Doesn't change:</strong> Existing campaigns aren't re-validated. Validator runs on save only. Backend accepts any URL the admin saves (no API-level block).
       </div>
@@ -404,26 +474,36 @@
 
           <table class="pb-mock">
             <thead>
-              <tr><th>Time</th><th>Source</th><th>Campaign</th><th>click_id</th><th>Event</th><th>Status</th></tr>
+              <tr><th>Time</th><th>Source</th><th>Campaign</th><th>click_id</th><th>Event</th><th>Payout</th><th>Order/Extra</th><th>Status</th></tr>
             </thead>
             <tbody>
               <tr class="row-attr">
-                <td>16:54:21</td><td>104.18.x.x</td><td>NORDVPN_CPI</td><td>OYGPEsH...</td><td>install</td><td><span class="status-badge attr">attributed</span></td>
-              </tr>
-              <tr class="row-rej">
-                <td>16:54:18</td><td>54.169.x.x (CD)</td><td>(unmatched)</td><td><em>empty</em></td><td>{event}</td><td><span class="status-badge rej">rejected</span></td>
-              </tr>
-              <tr class="row-dup">
-                <td>16:54:12</td><td>104.18.x.x</td><td>NORDVPN_CPI</td><td>OYGPEsH...</td><td>install</td><td><span class="status-badge dup">duplicate</span></td>
+                <td>16:54:21</td><td>104.18.x.x</td><td>NORDVPN_CPI</td><td>OYGPEsH...</td><td><span class="pill pur">install</span></td><td>$5.00</td><td>gaid:99...</td><td><span class="status-badge attr">attributed</span></td>
               </tr>
               <tr class="row-attr">
-                <td>16:54:08</td><td>176.31.x.x (CD)</td><td>SuperMainstream</td><td>3Tu2...gV</td><td>install</td><td><span class="status-badge attr">attributed</span></td>
+                <td>16:54:19</td><td>52.213.x.x (CJ)</td><td>InsuranceQuote_CPL</td><td>x9Jm...3a</td><td><span class="pill amber">lead</span></td><td>$1.20</td><td>email:hash:e8f...</td><td><span class="status-badge attr">attributed</span></td>
               </tr>
               <tr class="row-rej">
-                <td>16:54:01</td><td>54.169.x.x (CD)</td><td>(unmatched)</td><td>fake_test</td><td>install</td><td><span class="status-badge rej">rejected</span></td>
+                <td>16:54:18</td><td>54.169.x.x (CD)</td><td>(unmatched)</td><td><em>empty</em></td><td>{event}</td><td>$0</td><td>—</td><td><span class="status-badge rej">rejected</span></td>
+              </tr>
+              <tr class="row-attr">
+                <td>16:54:15</td><td>72.21.x.x (Awin)</td><td>EcomStore_CPS</td><td>Aw2vk...8x</td><td><span class="pill green">purchase</span></td><td>$24.50</td><td>order:ORD-9921</td><td><span class="status-badge attr">attributed</span></td>
+              </tr>
+              <tr class="row-dup">
+                <td>16:54:12</td><td>104.18.x.x</td><td>NORDVPN_CPI</td><td>OYGPEsH...</td><td><span class="pill pur">install</span></td><td>$5.00</td><td>gaid:99... (same)</td><td><span class="status-badge dup">duplicate</span></td>
+              </tr>
+              <tr class="row-attr">
+                <td>16:54:08</td><td>176.31.x.x (CD)</td><td>SuperMainstream</td><td>3Tu2...gV</td><td><span class="pill pur">install</span></td><td>$2.50</td><td>udid:DvC...</td><td><span class="status-badge attr">attributed</span></td>
+              </tr>
+              <tr class="row-rej">
+                <td>16:54:05</td><td>72.21.x.x (Awin)</td><td>EcomStore_CPS</td><td>Aw2vk...8x</td><td><span class="pill green">purchase</span></td><td>$18.00</td><td><em style="color:var(--red)">order_id missing</em></td><td><span class="status-badge rej">rejected</span></td>
+              </tr>
+              <tr class="row-rej">
+                <td>16:54:01</td><td>54.169.x.x (CD)</td><td>(unmatched)</td><td>fake_test</td><td><span class="pill pur">install</span></td><td>$0</td><td>—</td><td><span class="status-badge rej">rejected</span></td>
               </tr>
             </tbody>
           </table>
+          <p style="font-size:11px;color:var(--muted);margin-top:8px">↑ Notice: install (purple) + lead (amber) + purchase (green) all visible. The CPS row at 16:54:05 was rejected for missing <code>order_id</code> — exactly the kind of issue the validator catches at save time.</p>
 
           <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-top:14px;font-size:11px">
             <div style="font-weight:700;color:var(--accent-2);margin-bottom:6px">▸ Selected: rejected postback at 16:54:18 (drill-down)</div>
@@ -462,21 +542,29 @@
       All 3 features are additive. Existing campaigns and integrations continue to work unchanged. Each is independently shippable — you can approve any subset.
     </p>
 
-    <h3 style="margin:14px 0 6px;font-size:14px">Implementation order (if shipping all 3)</h3>
+    <h3 style="margin:14px 0 6px;font-size:14px">Implementation order — revised for CPL/CPS coverage</h3>
     <ol style="margin:0;padding-left:22px;color:var(--text);font-size:13px;line-height:1.8">
-      <li><strong>Feature 1 — Network presets</strong> (~6h) — biggest impact, fewest dependencies. Click Dealer + 10 other networks pre-loaded.</li>
-      <li><strong>Feature 2 — Validator</strong> (~3h) — small. Builds on Feature 1's network definitions to validate macros.</li>
-      <li><strong>Feature 3 — Live inspector</strong> (~8h) — biggest scope but independent. Can be done first if you want to debug current integrations sooner.</li>
+      <li><strong>Feature 1 — Network presets</strong> (~7h, +1h from v1 for CPL/CPS networks) — biggest impact, fewest dependencies. ~20 networks pre-loaded covering mobile MMP + web CPL + web CPS.</li>
+      <li><strong>Feature 2 — Validator</strong> (~4h, +1h for CPL/CPS rules) — builds on Feature 1's network definitions to validate macros, plus type-aware rules (no idfa on CPL, order_id required on CPS, etc.).</li>
+      <li><strong>Feature 3 — Live inspector</strong> (~10h, +2h for event-type badges + CPS fields) — biggest scope but independent. Real-time view of incoming postbacks with reject reasons.</li>
     </ol>
 
+    <div class="banner warn" style="margin-top:16px">
+      <span class="icon">⚠</span>
+      <div>
+        <strong>NOT in this scope — Risk C.5 (CPS chargebacks / status updates).</strong> When a CPS advertiser later rejects a sale (30 days post-conversion), they send a status-update postback. Today we treat each postback independently. Real handling would mark the original conversion as <code>status='reversed'</code> and roll back publisher payout. This is a SEPARATE feature (~6h, Sprint D) — important for serious CPS networks but not blocking the 3 UX gaps.
+      </div>
+    </div>
+
     <ul class="checklist" style="margin:14px 0 14px">
-      <li><code>ship all 3</code> — Implement #1+#2+#3 in one sprint (~16h). One bundled deploy when all ready.</li>
-      <li><code>ship 1+2</code> — Just the campaign-create improvements (~9h). Skip the inspector for now.</li>
-      <li><code>ship 3 first</code> — Build the inspector first (~8h) so you can debug Click Dealer in real time. Then come back for 1+2.</li>
-      <li><code>change X</code> — Tell me which feature to tweak before I build it.</li>
+      <li><code>ship all 3</code> — Implement #1+#2+#3 in 3 sprints (~21h). Each sprint verified before next.</li>
+      <li><code>ship A+B only</code> (recommended) — Just presets + validator (~11h). Skip the inspector for now — disk-write risk on Render Starter SQLite + persistent disk. Revisit Inspector after Postgres migration.</li>
+      <li><code>ship A only</code> — Just network presets (~7h). Smallest first ship; iterate after seeing real usage.</li>
+      <li><code>ship all 4 (including chargebacks)</code> — Full sweep + Sprint D for CPS status updates (~27h).</li>
+      <li><code>change X</code> — Tell me which feature/network/rule to tweak before I build it.</li>
     </ul>
     <p style="margin:0;color:var(--muted);font-size:12px">
-      Per the SOP: I build locally first (in the new <code>./dev.sh</code> environment), verify all flows manually, then push to prod in one bundled commit. No partial state on prod.
+      Per the SOP: I build locally first (in the <code>./dev.sh</code> environment), verify each feature with manual test flows (CPI/CPL/CPS each), then push to prod in one bundled commit per sprint. No partial state on prod. Each sprint = independently revertable.
     </p>
   </div>
 
