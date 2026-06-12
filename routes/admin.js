@@ -520,6 +520,36 @@ router.post('/test-pub-postback', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/admin/network-templates — network preset list for campaign form
+//
+// Returns the 20 advertiser network presets (Click Dealer, Trackier, HasOffers,
+// AppsFlyer, Adjust, Branch, Rakuten, CJ, Awin, ShareASale, etc.) with rendered
+// postback URL templates (with {OUR_DOMAIN} substituted; {YOUR_TOKEN} pre-filled
+// with the caller's own postback_token so the URL is ready to paste).
+router.get('/network-templates', requireAdmin, (req, res) => {
+  try {
+    const { loadAll, render } = require('../utils/networkTemplates');
+    const all = loadAll();
+    const me = db.prepare("SELECT postback_token FROM users WHERE id = ?").get(req.user.id);
+    const domain = (process.env.TRACKING_DOMAIN || `${req.protocol}://${req.get('host')}`)
+      .replace(/^https?:\/\//, '');
+    const networks = (all.networks || []).map(n => ({
+      key: n.key,
+      label: n.label,
+      category: n.category,
+      postback_url: render(n.postback_url_template, { domain, token: me?.postback_token || '<your_postback_token>' }),
+      destination_macro_hint: n.destination_macro_hint,
+      expected_click_id_slot: n.expected_click_id_slot,
+      supports_event_types: n.supports_event_types || [],
+      notes: n.notes || '',
+    }));
+    res.json({ networks, _meta: all._meta });
+  } catch (err) {
+    console.error('[network-templates] error:', err.message);
+    res.status(500).json({ error: 'Failed to load network templates' });
+  }
+});
+
 // GET /api/admin/stats  — platform-wide overview
 router.get('/stats', requireAdmin, (req, res) => {
   const advertisers = db.prepare("SELECT COUNT(*) as n FROM users WHERE role = 'advertiser'").get().n;

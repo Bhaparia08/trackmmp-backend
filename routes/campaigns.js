@@ -144,8 +144,8 @@ router.post('/', (req, res, next) => {
         cap_monthly, cap_redirect_url, conversion_hold_days, featured, url_masking, referrer_cloaking,
         attribution_model, deep_link_url, ios_store_url, android_store_url, deferred_deep_link,
         skan_enabled, skan_conversion_schema, re_engagement_window_days, re_engagement_postback_url,
-        vertical, seq_num)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        vertical, advertiser_network, seq_num)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(req.user.id, advertiser_id||null, app_id||null, name, advertiser_name||null, nanoid12(),
            nanoid20hex(),
            payout, payout_type, publisher_payout, publisher_payout_type,
@@ -160,7 +160,9 @@ router.post('/', (req, res, next) => {
            android_store_url||'', deferred_deep_link ? 1 : 0,
            skan_enabled ? 1 : 0, skan_conversion_schema||'{}',
            re_engagement_window_days||30, re_engagement_postback_url||'',
-           req.body.vertical||'', nextSeq);
+           req.body.vertical||'',
+           req.body.advertiser_network||'generic',
+           nextSeq);
 
       return result.lastInsertRowid;
     });
@@ -236,7 +238,8 @@ router.put('/:id', (req, res, next) => {
     const {
       attribution_model, deep_link_url, ios_store_url, android_store_url,
       deferred_deep_link, skan_enabled, skan_conversion_schema,
-      re_engagement_window_days, re_engagement_postback_url
+      re_engagement_window_days, re_engagement_postback_url,
+      advertiser_network,  // Sprint A — 2026-06-11
     } = req.body;
 
     db.prepare(`UPDATE campaigns SET
@@ -263,6 +266,7 @@ router.put('/:id', (req, res, next) => {
       re_engagement_window_days=COALESCE(?,re_engagement_window_days),
       re_engagement_postback_url=COALESCE(?,re_engagement_postback_url),
       vertical=COALESCE(?,vertical),
+      advertiser_network=COALESCE(?,advertiser_network),
       updated_at=unixepoch()
       WHERE id=?`)
       .run(name||null, advertiser_name||null, advertiser_id??null, payout??null, payout_type||null,
@@ -284,6 +288,7 @@ router.put('/:id', (req, res, next) => {
            skan_enabled!=null?+skan_enabled:null, skan_conversion_schema||null,
            re_engagement_window_days??null, re_engagement_postback_url!=null?re_engagement_postback_url:null,
            req.body.vertical!=null?req.body.vertical:null,
+           advertiser_network||null,
            c.id);
 
     // Frequency caps — secondary UPDATE so we don't have to expand the

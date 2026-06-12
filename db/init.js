@@ -60,6 +60,11 @@ const migrations = [
   `ALTER TABLE campaigns ADD COLUMN source_credential_id INTEGER REFERENCES advertiser_api_credentials(id)`,
   `ALTER TABLE campaigns ADD COLUMN external_offer_id TEXT`,
 
+  // campaigns: advertiser network preset (Sprint A — 2026-06-11)
+  // Drives postback URL template + click_id slot hint on the create/edit form.
+  // 'generic' = no preset (admin pastes their own URL — current behaviour).
+  `ALTER TABLE campaigns ADD COLUMN advertiser_network TEXT NOT NULL DEFAULT 'generic'`,
+
   // campaigns: separate publisher payout (what we pay publishers) from advertiser payout (what advertiser pays us)
   `ALTER TABLE campaigns ADD COLUMN publisher_payout REAL DEFAULT 0`,
   `ALTER TABLE campaigns ADD COLUMN publisher_payout_type TEXT DEFAULT 'cpi'`,
@@ -1068,6 +1073,33 @@ const migrations = [
   // from campaign_inventory_approvals for that inventory.
   `ALTER TABLE smart_links ADD COLUMN inventory_id INTEGER REFERENCES owned_inventory(id) ON DELETE SET NULL`,
   `ALTER TABLE smart_links ADD COLUMN rules_regenerated_at INTEGER`,
+
+  // Tier 1.1 — ML auto-rotation. base_weight preserves the populator's original
+  // payout-weighted output so the optimizer can re-baseline; weight then drifts
+  // based on observed EPC per segment. last_optimized_at marks when the
+  // optimizer last touched the rule.
+  `ALTER TABLE smart_link_rules ADD COLUMN base_weight INTEGER`,
+  `ALTER TABLE smart_link_rules ADD COLUMN last_optimized_at INTEGER`,
+  `UPDATE smart_link_rules SET base_weight = weight WHERE base_weight IS NULL`,
+
+  // Per-segment performance rollup: one row per (smart_link, campaign, country,
+  // device, day). Aggregator queries clicks + postbacks to populate; optimizer
+  // reads it to compute EPC per rule.
+  `CREATE TABLE IF NOT EXISTS smart_link_segment_stats (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    smart_link_id INTEGER NOT NULL REFERENCES smart_links(id) ON DELETE CASCADE,
+    campaign_id   INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    country       TEXT    NOT NULL DEFAULT 'XX',
+    device_type   TEXT    NOT NULL DEFAULT 'unknown',
+    date          TEXT    NOT NULL,
+    clicks        INTEGER NOT NULL DEFAULT 0,
+    conversions   INTEGER NOT NULL DEFAULT 0,
+    revenue       REAL    NOT NULL DEFAULT 0,
+    updated_at    INTEGER NOT NULL DEFAULT (unixepoch()),
+    UNIQUE(smart_link_id, campaign_id, country, device_type, date)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_slss_smartlink ON smart_link_segment_stats(smart_link_id, date DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_slss_campaign  ON smart_link_segment_stats(campaign_id, date DESC)`,
 ];
 
 const IGNORABLE = [
