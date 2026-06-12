@@ -1,0 +1,212 @@
+{
+  "_meta": {
+    "version": 1,
+    "updated": "2026-06-11",
+    "schema": "Each entry: { key, label, category, postback_url_template, destination_macro_hint, expected_click_id_slot, supports_event_types[], notes }. {OUR_DOMAIN} is replaced with the platform domain. {YOUR_TOKEN} is replaced with the user's postback_token (admin-only)."
+  },
+  "networks": [
+    {
+      "key": "generic",
+      "label": "Custom (no preset)",
+      "category": "custom",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?click_id={click_id}&security_token={YOUR_TOKEN}&event={event_name}&payout={payout}",
+      "destination_macro_hint": "{click_id}",
+      "expected_click_id_slot": "click_id",
+      "supports_event_types": ["install", "lead", "purchase", "custom"],
+      "notes": "No auto-fill — admin pastes their own URL. Validator still flags mixed formats."
+    },
+
+    {
+      "key": "clickdealer",
+      "label": "Click Dealer",
+      "category": "web_mixed",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?click_id=#s2#&security_token={YOUR_TOKEN}&event=install&payout=#price#&currency=#currency#&disposition=#status#&transaction_id=#tid#&udid=#udid#",
+      "destination_macro_hint": "?s2={click_id}&s1={publisher_id}",
+      "expected_click_id_slot": "s2",
+      "supports_event_types": ["install", "lead", "purchase"],
+      "notes": "CD uses #xN# format (hash delimiters). Their #udid# replaces idfa/gaid. Hardcode event=install (no event macro in CD)."
+    },
+    {
+      "key": "trackier",
+      "label": "Trackier",
+      "category": "mobile_mmp",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?click_id={click_id}&security_token={YOUR_TOKEN}&goal_value={goal_value}&payout={payout}&currency={currency}",
+      "destination_macro_hint": "?click_id={click_id}&p1={publisher_id}",
+      "expected_click_id_slot": "click_id",
+      "supports_event_types": ["install", "lead", "purchase", "custom"],
+      "notes": "Uses {goal_value} instead of {event_name}. Our normaliser maps it to event_type."
+    },
+    {
+      "key": "hasoffers_tune",
+      "label": "HasOffers / TUNE",
+      "category": "mobile_mmp",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?transaction_id={transaction_id}&security_token={YOUR_TOKEN}&event={goal_name}&payout={payout}&goal_id={goal_id}",
+      "destination_macro_hint": "?aff_sub={click_id}&aff_id={publisher_id}",
+      "expected_click_id_slot": "transaction_id",
+      "supports_event_types": ["install", "lead", "purchase", "custom"],
+      "notes": "TUNE/HasOffers uses transaction_id for click identity. Goal-based event naming."
+    },
+    {
+      "key": "affise",
+      "label": "Affise",
+      "category": "mobile_mmp",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?clickid={click_id}&security_token={YOUR_TOKEN}&event={status}&payout={sum}&currency={currency}&goal={goal}",
+      "destination_macro_hint": "?clickid={click_id}&pub_id={publisher_id}",
+      "expected_click_id_slot": "clickid",
+      "supports_event_types": ["install", "lead", "purchase", "custom"],
+      "notes": "Affise uses {sum} for payout, {status} for conversion state."
+    },
+    {
+      "key": "adjust",
+      "label": "Adjust",
+      "category": "mobile_mmp",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?clickid={adid}&security_token={YOUR_TOKEN}&event={activity_kind}&payout={revenue_float}&currency={currency}",
+      "destination_macro_hint": "?reftag={click_id}&campaign={publisher_id}",
+      "expected_click_id_slot": "adid",
+      "supports_event_types": ["install", "purchase", "custom"],
+      "notes": "Adjust uses {adid} (device-level), {activity_kind} for event, {revenue_float} for payout."
+    },
+    {
+      "key": "appsflyer",
+      "label": "AppsFlyer",
+      "category": "mobile_mmp",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?clickid={clickid}&security_token={YOUR_TOKEN}&event={af_event_name}&payout={payout}&advertising_id={advertising_id}",
+      "destination_macro_hint": "?clickid={click_id}&pid={publisher_id}",
+      "expected_click_id_slot": "clickid",
+      "supports_event_types": ["install", "purchase", "custom"],
+      "notes": "AppsFlyer's {af_event_name} carries install/event semantics. {advertising_id} = IDFA or GAID."
+    },
+    {
+      "key": "branch",
+      "label": "Branch",
+      "category": "mobile_mmp",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?clickid={~click_id}&security_token={YOUR_TOKEN}&event={customer_event_alias}&payout={revenue}&advertising_id={aaid}",
+      "destination_macro_hint": "?~click_id={click_id}&~campaign={publisher_id}",
+      "expected_click_id_slot": "~click_id",
+      "supports_event_types": ["install", "purchase", "custom"],
+      "notes": "Branch uses tilde-prefixed macros. {~click_id} requires URL-safe handling."
+    },
+    {
+      "key": "everflow",
+      "label": "Everflow",
+      "category": "mobile_mmp",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?transaction_id={transaction_id}&security_token={YOUR_TOKEN}&event={offer_url_event_name}&payout={payout_amount}&revenue={sale_amount}",
+      "destination_macro_hint": "?transaction_id={click_id}&aff_id={publisher_id}",
+      "expected_click_id_slot": "transaction_id",
+      "supports_event_types": ["install", "lead", "purchase", "custom"],
+      "notes": "Everflow uses {payout_amount} and {sale_amount} (already handled in our normaliser)."
+    },
+    {
+      "key": "impactradius",
+      "label": "Impact Radius",
+      "category": "mobile_mmp",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?irclickid={irclickid}&security_token={YOUR_TOKEN}&event={action}&payout={payout}&order_id={order_id}",
+      "destination_macro_hint": "?irclickid={click_id}&irpid={publisher_id}",
+      "expected_click_id_slot": "irclickid",
+      "supports_event_types": ["install", "lead", "purchase", "custom"],
+      "notes": "Impact Radius uses {irclickid} prefix. Supports order_id for CPS dedup."
+    },
+    {
+      "key": "admitad",
+      "label": "Admitad",
+      "category": "web_cps",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?subid={subid}&security_token={YOUR_TOKEN}&event=purchase&payout={price}&order_id={order_id}",
+      "destination_macro_hint": "?subid={click_id}&campaign={publisher_id}",
+      "expected_click_id_slot": "subid",
+      "supports_event_types": ["purchase", "lead"],
+      "notes": "Admitad is primarily CPS. {price} is payout, {subid} carries our click_id."
+    },
+
+    {
+      "key": "rakuten",
+      "label": "Rakuten LinkShare",
+      "category": "web_cps",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?clickid={u1}&security_token={YOUR_TOKEN}&event=purchase&payout={amt}&order_id={order}&site_id={siteid}",
+      "destination_macro_hint": "?u1={click_id}&mid={publisher_id}",
+      "expected_click_id_slot": "u1",
+      "supports_event_types": ["purchase"],
+      "notes": "Rakuten LinkShare is CPS-only. Uses {u1} sub-tracking slot."
+    },
+    {
+      "key": "cj_affiliate",
+      "label": "CJ Affiliate (CJ.com)",
+      "category": "web_mixed",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?clickid={CID}&security_token={YOUR_TOKEN}&event={event_type}&payout={commission}&order_id={order_id}",
+      "destination_macro_hint": "?CID={click_id}&PID={publisher_id}",
+      "expected_click_id_slot": "CID",
+      "supports_event_types": ["lead", "purchase"],
+      "notes": "Formerly Commission Junction. {CID} = click id. {commission} = payout. CJ supports both CPL and CPS."
+    },
+    {
+      "key": "awin",
+      "label": "Awin (Affiliate Window)",
+      "category": "web_cps",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?clickref={clickref}&security_token={YOUR_TOKEN}&event=purchase&payout={commission}&order_id={orderref}",
+      "destination_macro_hint": "?clickref={click_id}&awc={publisher_id}",
+      "expected_click_id_slot": "clickref",
+      "supports_event_types": ["purchase"],
+      "notes": "Awin (UK/EU CPS). {orderref} is their order id field."
+    },
+    {
+      "key": "shareasale",
+      "label": "ShareASale",
+      "category": "web_cps",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?afftrack={afftrack}&security_token={YOUR_TOKEN}&event=purchase&payout={commission}&order_id={orderid}",
+      "destination_macro_hint": "?afftrack={click_id}&affid={publisher_id}",
+      "expected_click_id_slot": "afftrack",
+      "supports_event_types": ["purchase"],
+      "notes": "ShareASale is CPS-only. {afftrack} = our click id."
+    },
+    {
+      "key": "pepperjam",
+      "label": "Pepperjam (Ascend)",
+      "category": "web_mixed",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?clickid={clickid}&security_token={YOUR_TOKEN}&event={event_type}&payout={payout}&order_id={order_id}",
+      "destination_macro_hint": "?clickid={click_id}&pid={publisher_id}",
+      "expected_click_id_slot": "clickid",
+      "supports_event_types": ["lead", "purchase"],
+      "notes": "Pepperjam (now Ascend). Supports both CPL and CPS."
+    },
+    {
+      "key": "cake",
+      "label": "CAKE (Cake Marketing)",
+      "category": "web_mixed",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?aff_sub={aff_sub}&security_token={YOUR_TOKEN}&event={goal_name}&payout={revenue}",
+      "destination_macro_hint": "?aff_sub={click_id}&aff_id={publisher_id}",
+      "expected_click_id_slot": "aff_sub",
+      "supports_event_types": ["install", "lead", "purchase", "custom"],
+      "notes": "CAKE is a legacy CPA platform. {aff_sub} = our click id. {goal_name} carries event."
+    },
+    {
+      "key": "cityads",
+      "label": "CityAds",
+      "category": "web_mixed",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?click_id={click_id}&security_token={YOUR_TOKEN}&event={event_name}&payout={payout}&order_id={order_id}",
+      "destination_macro_hint": "?click_id={click_id}&pub={publisher_id}",
+      "expected_click_id_slot": "click_id",
+      "supports_event_types": ["install", "lead", "purchase"],
+      "notes": "CityAds uses standard {click_id} naming. Mixed mobile+web."
+    },
+
+    {
+      "key": "generic_web_cpl",
+      "label": "Generic Web CPL (S2S)",
+      "category": "web_cpl",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?click_id={click_id}&security_token={YOUR_TOKEN}&event=lead&payout={payout}",
+      "destination_macro_hint": "?click_id={click_id}&pid={publisher_id}",
+      "expected_click_id_slot": "click_id",
+      "supports_event_types": ["lead"],
+      "notes": "Generic web lead-gen template. Advertiser fires from their thank-you page. NO device IDs (web traffic). Hardcoded event=lead."
+    },
+    {
+      "key": "generic_web_cps",
+      "label": "Generic Web CPS (S2S)",
+      "category": "web_cps",
+      "postback_url_template": "https://{OUR_DOMAIN}/acquisition?click_id={click_id}&security_token={YOUR_TOKEN}&event=purchase&payout={payout}&order_id={order_id}",
+      "destination_macro_hint": "?click_id={click_id}&pid={publisher_id}",
+      "expected_click_id_slot": "click_id",
+      "supports_event_types": ["purchase"],
+      "notes": "Generic web sale template. Advertiser fires from order-confirmation page. {order_id} is required for dedup on repeat purchases from same click."
+    }
+  ]
+}
