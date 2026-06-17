@@ -384,7 +384,13 @@ function handlePostback(params, ip, io) {
   }
 
   const finalPayout  = matchedGoal ? matchedGoal.payout  : resolvedPayout  || campaign?.payout  || 0;
-  const finalRevenue = matchedGoal ? matchedGoal.revenue : resolvedRevenue || 0;
+  // 2026-06-17 — Revenue fallback for fixed-rate campaigns whose MMP doesn't include &revenue=.
+  // Without this, postbacks attribute correctly (status='installed') but postbacks.revenue stays 0,
+  // making total_revenue $0 in reports. REVSHARE guard: only fall back for fixed-rate types
+  // (cpi/cpa/cpl/cps) — for revshare the campaign.payout is a percentage, not a dollar amount.
+  const FIXED_RATE_TYPES = /^(cpi|cpa|cpl|cps)$/i;
+  const revenueFallback = (campaign && FIXED_RATE_TYPES.test(campaign.payout_type || '')) ? (campaign.payout || 0) : 0;
+  const finalRevenue = matchedGoal ? matchedGoal.revenue : (resolvedRevenue || revenueFallback || 0);
 
   // ── Plan quota check ───────────────────────────────────────────────────────
   // If the campaign owner is over their monthly conversion cap, record the
