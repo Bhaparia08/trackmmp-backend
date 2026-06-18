@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TrackMMP — Reports redesign preview · Style 1</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-card: #131a31;
+    --bg-2: #1a2240;
+    --border: #232c4d;
+    --text: #e4e8f5;
+    --muted: #94a3b8;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red:  #ef4444;
+    --pink: #ec4899;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 36px 24px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 0; }
+  .lead { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+  .pill-tag { display:inline-block; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+  .pill-tag.accent { background: rgba(99,102,241,.18); color: var(--accent-2); }
+  .pill-tag.muted  { background: rgba(148,163,184,.15); color: var(--muted); }
+  .pill-tag.green  { background: rgba(16,185,129,.15); color: var(--green); }
+
+  .section {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    margin: 28px 0; overflow: hidden;
+  }
+  .section-head { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .section-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .section-body { padding: 22px; }
+
+  /* Mock UI styles — match prod dark theme */
+  .mock {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; overflow: hidden; margin-top: 12px;
+  }
+  .mock-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 10px; }
+
+  /* Section pill grid */
+  .pill-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
+  .pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    font-size: 12px; color: var(--text); cursor: pointer; transition: all .12s;
+  }
+  .pill input { margin: 0; }
+  .pill.checked { background: rgba(99,102,241,.14); border-color: var(--accent); color: var(--accent-2); font-weight: 600; }
+  .pill .ic { font-size: 14px; }
+
+  .picker-toolbar { display: flex; gap: 8px; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); margin-top: 4px; }
+  .btn-small { padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text); }
+  .btn-small.primary { background: rgba(99,102,241,.15); color: var(--accent-2); border-color: rgba(99,102,241,.4); }
+  .btn-small.subtle { color: var(--muted); }
+
+  /* Search-able filter */
+  .filter-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .search-filter {
+    position: relative; display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    font-size: 12px; min-width: 180px;
+  }
+  .search-filter.active { border-color: var(--accent); color: var(--accent-2); background: rgba(99,102,241,.08); }
+  .search-popover {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5;
+    background: var(--bg-card); border: 1px solid var(--accent); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35); padding: 10px; min-width: 240px;
+  }
+  .search-popover input {
+    width: 100%; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    font-size: 11px; color: var(--text); margin-bottom: 6px;
+  }
+  .search-popover .result {
+    padding: 6px 10px; font-size: 12px; cursor: pointer; border-radius: 4px;
+  }
+  .search-popover .result:hover { background: rgba(99,102,241,.1); color: var(--accent-2); }
+  .search-popover .result.chosen { background: rgba(99,102,241,.18); color: var(--accent-2); font-weight: 600; }
+
+  .date-presets { display: flex; gap: 4px; }
+  .date-pill { padding: 4px 10px; font-size: 11px; border-radius: 6px; background: transparent; border: 1px solid var(--border); color: var(--muted); cursor: pointer; }
+  .date-pill.on { background: rgba(99,102,241,.2); color: var(--accent-2); border-color: rgba(99,102,241,.4); font-weight: 600; }
+
+  .advanced-toggle {
+    margin-left: auto; padding: 5px 12px; font-size: 11px;
+    background: transparent; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--muted); cursor: pointer;
+  }
+  .advanced-drawer {
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 10px;
+    background: rgba(99,102,241,.04);
+  }
+  .advanced-drawer .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .advanced-drawer select { width: 100%; padding: 5px 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text); }
+  .advanced-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+  /* Mock report sections */
+  .report-section {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px; margin-top: 10px;
+  }
+  .report-section-head {
+    display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+  }
+  .report-section-head .name { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12px; }
+  .report-section-head .badge { font-size: 10px; padding: 1px 7px; border-radius: 8px; background: rgba(148,163,184,.15); color: var(--muted); }
+
+  .chart-mock {
+    height: 80px; background: linear-gradient(180deg, rgba(99,102,241,.12), transparent);
+    border-radius: 6px; position: relative; overflow: hidden;
+  }
+  .chart-mock svg { width: 100%; height: 100%; }
+
+  .table-mock { font-size: 11px; }
+  .table-mock th, .table-mock td { padding: 4px 8px; text-align: left; color: var(--muted); border-bottom: 1px dashed rgba(148,163,184,.12); }
+  .table-mock th { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
+  .table-mock td { color: var(--text); }
+
+  .doesnt-change {
+    background: rgba(148,163,184,.06);
+    border-left: 3px solid var(--muted);
+    padding: 10px 14px; margin-top: 14px; border-radius: 4px;
+    font-size: 12px; color: var(--muted);
+  }
+  .doesnt-change strong { color: var(--text); }
+
+  .footer-card {
+    background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(16,185,129,.08));
+    border: 1px solid var(--accent);
+    border-radius: 12px; padding: 22px; margin-top: 32px;
+  }
+
+  .verdict {
+    background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.25);
+    border-radius: 8px; padding: 14px 18px; margin-top: 18px;
+    font-size: 13px;
+  }
+  .checklist { padding-left: 22px; margin: 14px 0 0; }
+  .checklist li { margin: 4px 0; }
+  .checklist li::marker { color: var(--accent-2); }
+
+  code { background: var(--bg-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p style="margin:0 0 6px;color:var(--muted);font-size:12px">Preview deck · 2026-06-19 · TrackMMP</p>
+  <h1>Reports redesign — Style 1 (visible pills) + search filters + advanced toggle</h1>
+  <p class="lead">
+    Always-visible pill grid for section selection. Search-able panels for Advertiser / Publisher / Campaign filters. Date presets stay inline. A "Show advanced ▾" drawer hides the less-used filters (sub-id type, app, vertical). No more dropdowns hiding options.
+  </p>
+
+  <div class="verdict">
+    <strong>Scope:</strong>
+    <span class="pill-tag accent" style="margin-left:6px">Reports.jsx only</span>
+    <span class="pill-tag muted" style="margin-left:6px">~3h work</span>
+    <span class="pill-tag green" style="margin-left:6px">no tracking impact</span>
+    <span class="pill-tag muted" style="margin-left:6px">backend unchanged</span>
+  </div>
+
+  <!-- ========== 1 — Section picker ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">1</div>
+      <h2>Section picker — always-visible pill grid</h2>
+      <span class="pill-tag accent" style="margin-left:auto">replaces hidden dropdown</span>
+    </div>
+    <div class="section-body">
+      <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+        All 11 report types visible at once. Click a pill to toggle it on/off. Selected pills are highlighted in indigo. <code>Select all</code> / <code>Clear all</code> at the bottom.
+      </p>
+
+      <div class="mock">
+        <div class="mock-title">Pick sections to display in your custom report panel</div>
+        <div class="pill-grid">
+          <label class="pill checked"><input type="checkbox" checked><span class="ic">📅</span> By Day</label>
+          <label class="pill checked"><input type="checkbox" checked><span class="ic">📢</span> By Campaign</label>
+          <label class="pill"><input type="checkbox"><span class="ic">🤝</span> By Publisher</label>
+          <label class="pill checked"><input type="checkbox" checked><span class="ic">🌍</span> By Country</label>
+          <label class="pill"><input type="checkbox"><span class="ic">📱</span> By Device</label>
+          <label class="pill checked"><input type="checkbox" checked><span class="ic">💻</span> By OS</label>
+          <label class="pill"><input type="checkbox"><span class="ic">⚡</span> By Event</label>
+          <label class="pill"><input type="checkbox"><span class="ic">🎯</span> By Goal</label>
+          <label class="pill"><input type="checkbox"><span class="ic">🔖</span> By Sub ID</label>
+          <label class="pill"><input type="checkbox"><span class="ic">🔁</span> Cohort</label>
+          <label class="pill"><input type="checkbox"><span class="ic">💰</span> Cost & ROI</label>
+          <label class="pill" style="opacity:.4"><span class="ic">+</span> add more later</label>
+        </div>
+        <div class="picker-toolbar">
+          <button class="btn-small primary">☑ Select all</button>
+          <button class="btn-small subtle">☐ Clear all</button>
+          <span style="margin-left:auto;font-size:11px;color:var(--muted)">4 selected</span>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>All 11 sections visible at once — no dropdown, no hiding</li>
+        <li>Click any pill to toggle (checkbox driven)</li>
+        <li>Selected pills highlighted indigo + checkmark, unselected stay neutral</li>
+        <li>Choice persists in <code>localStorage</code> across refreshes</li>
+        <li>Grid wraps responsively: 4 columns on desktop, fewer on narrow screens</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> The data sections below the picker (chart + table per selected type) work exactly like the multi-select build you saw on local.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 2 — Search-able filters ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">2</div>
+      <h2>Search-able filter panels — Advertiser / Publisher / Campaign</h2>
+      <span class="pill-tag accent" style="margin-left:auto">replaces dropdowns</span>
+    </div>
+    <div class="section-body">
+      <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+        Click a filter → small popover opens with a search box + matching results. Type to filter. Click a result → selected, popover closes. Click ✕ to clear.
+      </p>
+
+      <div class="mock">
+        <div class="mock-title">Filters row (collapsed state)</div>
+        <div class="filter-row">
+          <div class="search-filter active">
+            <span>🔍</span><span>Advertiser:</span> <strong style="color:var(--accent-2)">BetMGM Partners</strong>
+            <span style="margin-left:6px;color:var(--muted);cursor:pointer">✕</span>
+          </div>
+          <div class="search-filter">
+            <span>🔍</span><span>Publisher:</span> <span style="color:var(--muted)">All</span>
+            <span style="margin-left:auto;color:var(--muted)">▾</span>
+          </div>
+          <div class="search-filter">
+            <span>🔍</span><span>Campaign:</span> <span style="color:var(--muted)">All</span>
+            <span style="margin-left:auto;color:var(--muted)">▾</span>
+          </div>
+          <div class="date-presets" style="margin-left:auto">
+            <button class="date-pill">Today</button>
+            <button class="date-pill">Yest</button>
+            <button class="date-pill on">7d</button>
+            <button class="date-pill">30d</button>
+            <button class="date-pill">Custom</button>
+          </div>
+          <button class="advanced-toggle">Show advanced ▾</button>
+        </div>
+      </div>
+
+      <div class="mock" style="margin-top:14px">
+        <div class="mock-title">Publisher filter — open with search popover</div>
+        <div class="filter-row">
+          <div class="search-filter active" style="position:relative">
+            <span>🔍</span><span>Publisher:</span> <span style="color:var(--muted)">All</span>
+            <span style="margin-left:auto;color:var(--accent-2)">▴</span>
+            <div class="search-popover">
+              <input type="text" placeholder="Type to search publishers…" value="gala" disabled />
+              <div class="result chosen">Galaksion (PID 9) ✓</div>
+              <div class="result">Galaxy Mobile (PID 14)</div>
+              <div class="result">— no other matches —</div>
+            </div>
+          </div>
+          <div style="flex:1"></div>
+        </div>
+        <div style="height: 110px"></div>
+      </div>
+
+      <ul class="checklist">
+        <li>Search as you type — instant filter of advertiser / publisher / campaign lists</li>
+        <li>Selected entity shown in the button label with ✕ to clear quickly</li>
+        <li>Click outside or pick a result → popover closes</li>
+        <li>Works the same for all 3 entity filters (Advertiser, Publisher, Campaign)</li>
+        <li>Helpful when you have 100+ campaigns — no more scrolling a giant dropdown</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> The selected value flows into the same API params as today — backend stays the same.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 3 — Advanced filters toggle ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">3</div>
+      <h2>"Show advanced" drawer — hide rarely-used filters</h2>
+      <span class="pill-tag accent" style="margin-left:auto">cleaner default view</span>
+    </div>
+    <div class="section-body">
+      <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+        Less-used filters (Sub-ID parameter, App, Vertical) move into a collapsed drawer. Toggle to show. Keeps the default UI uncluttered.
+      </p>
+
+      <div class="mock">
+        <div class="mock-title">Default — drawer collapsed</div>
+        <div class="filter-row">
+          <div class="search-filter"><span>🔍</span><span>Advertiser:</span> <span style="color:var(--muted)">All</span> <span style="margin-left:auto;color:var(--muted)">▾</span></div>
+          <div class="search-filter"><span>🔍</span><span>Publisher:</span> <span style="color:var(--muted)">All</span> <span style="margin-left:auto;color:var(--muted)">▾</span></div>
+          <div class="search-filter"><span>🔍</span><span>Campaign:</span> <span style="color:var(--muted)">All</span> <span style="margin-left:auto;color:var(--muted)">▾</span></div>
+          <div class="date-presets" style="margin-left:auto">
+            <button class="date-pill on">7d</button>
+            <button class="date-pill">30d</button>
+          </div>
+          <button class="advanced-toggle">Show advanced ▾</button>
+        </div>
+      </div>
+
+      <div class="mock" style="margin-top:14px">
+        <div class="mock-title">Drawer expanded</div>
+        <div class="filter-row">
+          <div class="search-filter"><span>🔍</span><span>Advertiser:</span> <span style="color:var(--muted)">All</span> <span style="margin-left:auto;color:var(--muted)">▾</span></div>
+          <div class="search-filter"><span>🔍</span><span>Publisher:</span> <span style="color:var(--muted)">All</span> <span style="margin-left:auto;color:var(--muted)">▾</span></div>
+          <div class="search-filter"><span>🔍</span><span>Campaign:</span> <span style="color:var(--muted)">All</span> <span style="margin-left:auto;color:var(--muted)">▾</span></div>
+          <div class="date-presets" style="margin-left:auto">
+            <button class="date-pill on">7d</button>
+            <button class="date-pill">30d</button>
+          </div>
+          <button class="advanced-toggle" style="background:rgba(99,102,241,.15);color:var(--accent-2);border-color:rgba(99,102,241,.4)">Hide advanced ▴</button>
+        </div>
+        <div class="advanced-drawer">
+          <div class="advanced-grid">
+            <div>
+              <div class="label">Sub-ID parameter</div>
+              <select disabled>
+                <option>af_sub2 (publisher click ID)</option>
+                <option>af_sub1 · af_sub3 · af_sub4 · af_sub5</option>
+              </select>
+            </div>
+            <div>
+              <div class="label">App</div>
+              <select disabled>
+                <option>All apps</option>
+                <option>NordVPN iOS · NordVPN Android · BharatLoan · …</option>
+              </select>
+            </div>
+            <div>
+              <div class="label">Vertical</div>
+              <select disabled>
+                <option>All verticals</option>
+                <option>Betting · Finance · Insurance · Health · E-commerce</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>Drawer state persists across refreshes (localStorage)</li>
+        <li>Filters in the drawer apply to the same query string as today</li>
+        <li>Drawer can grow later — easy to add more fields without re-cluttering the default view</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ========== 4 — How it all looks together ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">4</div>
+      <h2>Full page layout — putting it all together</h2>
+    </div>
+    <div class="section-body">
+      <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+        Section picker on top → search filter row → date presets → data sections (one per selected type, each with chart + table).
+      </p>
+
+      <div class="mock" style="padding:14px">
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <h2 style="margin:0;font-size:16px">Reports</h2>
+            <div style="font-size:11px;color:var(--muted)">2026-06-12 → 2026-06-18 · 4 sections active</div>
+          </div>
+          <button class="btn-small primary">⬇ Export CSV</button>
+        </div>
+
+        <!-- Section picker pills -->
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+          <div class="mock-title">Pick sections</div>
+          <div class="pill-grid">
+            <label class="pill checked"><input type="checkbox" checked><span class="ic">📅</span> By Day</label>
+            <label class="pill checked"><input type="checkbox" checked><span class="ic">📢</span> By Campaign</label>
+            <label class="pill"><input type="checkbox"><span class="ic">🤝</span> By Publisher</label>
+            <label class="pill checked"><input type="checkbox" checked><span class="ic">🌍</span> By Country</label>
+            <label class="pill"><input type="checkbox"><span class="ic">📱</span> By Device</label>
+            <label class="pill checked"><input type="checkbox" checked><span class="ic">💻</span> By OS</label>
+            <label class="pill"><input type="checkbox"><span class="ic">⚡</span> By Event</label>
+            <label class="pill"><input type="checkbox"><span class="ic">🎯</span> By Goal</label>
+            <label class="pill"><input type="checkbox"><span class="ic">🔖</span> By Sub ID</label>
+            <label class="pill"><input type="checkbox"><span class="ic">🔁</span> Cohort</label>
+            <label class="pill"><input type="checkbox"><span class="ic">💰</span> Cost & ROI</label>
+            <label class="pill" style="opacity:.3"></label>
+          </div>
+        </div>
+
+        <!-- Filters row -->
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
+          <div class="filter-row">
+            <div class="search-filter"><span>🔍</span><span>Adv:</span> <span style="color:var(--muted)">All</span></div>
+            <div class="search-filter active"><span>🔍</span><span>Pub:</span> <strong>Galaksion</strong> <span style="margin-left:auto;color:var(--muted)">✕</span></div>
+            <div class="search-filter"><span>🔍</span><span>Cmp:</span> <span style="color:var(--muted)">All</span></div>
+            <div class="date-presets">
+              <button class="date-pill">Today</button>
+              <button class="date-pill on">7d</button>
+              <button class="date-pill">30d</button>
+              <button class="date-pill">Custom</button>
+            </div>
+            <button class="advanced-toggle">Adv ▾</button>
+          </div>
+        </div>
+
+        <!-- Section 1: Day -->
+        <div class="report-section">
+          <div class="report-section-head">
+            <div class="name"><span>📅</span> By Day Breakdown <span class="badge">7 rows</span></div>
+            <button class="btn-small subtle">⬇ CSV</button>
+          </div>
+          <div class="chart-mock">
+            <svg viewBox="0 0 400 80" preserveAspectRatio="none">
+              <polyline fill="rgba(99,102,241,.2)" stroke="none" points="0,80 60,55 120,45 180,32 240,18 300,22 360,12 400,8 400,80"/>
+              <polyline fill="none" stroke="#818cf8" stroke-width="2" points="0,80 60,55 120,45 180,32 240,18 300,22 360,12 400,8"/>
+              <polyline fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="3 2" points="0,78 60,70 120,65 180,55 240,42 300,40 360,35 400,30"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Section 2: Campaign -->
+        <div class="report-section">
+          <div class="report-section-head">
+            <div class="name"><span>📢</span> By Campaign Breakdown <span class="badge">8 rows</span></div>
+            <button class="btn-small subtle">⬇ CSV</button>
+          </div>
+          <div class="chart-mock">
+            <svg viewBox="0 0 400 80" preserveAspectRatio="none">
+              <rect x="10" y="20" width="30" height="60" fill="#6366f1"/>
+              <rect x="50" y="35" width="30" height="45" fill="#10b981"/>
+              <rect x="90" y="40" width="30" height="40" fill="#f59e0b"/>
+              <rect x="130" y="50" width="30" height="30" fill="#ef4444"/>
+              <rect x="170" y="55" width="30" height="25" fill="#a78bfa"/>
+              <rect x="210" y="60" width="30" height="20" fill="#60a5fa"/>
+              <rect x="250" y="65" width="30" height="15" fill="#34d399"/>
+              <rect x="290" y="68" width="30" height="12" fill="#ec4899"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Section 3: Country -->
+        <div class="report-section">
+          <div class="report-section-head">
+            <div class="name"><span>🌍</span> By Country Breakdown <span class="badge">12 rows</span></div>
+            <button class="btn-small subtle">⬇ CSV</button>
+          </div>
+          <div class="chart-mock"></div>
+        </div>
+
+        <!-- Section 4: OS -->
+        <div class="report-section">
+          <div class="report-section-head">
+            <div class="name"><span>💻</span> By OS Breakdown <span class="badge">5 rows</span></div>
+            <button class="btn-small subtle">⬇ CSV</button>
+          </div>
+          <div class="chart-mock"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Decide ========== -->
+  <div class="footer-card">
+    <h2 style="margin:0 0 8px">Decision</h2>
+    <p style="margin:0 0 12px;color:var(--muted);font-size:13px">
+      All 3 pieces shipped together in one Reports.jsx change. Each piece independently revertable if needed.
+    </p>
+    <ul class="checklist" style="margin:0 0 14px">
+      <li><code>ship</code> — I build it locally first, you check at <code>localhost:5173/reports</code>, then we deploy</li>
+      <li><code>change X</code> — Tell me what to tweak first</li>
+      <li><code>only build piece 1+2 not 3</code> — Skip the advanced drawer for now</li>
+    </ul>
+    <p style="margin:0;color:var(--muted);font-size:12px">
+      No tracking layer impact. Backend unchanged. Reports endpoints and filters all use existing params.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
