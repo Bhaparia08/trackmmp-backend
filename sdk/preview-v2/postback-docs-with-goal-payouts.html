@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TrackMMP — Postback docs + per-goal payouts preview</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-card: #131a31;
+    --bg-2: #1a2240;
+    --border: #232c4d;
+    --text: #e4e8f5;
+    --muted: #94a3b8;
+    --accent: #6366f1;
+    --accent-2: #818cf8;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red:  #ef4444;
+    --pink: #ec4899;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 36px 24px 80px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 0; }
+  .lead { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+  .pill-tag { display:inline-block; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700; }
+  .pill-tag.accent { background: rgba(99,102,241,.18); color: var(--accent-2); }
+  .pill-tag.muted  { background: rgba(148,163,184,.15); color: var(--muted); }
+  .pill-tag.green  { background: rgba(16,185,129,.15); color: var(--green); }
+  .pill-tag.amber  { background: rgba(245,158,11,.15); color: var(--amber); }
+
+  .section {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    margin: 28px 0; overflow: hidden;
+  }
+  .section-head { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .section-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .section-body { padding: 22px; }
+
+  .mock {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; overflow: hidden; margin-top: 12px;
+  }
+  .mock-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 10px; }
+
+  /* Form mock styles */
+  .field-group { margin-bottom: 14px; }
+  .field-group label { display: block; font-size: 12px; color: var(--text); font-weight: 500; margin-bottom: 4px; }
+  .field-group label .hint { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .field-group input, .field-group select {
+    width: 100%; padding: 8px 12px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: 12px; font-family: 'Monaco', 'Menlo', monospace;
+  }
+  .field-group input:focus { outline: none; border-color: var(--accent); }
+
+  .macro-help {
+    margin-top: 8px; padding: 10px 14px;
+    background: rgba(99,102,241,.06); border: 1px solid rgba(99,102,241,.2); border-radius: 6px;
+    font-size: 11px;
+  }
+  .macro-help .title { font-weight: 700; color: var(--accent-2); margin-bottom: 6px; }
+  .macro-help code { background: var(--bg-2); padding: 1px 6px; border-radius: 3px; font-size: 11px; color: var(--amber); }
+  .macro-help table { width: 100%; font-size: 11px; border-collapse: collapse; margin-top: 8px; }
+  .macro-help th, .macro-help td { text-align: left; padding: 4px 8px; border-bottom: 1px dashed rgba(148,163,184,.15); }
+  .macro-help th { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); font-weight: 600; }
+  .macro-help .net { font-weight: 700; color: var(--accent-2); }
+
+  /* Goal rows */
+  .goal-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .goal-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 10px; padding: 12px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    align-items: center;
+  }
+  .goal-row .label-mini { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 3px; }
+  .goal-row input, .goal-row select {
+    width: 100%; padding: 6px 10px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); font-size: 12px;
+  }
+  .btn-delete {
+    width: 28px; height: 28px; border-radius: 6px; border: none;
+    background: rgba(239,68,68,.1); color: var(--red); cursor: pointer; font-size: 14px;
+  }
+  .btn-add {
+    margin-top: 10px; padding: 8px 14px; font-size: 12px;
+    background: rgba(99,102,241,.1); color: var(--accent-2);
+    border: 1px dashed rgba(99,102,241,.4); border-radius: 6px; cursor: pointer; font-weight: 600;
+  }
+
+  .confirmed {
+    background: rgba(16,185,129,.06); border: 1px solid rgba(16,185,129,.3); border-radius: 8px;
+    padding: 14px 18px; margin-bottom: 12px;
+  }
+  .confirmed strong { color: var(--green); }
+
+  .checklist { padding-left: 22px; margin: 14px 0 0; }
+  .checklist li { margin: 4px 0; }
+  .checklist li::marker { color: var(--accent-2); }
+  code { background: var(--bg-2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  pre { background: var(--bg-2); padding: 10px 14px; border-radius: 6px; font-size: 11px; overflow-x: auto; margin: 8px 0; font-family: 'Monaco', 'Menlo', monospace; }
+
+  .verdict {
+    background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.25);
+    border-radius: 8px; padding: 14px 18px; margin-top: 18px;
+    font-size: 13px;
+  }
+  .doesnt-change {
+    background: rgba(148,163,184,.06);
+    border-left: 3px solid var(--muted);
+    padding: 10px 14px; margin-top: 14px; border-radius: 4px;
+    font-size: 12px; color: var(--muted);
+  }
+  .doesnt-change strong { color: var(--text); }
+
+  .footer-card {
+    background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(16,185,129,.08));
+    border: 1px solid var(--accent);
+    border-radius: 12px; padding: 22px; margin-top: 32px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p style="margin:0 0 6px;color:var(--muted);font-size:12px">Preview deck · 2026-06-21 · TrackMMP</p>
+  <h1>Postback inline docs + per-goal payouts</h1>
+  <p class="lead">
+    Confirms the industry pattern: ONE postback URL per campaign with an <code>event_name</code> macro substituted by the MMP at fire time. Plus per-goal payout configuration so different events (install / FTD / purchase) can pay different rates without needing separate URLs.
+  </p>
+
+  <div class="verdict">
+    <strong>Scope:</strong>
+    <span class="pill-tag accent" style="margin-left:6px">2 small changes</span>
+    <span class="pill-tag muted" style="margin-left:6px">~3h work</span>
+    <span class="pill-tag green" style="margin-left:6px">no tracking-engine impact</span>
+    <span class="pill-tag muted" style="margin-left:6px">backend already supports goals</span>
+  </div>
+
+  <!-- ========== 0 — Confirm understanding ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">✓</div>
+      <h2>Your understanding — confirmed correct</h2>
+      <span class="pill-tag green" style="margin-left:auto">verified against AppsFlyer, Adjust, Branch, Click Dealer, Trackier, Affise</span>
+    </div>
+    <div class="section-body">
+      <div class="confirmed">
+        <strong>Confirmed:</strong> The dominant industry pattern is exactly what you described.
+        ONE postback URL per campaign. The MMP substitutes the event name (and other values) into the URL at fire time. Same URL handles install + every other event.
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:14px">
+        <thead>
+          <tr style="background:rgba(148,163,184,.05)">
+            <th style="padding:8px;text-align:left;font-size:10px;color:var(--muted);text-transform:uppercase">MMP</th>
+            <th style="padding:8px;text-align:left;font-size:10px;color:var(--muted);text-transform:uppercase">Event macro they substitute</th>
+            <th style="padding:8px;text-align:left;font-size:10px;color:var(--muted);text-transform:uppercase">Example values fired</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px dashed rgba(148,163,184,.12)">
+            <td style="padding:8px;font-weight:700;color:var(--accent-2)">AppsFlyer</td>
+            <td style="padding:8px"><code>{af_event_name}</code></td>
+            <td style="padding:8px;color:var(--muted)">install · af_purchase · af_subscribe · af_complete_registration · custom names</td>
+          </tr>
+          <tr style="border-bottom:1px dashed rgba(148,163,184,.12)">
+            <td style="padding:8px;font-weight:700;color:var(--accent-2)">Adjust</td>
+            <td style="padding:8px"><code>{activity_kind}</code></td>
+            <td style="padding:8px;color:var(--muted)">install · session · event · rejected_install · reattribution</td>
+          </tr>
+          <tr style="border-bottom:1px dashed rgba(148,163,184,.12)">
+            <td style="padding:8px;font-weight:700;color:var(--accent-2)">Branch</td>
+            <td style="padding:8px"><code>{customer_event_alias}</code></td>
+            <td style="padding:8px;color:var(--muted)">INSTALL · PURCHASE · LOGIN · custom alias</td>
+          </tr>
+          <tr style="border-bottom:1px dashed rgba(148,163,184,.12)">
+            <td style="padding:8px;font-weight:700;color:var(--accent-2)">Click Dealer</td>
+            <td style="padding:8px"><code>#status#</code></td>
+            <td style="padding:8px;color:var(--muted)">approved · pending · rejected · trial</td>
+          </tr>
+          <tr style="border-bottom:1px dashed rgba(148,163,184,.12)">
+            <td style="padding:8px;font-weight:700;color:var(--accent-2)">Trackier</td>
+            <td style="padding:8px"><code>{goal_value}</code> or <code>{event_name}</code></td>
+            <td style="padding:8px;color:var(--muted)">install · registration · ftd · purchase</td>
+          </tr>
+          <tr style="border-bottom:1px dashed rgba(148,163,184,.12)">
+            <td style="padding:8px;font-weight:700;color:var(--accent-2)">Affise</td>
+            <td style="padding:8px"><code>{goal}</code> (numeric goal ID)</td>
+            <td style="padding:8px;color:var(--muted)">1 (install) · 2 (deposit) · 3 (subscribe) · custom</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p style="margin-top:14px;font-size:13px;color:var(--text)">
+        <strong>So our existing single <code>postback_url</code> field is the right model.</strong> Admin pastes one URL with the right MMP macro and we're done. No need to build a per-event URLs UI.
+      </p>
+    </div>
+  </div>
+
+  <!-- ========== 1 — Inline docs under postback URL field ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">1</div>
+      <h2>Inline macro docs — appears under the Postback URL field</h2>
+      <span class="pill-tag accent" style="margin-left:auto">~1h · admin UI only</span>
+    </div>
+    <div class="section-body">
+      <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+        When admin focuses the Postback URL field, an expandable help panel shows examples for their selected Advertiser Network (from Sprint A's preset dropdown).
+      </p>
+
+      <div class="mock">
+        <div class="mock-title">Mockup — Postback URL field with inline help</div>
+
+        <div class="field-group">
+          <label>Advertiser Network <span class="hint">(Sprint A — already shipped)</span></label>
+          <select disabled>
+            <option>📱 AppsFlyer</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label>Outbound Postback URL <span class="hint">(fires when conversion attributes)</span></label>
+          <input value="https://track.apogeemobi.com/acquisition?clickid={clickid}&event={af_event_name}&payout={payout}&advertising_id={advertising_id}" />
+
+          <div class="macro-help">
+            <div class="title">🎯 ONE URL — handles install + every event</div>
+            <p style="margin:0 0 8px;color:var(--text);font-size:11px;line-height:1.5">
+              AppsFlyer fires this same URL for every conversion. <code>{af_event_name}</code> gets replaced with the actual event name (install, af_purchase, etc.).
+            </p>
+            <table>
+              <thead><tr><th>Macro</th><th>What AppsFlyer substitutes</th></tr></thead>
+              <tbody>
+                <tr><td><code>{clickid}</code></td><td>Your TrackMMP click_id (passed via tracking link)</td></tr>
+                <tr><td><code>{af_event_name}</code></td><td>install · af_purchase · af_subscribe · custom event</td></tr>
+                <tr><td><code>{payout}</code></td><td>Payout configured on AppsFlyer for this event</td></tr>
+                <tr><td><code>{advertising_id}</code></td><td>IDFA (iOS) or GAID (Android)</td></tr>
+                <tr><td><code>{af_revenue}</code></td><td>Revenue value if reported</td></tr>
+              </tbody>
+            </table>
+            <p style="margin:8px 0 0;font-size:11px;color:var(--muted);font-style:italic">
+              💡 If you set the Advertiser Network dropdown above, this URL auto-fills with the right macro format. Different network selected → different macros shown.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>Help panel adapts based on which Advertiser Network is picked (Sprint A presets)</li>
+        <li>Shows the EXACT macro name that MMP substitutes (e.g. <code>{af_event_name}</code> for AppsFlyer, <code>{activity_kind}</code> for Adjust)</li>
+        <li>Highlights the "one URL handles all events" pattern</li>
+        <li>Inline — no popup, doesn't take you away from the form</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> The actual postback_url field is the SAME as today. We're just adding a help panel below it.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 2 — Per-goal payout configuration ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">2</div>
+      <h2>Per-goal payout configuration</h2>
+      <span class="pill-tag accent" style="margin-left:auto">~2h · enables different rates per event</span>
+    </div>
+    <div class="section-body">
+      <p style="margin:0 0 8px;font-size:12px;color:var(--muted)">
+        For CPA campaigns where install pays $0.50 but FTD pays $25, configure each goal here. Same URL fires for all of them — we just credit different payout based on which event_name matched.
+      </p>
+
+      <div class="mock">
+        <div class="mock-title">Mockup — Goals section under the postback URL block</div>
+
+        <h3 style="margin:0 0 6px;font-size:13px">Campaign Goals & Payouts <span style="font-size:11px;color:var(--muted);font-weight:400">(optional — default: single CPA rate above)</span></h3>
+        <p style="margin:0 0 12px;font-size:11px;color:var(--muted)">
+          One URL fires for all events, but each event can pay a different amount. Add a row per event_name your MMP will fire.
+        </p>
+
+        <div class="goal-list">
+          <div class="goal-row">
+            <div>
+              <div class="label-mini">Goal name</div>
+              <input value="Install" />
+            </div>
+            <div>
+              <div class="label-mini">Event name (matches MMP's value)</div>
+              <input value="install" style="font-family:'Monaco',monospace;color:var(--amber)" />
+            </div>
+            <div>
+              <div class="label-mini">Publisher payout ($)</div>
+              <input value="0.50" />
+            </div>
+            <button class="btn-delete" disabled>✕</button>
+          </div>
+          <div class="goal-row">
+            <div>
+              <div class="label-mini">Goal name</div>
+              <input value="First Deposit (FTD)" />
+            </div>
+            <div>
+              <div class="label-mini">Event name</div>
+              <input value="ftd" style="font-family:'Monaco',monospace;color:var(--amber)" />
+            </div>
+            <div>
+              <div class="label-mini">Publisher payout ($)</div>
+              <input value="25.00" />
+            </div>
+            <button class="btn-delete">✕</button>
+          </div>
+          <div class="goal-row">
+            <div>
+              <div class="label-mini">Goal name</div>
+              <input value="Subscription Started" />
+            </div>
+            <div>
+              <div class="label-mini">Event name</div>
+              <input value="af_subscribe" style="font-family:'Monaco',monospace;color:var(--amber)" />
+            </div>
+            <div>
+              <div class="label-mini">Publisher payout ($)</div>
+              <input value="10.00" />
+            </div>
+            <button class="btn-delete">✕</button>
+          </div>
+        </div>
+
+        <button class="btn-add">+ Add another goal</button>
+
+        <div class="macro-help" style="margin-top:14px">
+          <div class="title">⚡ How it works at fire time</div>
+          <ol style="margin:0;padding-left:20px;font-size:11px;color:var(--text);line-height:1.6">
+            <li>MMP fires the single Postback URL above (with <code>event_name=ftd</code> for example)</li>
+            <li>Our handler looks up the click → finds the campaign</li>
+            <li>Matches <code>event_name</code> against the Goals list → finds "First Deposit" row</li>
+            <li>Credits the publisher <strong>$25.00</strong> (the FTD rate, not the install rate)</li>
+            <li>If no goal matches → falls back to the campaign's default payout (the value in the main "Advertiser Payout" + "Publisher Payout" fields)</li>
+          </ol>
+        </div>
+      </div>
+
+      <ul class="checklist">
+        <li>Each goal = a row with name, event_name, publisher payout</li>
+        <li>NO separate postback URL per goal — they share the campaign's single URL</li>
+        <li>Backend already has <code>campaign_goals</code> table — we're just exposing it in the form</li>
+        <li>Backend handler already matches goal by event_name (<code>postbackHandler.js</code> line ~380)</li>
+        <li>Defaults to campaign-level payout if no goal matches — backward compatible</li>
+      </ul>
+
+      <div class="doesnt-change">
+        <strong>Doesn't change:</strong> Campaigns with single payout (no goals configured) work exactly as today. Existing data stays untouched.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 3 — Together (full mockup) ========== -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-num">3</div>
+      <h2>How the campaign form looks together</h2>
+    </div>
+    <div class="section-body">
+      <div class="mock">
+        <div class="mock-title">Full layout — Postback section of the Campaign Create / Edit form</div>
+
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px">
+          <h3 style="margin:0 0 10px;font-size:13px;color:var(--accent-2)">🎯 Advertiser Network</h3>
+          <select disabled style="width:100%;padding:7px 12px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:12px">
+            <option>📱 AppsFlyer (mobile MMP)</option>
+          </select>
+        </div>
+
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px">
+          <h3 style="margin:0 0 10px;font-size:13px">📡 Outbound Postback URL</h3>
+          <input disabled value="https://track.apogeemobi.com/acquisition?clickid={clickid}&event={af_event_name}&payout={payout}&advertising_id={advertising_id}"
+            style="width:100%;padding:7px 12px;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;font-family:'Monaco',monospace" />
+          <div style="margin-top:6px;padding:8px 12px;background:rgba(99,102,241,.05);border-radius:4px;font-size:11px;color:var(--muted)">
+            💡 One URL handles install + every event. AppsFlyer substitutes <code>{af_event_name}</code> with the event being fired. ← <strong>inline doc panel from Section 1</strong>
+          </div>
+        </div>
+
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:14px">
+          <h3 style="margin:0 0 6px;font-size:13px">🪜 Campaign Goals & Payouts <span style="color:var(--muted);font-size:11px;font-weight:400">(optional)</span></h3>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">For multi-event CPA where install + FTD + purchase pay different rates ← <strong>per-goal payouts from Section 2</strong></div>
+          <div style="font-size:11px;color:var(--text);padding:8px 10px;background:var(--bg);border-radius:5px">
+            Install · $0.50 · matches event_name=install<br>
+            FTD · $25.00 · matches event_name=ftd<br>
+            Subscribe · $10.00 · matches event_name=af_subscribe<br>
+            <button class="btn-add" style="margin-top:8px">+ Add another goal</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Decide ========== -->
+  <div class="footer-card">
+    <h2 style="margin:0 0 8px">Decision</h2>
+    <p style="margin:0 0 12px;color:var(--muted);font-size:13px">
+      Two small changes. No new endpoint needed (backend goal CRUD via the existing campaigns endpoint). No tracking impact. Backward compatible — existing campaigns without goals work exactly as today.
+    </p>
+    <ul class="checklist" style="margin:0 0 14px">
+      <li><code>ship both</code> — Inline macro docs + per-goal payouts. ~3h.</li>
+      <li><code>ship docs only — skip goals UI</code> — Just the help text (~1h). Single-payout campaigns stay simple.</li>
+      <li><code>ship goals only — skip docs</code> — Per-goal payouts (~2h). Macros documented elsewhere.</li>
+      <li><code>change X</code> — Tell me what to revise in the mockup</li>
+    </ul>
+    <p style="margin:0;color:var(--muted);font-size:12px">
+      Strong recommendation: <code>ship both</code>. Together they give admins clear guidance (macros) + flexibility (per-event payouts) without overbuilding (no per-event URLs UI). Matches what AppsFlyer / Adjust / Branch / Click Dealer / Trackier / Affise all do.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
