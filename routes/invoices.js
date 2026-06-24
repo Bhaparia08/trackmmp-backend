@@ -4,34 +4,9 @@ const path     = require('path');
 const db       = require('../db/init');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
-const jwt    = require('jsonwebtoken');
 const router = express.Router();
 
 const LOGO_PATH = path.join(__dirname, '../public/logo.png');
-
-// PDF download — registered BEFORE requireAuth so ?token= query param works in browser <a> links
-router.get('/:id/pdf', (req, res, next) => {
-  // Resolve user from Bearer header OR ?token= query param
-  let user = null;
-  const authHeader = req.headers.authorization;
-  const queryToken = req.query.token;
-  try {
-    if (authHeader?.startsWith('Bearer ')) {
-      user = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
-    } else if (queryToken) {
-      user = jwt.verify(queryToken, process.env.JWT_SECRET);
-    }
-  } catch {}
-  if (!user) return res.status(401).json({ error: 'Unauthorized' });
-  // Gate PDF download with the same allowlist as the rest of the routes
-  const allowRaw = process.env.INVOICE_ADMINS || 'integration@apogeemobi.com';
-  const allow = new Set(allowRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
-  if (!allow.has((user.email || '').toLowerCase())) {
-    return res.status(403).json({ error: 'Invoice access restricted' });
-  }
-  req.user = user;
-  _generatePDF(req, res, next);
-});
 
 router.use(requireAuth);
 
@@ -51,6 +26,9 @@ router.use((req, res, next) => {
   }
   next();
 });
+
+// PDF download — authed via Bearer header (frontend uses fetch + blob, not <a> link)
+router.get('/:id/pdf', (req, res, next) => _generatePDF(req, res, next));
 
 // ── Entity definitions ────────────────────────────────────────────────────────
 const ENTITIES = {
@@ -238,6 +216,43 @@ router.put('/historical/:id', requireRole('admin'), (req, res) => {
   db.prepare('UPDATE historical_invoices SET status = COALESCE(?,status), notes = COALESCE(?,notes) WHERE id = ?')
     .run(status || null, notes != null ? notes : null, row.id);
   res.json(db.prepare('SELECT * FROM historical_invoices WHERE id = ?').get(row.id));
+});
+
+// ── GET /api/invoices/summary — aggregate totals across the FULL filtered set
+// (not just the current page). Mirrors the same filter params as GET /.
+router.get('/summary', requireRole('admin'), (req, res) => {
+  const { status, advertiser_id, from, to, search } = req.query;
+  const conditions = [];
+  const values     = [];
+
+  if (advertiser_id) { conditions.push('i.advertiser_id = ?'); values.push(advertiser_id); }
+  if (status)        { conditions.push('i.status = ?');        values.push(status); }
+  if (from)          { conditions.push('i.issue_date >= ?');   values.push(from); }
+  if (to)            { conditions.push('i.issue_date <= ?');   values.push(to); }
+  if (search) {
+    conditions.push('(i.invoice_number LIKE ? OR u.name LIKE ? OR u.legal_name LIKE ? OR u.email LIKE ?)');
+    const like = `%${search}%`;
+    values.push(like, like, like, like);
+  }
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+  const row = db.prepare(`
+    SELECT
+      COUNT(*) AS count,
+      COALESCE(SUM(CASE WHEN i.status != 'cancelled' THEN i.total ELSE 0 END), 0) AS total_all,
+      COALESCE(SUM(CASE WHEN i.status  = 'paid'      THEN i.total ELSE 0 END), 0) AS total_paid,
+      COALESCE(SUM(CASE WHEN i.status IN ('sent','overdue') THEN i.total ELSE 0 END), 0) AS total_due
+    FROM invoices i
+    LEFT JOIN users u ON u.id = i.advertiser_id
+    ${where}
+  `).get(...values);
+
+  res.json({
+    count:      row.count,
+    total_all:  Number(row.total_all)  || 0,
+    total_paid: Number(row.total_paid) || 0,
+    total_due:  Number(row.total_due)  || 0,
+  });
 });
 
 // ── GET /api/invoices — list ──────────────────────────────────────────────────
