@@ -5,6 +5,7 @@ const { customAlphabet } = require('nanoid');
 const nodemailer = require('nodemailer');
 const otplib = require('otplib');
 const QRCode = require('qrcode');
+const rateLimit = require('express-rate-limit');
 // otplib v4+ has flat exports — wrap for authenticator-style API
 const authenticator = {
   generateSecret: () => otplib.generateSecret(),
@@ -36,6 +37,40 @@ function getMailer() {
 const router = express.Router();
 const SALT_ROUNDS = 12;
 
+// ── Rate limiters ────────────────────────────────────────────────────────────
+// Defends against credential-stuffing, signup abuse, and password-reset spam.
+// All limiters key on IP (express-rate-limit default). Behind a CDN/proxy
+// trust-proxy is already set in server.js so req.ip resolves to the client.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // only failed logins count toward the limit
+  message: { error: 'Too many login attempts. Try again in 15 minutes.' },
+});
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many sign-up attempts. Try again later.' },
+});
+const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many reset requests. Try again in 15 minutes.' },
+});
+const verificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many verification attempts. Try again later.' },
+});
+
 function signToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, name: user.name, role: user.role || 'admin' },
@@ -46,7 +81,7 @@ function signToken(user) {
 
 // POST /api/auth/register  (admin registration — restricted to integration@apogeemobi.com only)
 const ADMIN_EMAIL = 'integration@apogeemobi.com';
-router.post('/register', async (req, res, next) => {
+router.post('/register', signupLimiter, async (req, res, next) => {
   try {
     const { email, password, name, company_name } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'email, password and name are required' });
@@ -70,7 +105,7 @@ router.post('/register', async (req, res, next) => {
 });
 
 // POST /api/auth/register/advertiser  (open advertiser self-signup)
-router.post('/register/advertiser', async (req, res, next) => {
+router.post('/register/advertiser', signupLimiter, async (req, res, next) => {
   try {
     const { email, password, name, company_name } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'email, password and name are required' });
@@ -147,7 +182,7 @@ router.get('/account-managers', (req, res) => {
 });
 
 // POST /api/auth/register/publisher  (open publisher self-signup — requires admin approval)
-router.post('/register/publisher', async (req, res, next) => {
+router.post('/register/publisher', signupLimiter, async (req, res, next) => {
   try {
     const { email, password, name, company_name, website_url, vertical, geo, traffic_type, monthly_traffic, account_manager_id } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'email, password and name are required' });
@@ -206,7 +241,7 @@ router.post('/register/publisher', async (req, res, next) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     const { email, password, totp_token } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
@@ -268,7 +303,7 @@ router.get('/verify-email', (req, res, next) => {
 });
 
 // POST /api/auth/resend-verification
-router.post('/resend-verification', async (req, res, next) => {
+router.post('/resend-verification', verificationLimiter, async (req, res, next) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });
@@ -300,24 +335,34 @@ router.post('/resend-verification', async (req, res, next) => {
 });
 
 // POST /api/auth/forgot-password
-router.post('/forgot-password', async (req, res, next) => {
+// Security: response is ALWAYS { sent: true } regardless of whether the email
+// exists, whether SMTP is configured, or whether the mail send succeeded —
+// otherwise the response shape becomes a user-enumeration oracle and a
+// SMTP-misconfig account-takeover path. In dev (NODE_ENV !== 'production')
+// the reset URL is logged to the server console so local testing without
+// SMTP still works.
+router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });
 
-    const user = db.prepare('SELECT id, name, email FROM users WHERE email = ?').get(email.toLowerCase().trim());
-    // Always return 200 so we don't leak which emails exist
-    if (!user) return res.json({ sent: true });
+    // Respond immediately, then do DB/mail work in the background.
+    // This both prevents body leakage and removes the timing oracle
+    // (user-exists vs not-exists were measurably different before).
+    res.json({ sent: true });
 
-    // Expire any existing unused tokens for this user
+    const user = db.prepare('SELECT id, name, email FROM users WHERE email = ?').get(email.toLowerCase().trim());
+    if (!user) return;
+
     db.prepare('UPDATE password_reset_tokens SET used=1 WHERE user_id=? AND used=0').run(user.id);
 
     const token = nanoid32();
-    const expiresAt = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600;
     db.prepare('INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, token, expiresAt);
 
     const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
     const resetUrl = `${base}/reset-password?token=${token}`;
+    const isDev = process.env.NODE_ENV !== 'production';
 
     const mailer = getMailer();
     if (mailer) {
@@ -343,22 +388,23 @@ router.post('/forgot-password', async (req, res, next) => {
             </div>
           `,
         });
-        res.json({ sent: true });
       } catch (smtpErr) {
-        // SMTP failed (bad credentials, blocked, etc.) — fall back to returning the reset URL directly
         console.error('[forgot-password] SMTP error:', smtpErr.message);
-        res.json({ sent: true, reset_url: resetUrl, note: 'Email delivery failed — use this link to reset your password' });
+        if (isDev) console.log(`[forgot-password] dev fallback URL for ${user.email}: ${resetUrl}`);
       }
+    } else if (isDev) {
+      console.log(`[forgot-password] dev reset URL for ${user.email}: ${resetUrl}`);
     } else {
-      // No SMTP configured — return the reset URL directly (admin use / dev mode)
-      console.log(`[forgot-password] reset URL for ${user.email}: ${resetUrl}`);
-      res.json({ sent: true, reset_url: resetUrl, note: 'SMTP not configured — reset URL returned directly' });
+      console.error('[forgot-password] SMTP not configured in production — reset email NOT sent');
     }
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.error('[forgot-password] background error:', err);
+    // Response already sent; cannot call next(err) here.
+  }
 });
 
 // POST /api/auth/reset-password
-router.post('/reset-password', async (req, res, next) => {
+router.post('/reset-password', passwordResetLimiter, async (req, res, next) => {
   try {
     const { token, password } = req.body;
     if (!token || !password) return res.status(400).json({ error: 'token and password are required' });
