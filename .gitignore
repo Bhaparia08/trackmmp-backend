@@ -4,5 +4,8 @@ data/
 .env.production
 .env.railway
 *.db
+*.sqlite3
 *.mmdb
 logs/
+sdk/android/
+sdk/ios/
