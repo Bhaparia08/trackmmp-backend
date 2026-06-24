@@ -1389,7 +1389,10 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
       const bcrypt = require('bcrypt');
       const existing = db.prepare("SELECT id FROM users WHERE email = 'leelam.s@apogeemobi.com'").get();
       if (!existing) {
-        const hash  = bcrypt.hashSync('Leelam@Apogeemobi2024', 12);
+        // 2026-06-24 P0 security batch (#3 audit) — read seed pwd from env var.
+        // Random fallback if env unset; account holder uses forgot-password to set their own.
+        const seedPwd = process.env.SEED_LEELAM_PASSWORD || require('crypto').randomBytes(18).toString('base64url');
+        const hash  = bcrypt.hashSync(seedPwd, 12);
         const token = nanoid20hex();
         const maxSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
         db.prepare(
@@ -1410,9 +1413,10 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
 }
 
 // ── Migration: create priya.t@apogeemobi.com as admin ────────────────────────
-// Mirrors create_leelam_admin_v1. Creates the account if missing with the temp
-// password "Welcome@2026" (forced change on first login expected). If the
-// account exists, ensures role = admin and status = active.
+// Mirrors create_leelam_admin_v1. Creates the account if missing; password is
+// read from SEED_PRIYA_PASSWORD env var (random fallback if unset — admin uses
+// forgot-password to set their own). If the account exists, ensures role =
+// admin and status = active.
 {
   db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
   const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'create_priya_admin_v1'").get();
@@ -1421,14 +1425,16 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
       const bcrypt = require('bcrypt');
       const existing = db.prepare("SELECT id FROM users WHERE email = 'priya.t@apogeemobi.com'").get();
       if (!existing) {
-        const hash  = bcrypt.hashSync('Welcome@2026', 12);
+        // 2026-06-24 P0 security batch (#3 audit) — was literal 'Welcome@2026' in source
+        const seedPwd = process.env.SEED_PRIYA_PASSWORD || require('crypto').randomBytes(18).toString('base64url');
+        const hash  = bcrypt.hashSync(seedPwd, 12);
         const token = nanoid20hex();
         const maxSeq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
         db.prepare(
           `INSERT INTO users (email, password, name, role, status, email_verified, postback_token, seq_num)
            VALUES (?, ?, 'Priya T', 'admin', 'active', 1, ?, ?)`
         ).run('priya.t@apogeemobi.com', hash, token, maxSeq);
-        console.log('[migration] create_priya_admin_v1: priya.t@apogeemobi.com created as admin (temp pwd Welcome@2026)');
+        console.log('[migration] create_priya_admin_v1: priya.t@apogeemobi.com created as admin (password from SEED_PRIYA_PASSWORD env or random)');
       } else {
         db.prepare("UPDATE users SET role = 'admin', status = 'active' WHERE email = 'priya.t@apogeemobi.com'").run();
         console.log('[migration] create_priya_admin_v1: priya.t@apogeemobi.com role set to admin');
@@ -1513,20 +1519,27 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
 }
 
 // ── Migration: reset integration + leelam admin passwords to known values ─────
+// 2026-06-24 P0 security batch (#3 audit) — was hardcoded
+// 'Integration@Apogee2024' and 'Leelam@Apogee2024'. Now reads from env vars
+// with random fallback. Migration is already run on prod (idempotent via
+// migrations table) so this refactor is for source hygiene + future deploys.
 {
   db.prepare("CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, ran_at TEXT DEFAULT (datetime('now')))").run();
   const done = db.prepare("SELECT 1 FROM migrations WHERE name = 'reset_admin_passwords_v1'").get();
   if (!done) {
     try {
       const bcrypt = require('bcrypt');
+      const crypto = require('crypto');
       // Reset integration@apogeemobi.com
-      const hash1 = bcrypt.hashSync('Integration@Apogee2024', 12);
+      const integrationPwd = process.env.SEED_INTEGRATION_PASSWORD || crypto.randomBytes(18).toString('base64url');
+      const hash1 = bcrypt.hashSync(integrationPwd, 12);
       db.prepare("UPDATE users SET password = ?, role = 'admin', status = 'active', email_verified = 1 WHERE email = 'integration@apogeemobi.com'").run(hash1);
-      console.log('[migration] reset_admin_passwords_v1: integration@apogeemobi.com password reset');
+      console.log('[migration] reset_admin_passwords_v1: integration@apogeemobi.com password reset (from SEED_INTEGRATION_PASSWORD env or random)');
       // Reset leelam.s@apogeemobi.com
-      const hash2 = bcrypt.hashSync('Leelam@Apogee2024', 12);
+      const leelamPwd = process.env.SEED_LEELAM_PASSWORD || crypto.randomBytes(18).toString('base64url');
+      const hash2 = bcrypt.hashSync(leelamPwd, 12);
       db.prepare("UPDATE users SET password = ?, role = 'admin', status = 'active', email_verified = 1 WHERE email = 'leelam.s@apogeemobi.com'").run(hash2);
-      console.log('[migration] reset_admin_passwords_v1: leelam.s@apogeemobi.com password reset');
+      console.log('[migration] reset_admin_passwords_v1: leelam.s@apogeemobi.com password reset (from SEED_LEELAM_PASSWORD env or random)');
       db.prepare("INSERT INTO migrations (name) VALUES ('reset_admin_passwords_v1')").run();
     } catch (e) {
       console.error('[migration] reset_admin_passwords_v1 failed:', e.message);
@@ -1569,7 +1582,9 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
       // 2. Find or create BetMGM advertiser
       let advertiser = db.prepare("SELECT id FROM users WHERE email = 'partners@betmgm.com'").get();
       if (!advertiser) {
-        const pw = bcrypt.hashSync('BetMGM@Welcome2026', 12);
+        // 2026-06-24 P0 security batch (#3 audit) — was literal 'BetMGM@Welcome2026' in source
+        const seedPwd = process.env.SEED_BETMGM_PASSWORD || require('crypto').randomBytes(18).toString('base64url');
+        const pw = bcrypt.hashSync(seedPwd, 12);
         const token = nanoid20hex();
         const seq = db.prepare('SELECT COALESCE(MAX(seq_num),0)+1 AS n FROM users').get().n;
         const r = db.prepare(
@@ -1577,7 +1592,7 @@ for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
            VALUES (?, ?, 'BetMGM Partners', 'BetMGM Partners', 'advertiser', 'active', 1, ?, ?)`
         ).run('partners@betmgm.com', pw, token, seq);
         advertiser = { id: r.lastInsertRowid };
-        console.log('[migration] bootstrap_betmgm_v1: BetMGM advertiser CREATED (id=' + advertiser.id + ', temp pwd BetMGM@Welcome2026)');
+        console.log('[migration] bootstrap_betmgm_v1: BetMGM advertiser CREATED (id=' + advertiser.id + ', password from SEED_BETMGM_PASSWORD env or random)');
       } else {
         console.log('[migration] bootstrap_betmgm_v1: BetMGM advertiser already exists (id=' + advertiser.id + ')');
       }
