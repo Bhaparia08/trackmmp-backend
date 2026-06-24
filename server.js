@@ -1,11 +1,26 @@
 require('dotenv').config();
 
-// Global crash handlers — prevent silent process exits
+// Global crash handlers — 2026-06-24 P0 security batch (#7 from audit).
+// Old behaviour: log only, process continued in possibly-corrupted state.
+// New behaviour: log + trigger graceful shutdown (defined later in this file)
+// + process.exit(1) so Render's supervisor restarts the worker cleanly.
+// Init-stage errors (before shutdown is wired up) fall through to a direct
+// exit since there's no in-flight state to drain.
+let _gracefulShutdown = null;
 process.on('uncaughtException', err => {
   console.error('[uncaughtException]', err);
+  if (_gracefulShutdown) {
+    _gracefulShutdown('uncaughtException');
+  } else {
+    process.exit(1);
+  }
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
+  // Promise rejections that nothing handles indicate a real bug — exit so we
+  // restart in a clean state rather than serving more traffic with a tainted
+  // event loop.
+  if (_gracefulShutdown) _gracefulShutdown('unhandledRejection');
 });
 
 const express = require('express');
@@ -27,13 +42,25 @@ app.disable('x-powered-by');                          // suppress Express finger
 app.set('trust proxy', 1);                            // trust Render/Cloudflare X-Forwarded-* for real client IPs
 const server = http.createServer(app);
 
-// Socket.io — in production allow same-origin (Express serves the frontend)
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? true  // same origin — Express serves both frontend and backend on :3001
-  : (process.env.FRONTEND_ORIGIN || 'http://localhost:5173');
-
+// Socket.io — 2026-06-24 P0 security batch (#5 from audit). Old prod default
+// was `true` (any origin). Now tightened to the same allowlist + *.apogeemobi.com
+// pattern as the Express CORS middleware. Server-to-server / no-Origin still allowed.
+const SOCKET_ORIGINS = (process.env.CORS_ORIGINS ||
+  'https://track.apogeemobi.com,http://localhost:5173,http://localhost:5180'
+).split(',').map(s => s.trim()).filter(Boolean);
 const io = new Server(server, {
-  cors: { origin: allowedOrigins, credentials: true }
+  cors: {
+    origin: function (origin, cb) {
+      if (!origin) return cb(null, true);
+      if (SOCKET_ORIGINS.includes(origin)) return cb(null, true);
+      try {
+        const host = new URL(origin).hostname;
+        if (/(^|\.)apogeemobi\.com$/i.test(host)) return cb(null, true);
+      } catch {}
+      return cb(new Error('Socket origin not allowed'), false);
+    },
+    credentials: true,
+  },
 });
 
 io.use((socket, next) => {
@@ -86,11 +113,23 @@ const STRICT_ORIGINS = (process.env.CORS_ORIGINS ||
   'https://track.apogeemobi.com,http://localhost:5173,http://localhost:5180'
 ).split(',').map(s => s.trim()).filter(Boolean);
 
+// 2026-06-24 P0 security batch (#5 from audit) — close the open-CORS bug.
+// Old behaviour: both branches returned cb(null, true), so the allowlist was
+// meaningless. Any origin could trigger XHR with CORS headers attached.
+// New behaviour: non-allowlisted browser origins receive cb(null, false) —
+// response goes through but without Access-Control-Allow-Origin, so the
+// browser blocks the cross-origin read. Server-to-server requests (no Origin
+// header) and any *.apogeemobi.com subdomain are still allowed for the
+// publisher SDK / future hostnames.
 app.use(cors({
   origin: function (origin, cb) {
     if (!origin) return cb(null, true);               // curl, server-to-server, mobile native — no Origin header
     if (STRICT_ORIGINS.includes(origin)) return cb(null, true);
-    return cb(null, true);                            // publisher SDK sites — credentials:false below means no cookie reflection
+    try {
+      const host = new URL(origin).hostname;
+      if (/(^|\.)apogeemobi\.com$/i.test(host)) return cb(null, true);
+    } catch {}
+    return cb(null, false);                           // non-allowlisted — no CORS headers, browser blocks cross-origin XHR
   },
   credentials: false,
 }));
@@ -415,7 +454,9 @@ function shutdown(signal) {
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT',  () => shutdown('SIGINT'));
-process.on('unhandledRejection', (err) => console.error('unhandledRejection', err));
+// 2026-06-24 — wire the uncaughtException/unhandledRejection top-of-file
+// handlers into the same graceful shutdown path defined above.
+_gracefulShutdown = shutdown;
 
 // deploy trigger Wed Apr 16 2026 — Publishers tab + campaign access routes
 // deploy trigger 2026-05-16T01:34:55Z — Phase 3a routes
