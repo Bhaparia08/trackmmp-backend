@@ -46,7 +46,13 @@ const loginLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: true, // only failed logins count toward the limit
+  skipSuccessfulRequests: true,
+  // Override the default success test so that a 2FA-challenge response is
+  // NOT treated as "successful" for rate-limit purposes. Otherwise the 200
+  // {requires_2fa:true} branch would let an attacker probe (email,password)
+  // pairs against any 2FA-enabled account without ever tripping the limit.
+  // The login handler sets X-2FA-Required:1 when it returns that branch.
+  requestWasSuccessful: (req, res) => res.statusCode < 400 && !res.getHeader('X-2FA-Required'),
   message: { error: 'Too many login attempts. Try again in 15 minutes.' },
 });
 const signupLimiter = rateLimit({
@@ -56,12 +62,21 @@ const signupLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many sign-up attempts. Try again later.' },
 });
-const passwordResetLimiter = rateLimit({
+// Two separate limiters so a user/IP cannot lock themselves out of the
+// final reset step by exhausting requests during the forgot-password phase.
+const forgotPasswordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many reset requests. Try again in 15 minutes.' },
+});
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many reset attempts. Try again in 15 minutes.' },
 });
 const verificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -129,12 +144,17 @@ router.post('/register/advertiser', signupLimiter, async (req, res, next) => {
       const expiresAt = Math.floor(Date.now() / 1000) + 86400;
       db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
       const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
-      const mailResult = await sendVerificationEmail(mailer, email, name, `${base}/verify-email?token=${verifyToken}`);
+      const verifyUrl = `${base}/verify-email?token=${verifyToken}`;
+      const mailResult = await sendVerificationEmail(mailer, email, name, verifyUrl);
       if (!mailResult.sent) {
-        // SMTP failed — auto-verify and log in directly
-        db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(user.id);
-        const freshUser = db.prepare('SELECT id, email, name, company_name, role, plan, status, postback_token, created_at FROM users WHERE id = ?').get(user.id);
-        return res.status(201).json({ token: signToken(freshUser), user: freshUser });
+        // SMTP failure: do NOT auto-verify (was exploitable — anyone signing
+        // up during an outage instantly got a verified account). Surface the
+        // generic "check your inbox" response just like the success path so
+        // the failure is not observable from the client side.
+        const isDev = process.env.NODE_ENV !== 'production';
+        if (isDev) console.log(`[register/advertiser] dev verify URL for ${email}: ${verifyUrl}`);
+        else console.error(`[register/advertiser] SMTP_FAILURE email=${email} — verification email NOT sent`);
+        audit.log(req, 'register_advertiser_smtp_failure', 'user', user.id, email, { error: 'verification email not sent' });
       }
       return res.status(201).json({ sent: true, email: user.email });
     }
@@ -267,7 +287,11 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     // 2FA check: if TOTP is enabled for this user
     if (user.totp_enabled === 1 && user.totp_secret) {
       if (!totp_token) {
-        // Password correct but 2FA code not provided — prompt frontend
+        // Password correct but 2FA code not provided — prompt frontend.
+        // Tag the response so loginLimiter's requestWasSuccessful counts this
+        // attempt; otherwise the 200 response would let attackers probe valid
+        // (email,password) pairs against 2FA-enabled accounts unlimited times.
+        res.setHeader('X-2FA-Required', '1');
         return res.json({ requires_2fa: true, email: user.email });
       }
       // Verify the TOTP token
@@ -323,11 +347,16 @@ router.post('/resend-verification', verificationLimiter, async (req, res, next) 
     db.prepare('INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES (?, ?, ?)').run(user.id, verifyToken, expiresAt);
 
     const base = process.env.FRONTEND_ORIGIN || 'https://track.apogeemobi.com';
-    const mailResult = await sendVerificationEmail(mailer, user.email, user.name, `${base}/verify-email?token=${verifyToken}`);
+    const verifyUrl = `${base}/verify-email?token=${verifyToken}`;
+    const mailResult = await sendVerificationEmail(mailer, user.email, user.name, verifyUrl);
     if (!mailResult.sent) {
-      // SMTP failed — auto-verify the user so they can log in
-      db.prepare('UPDATE users SET email_verified=1 WHERE id=?').run(user.id);
-      return res.json({ sent: true, auto_verified: true });
+      // SMTP failure: do NOT auto-verify (was exploitable — anyone with a
+      // known email could verify any account during an outage) and do NOT
+      // change response shape (auto_verified leaked existence+state).
+      const isDev = process.env.NODE_ENV !== 'production';
+      if (isDev) console.log(`[resend-verification] dev verify URL for ${user.email}: ${verifyUrl}`);
+      else console.error(`[resend-verification] SMTP_FAILURE email=${user.email} — verification email NOT sent`);
+      audit.log(req, 'resend_verification_smtp_failure', 'user', user.id, user.email, { error: 'verification email not sent' });
     }
 
     res.json({ sent: true });
@@ -341,7 +370,7 @@ router.post('/resend-verification', verificationLimiter, async (req, res, next) 
 // SMTP-misconfig account-takeover path. In dev (NODE_ENV !== 'production')
 // the reset URL is logged to the server console so local testing without
 // SMTP still works.
-router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => {
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res, next) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });
@@ -389,13 +418,15 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => 
           `,
         });
       } catch (smtpErr) {
-        console.error('[forgot-password] SMTP error:', smtpErr.message);
+        console.error(`[forgot-password] SMTP_FAILURE email=${user.email} error=${smtpErr.message}`);
+        audit.log(req, 'forgot_password_smtp_failure', 'user', user.id, user.email, { error: smtpErr.message });
         if (isDev) console.log(`[forgot-password] dev fallback URL for ${user.email}: ${resetUrl}`);
       }
     } else if (isDev) {
       console.log(`[forgot-password] dev reset URL for ${user.email}: ${resetUrl}`);
     } else {
-      console.error('[forgot-password] SMTP not configured in production — reset email NOT sent');
+      console.error(`[forgot-password] SMTP_NOT_CONFIGURED email=${user.email} — reset email NOT sent`);
+      audit.log(req, 'forgot_password_smtp_not_configured', 'user', user.id, user.email);
     }
   } catch (err) {
     console.error('[forgot-password] background error:', err);
@@ -404,7 +435,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res, next) => 
 });
 
 // POST /api/auth/reset-password
-router.post('/reset-password', passwordResetLimiter, async (req, res, next) => {
+router.post('/reset-password', resetPasswordLimiter, async (req, res, next) => {
   try {
     const { token, password } = req.body;
     if (!token || !password) return res.status(400).json({ error: 'token and password are required' });

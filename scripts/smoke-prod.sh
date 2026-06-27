@@ -148,15 +148,23 @@ check_code   "GET  /api/ads-text/all (no auth)"   "$PROD/api/ads-text/all"      
 
 echo ""
 echo "[12] Dev-only endpoints (locked in production)"
-# /api/dev/preview-token is localhost-only in non-prod, 404 in prod.
-# We accept either 404 (prod) or 200 (local with NODE_ENV != production).
+# /api/dev/preview-token MUST return 404 against production. Accepting 200
+# would silently approve a dev endpoint leaking into prod that mints admin
+# JWTs. Only allow 200 when $PROD points at a loopback/RFC1918 address.
 DEV_TOKEN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$PROD/api/dev/preview-token")
-if [ "$DEV_TOKEN_STATUS" = "404" ] || [ "$DEV_TOKEN_STATUS" = "200" ]; then
+if [[ "$PROD" =~ ^https?://(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.) ]]; then
+  ALLOWED_REGEX='^(200|404)$'
+  ALLOWED_DESC="200 or 404 (localhost)"
+else
+  ALLOWED_REGEX='^404$'
+  ALLOWED_DESC="404 (production — 200 would be a leak)"
+fi
+if [[ "$DEV_TOKEN_STATUS" =~ $ALLOWED_REGEX ]]; then
   printf "  ✓ %-50s %s (acceptable)\n" "GET  /api/dev/preview-token" "$DEV_TOKEN_STATUS"
   PASS_COUNT=$((PASS_COUNT + 1))
 else
-  printf "  ✗ %-50s expected 200 or 404, got %s\n" "GET  /api/dev/preview-token" "$DEV_TOKEN_STATUS"
-  FAILURES+=("Dev preview token endpoint unexpected status: $DEV_TOKEN_STATUS")
+  printf "  ✗ %-50s expected %s, got %s\n" "GET  /api/dev/preview-token" "$ALLOWED_DESC" "$DEV_TOKEN_STATUS"
+  FAILURES+=("Dev preview token endpoint unexpected status against $PROD: $DEV_TOKEN_STATUS (expected $ALLOWED_DESC)")
 fi
 
 # ── result ────────────────────────────────────────────────────────────────
