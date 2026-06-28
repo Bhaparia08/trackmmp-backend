@@ -1,0 +1,49 @@
+# CODEOWNERS for trackmmp-backend.
+#
+# Reviews are required from the listed owners before a PR can merge into main
+# (provided "Require review from Code Owners" is enabled in branch protection
+# — see GITHUB-BRANCH-PROTECTION.md).
+#
+# Currently @Bhaparia08 is sole reviewer. When the team grows, split by area:
+# tracking → tracking-leads, payments → finance, etc.
+
+# ── Default owner ────────────────────────────────────────────────────────────
+* @Bhaparia08
+
+# ── Frozen tracking layer (HARD STOP) ────────────────────────────────────────
+# These files require explicit "modify tracking" approval in addition to a
+# normal review. Listed individually so accidental edits trigger an owner
+# notification even if branch-protection rules aren't applied.
+routes/track.js                  @Bhaparia08
+routes/postbacks.js              @Bhaparia08
+routes/acquisition.js            @Bhaparia08
+utils/postbackHandler.js         @Bhaparia08
+utils/macroReplace.js            @Bhaparia08
+utils/webhookRetry.js            @Bhaparia08
+
+# ── Auth + security (HIGH) ───────────────────────────────────────────────────
+routes/auth.js                   @Bhaparia08
+middleware/auth.js               @Bhaparia08
+server.js                        @Bhaparia08
+.env*                            @Bhaparia08
+
+# ── Payments + invoices (HIGH) ───────────────────────────────────────────────
+routes/invoices.js               @Bhaparia08
+routes/insertionOrders.js        @Bhaparia08
+routes/currency.js               @Bhaparia08
+
+# ── DB schema (HIGH — forward-only on prod) ──────────────────────────────────
+db/init.js                       @Bhaparia08
+db/                              @Bhaparia08
+
+# ── CI / deploy / config (HIGH) ──────────────────────────────────────────────
+.github/workflows/               @Bhaparia08
+.github/CODEOWNERS               @Bhaparia08
+CODEOWNERS                       @Bhaparia08
+package.json                     @Bhaparia08
+package-lock.json                @Bhaparia08
+
+# ── Review process docs ──────────────────────────────────────────────────────
+docs/REVIEW-STANDARDS.md         @Bhaparia08
+docs/CROSS-CHECK-TEMPLATE.md     @Bhaparia08
+scripts/review.sh                @Bhaparia08
