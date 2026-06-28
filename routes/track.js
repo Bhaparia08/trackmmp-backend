@@ -421,18 +421,33 @@ router.get('/click/:campaign_token', clickLimiter, async (req, res, next) => {
 
     // ── Macro substitution in advertiser's destination/tracking URL ──────────
     // The destination_url may contain the advertiser's own macro placeholders.
-    // Fallback chain: landing_page URL → destination_url → preview_url → error
-    if (!campaign.destination_url && !campaign.preview_url && !landing_page_id) {
-      return res.status(404).send('Campaign has no destination URL configured. Contact your account manager.');
+    // Fallback chain: landing_page URL → destination_url → preview_url (if not
+    // an image) → error.
+    //
+    // Refinement (2026-06-05): preview_url for many platforms (Insparx, CAKE,
+    // ClickDealer) holds a THUMBNAIL IMAGE — not a tracker. Previously we'd
+    // 302-redirect to the image which gave a confusingly broken UX. Now we
+    // skip preview_url when it looks like an image and return a clear 404
+    // with actionable guidance instead.
+    function looksLikeImage(url) {
+      if (!url) return false;
+      return /\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff)(\?|#|$)/i.test(url);
     }
 
-    // If a landing page was selected, use its URL as destination
     let dest;
     if (landing_page_id) {
       const lp = db.prepare('SELECT url FROM landing_pages WHERE id = ?').get(landing_page_id);
-      dest = lp?.url || campaign.destination_url || campaign.preview_url;
+      dest = lp?.url || campaign.destination_url || null;
     } else {
-      dest = campaign.destination_url || campaign.preview_url;
+      dest = campaign.destination_url || null;
+    }
+    // Only fall back to preview_url when there's no real destination AND
+    // preview_url isn't a thumbnail image.
+    if (!dest && campaign.preview_url && !looksLikeImage(campaign.preview_url)) {
+      dest = campaign.preview_url;
+    }
+    if (!dest) {
+      return res.status(404).send('Campaign has no destination URL configured. Set the destination URL in campaign settings (Campaigns → Edit → Destination URL), or contact your account manager to get a tracking URL for this offer.');
     }
 
     const macroMap = {
