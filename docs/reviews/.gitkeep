@@ -1,0 +1,2 @@
+# keep this directory tracked
+# Per-feature review logs land here as `YYYY-MM-DD-<branch>.md`, written by scripts/review.sh.
