@@ -209,6 +209,52 @@ class ClickDealerConnector extends BaseConnector {
 
   static async listOffers(creds, opts = {}) {
     if (!creds?.api_key || !creds?.network_id) return [];
+    // PRIMARY PATH (2026-06-10): GetCampaign returns ONLY the offers the
+    // affiliate is actively connected to — and CRUCIALLY includes the
+    // per-affiliate tracking URL in `default_tracking_link`. Operators get
+    // a curated, runnable list instead of an 8000-row catalog where 99%
+    // would import as broken campaigns.
+    //
+    // To browse the full catalog (apply for new offers), operators use the
+    // ClickDealer dashboard directly, OR call listAllOffers() below.
+    if (opts.browse_catalog === true) {
+      return this.listAllOffers(creds, opts);
+    }
+    const all = [];
+    let startAtRow = 1;
+    for (let i = 0; i < 50; i++) {
+      const qs = buildQS(creds, {
+        row_limit: String(PAGE_LIMIT),
+        start_at_row: String(startAtRow),
+      });
+      const url = `${baseUrl(creds)}/offers.asmx/GetCampaign?${qs}`;
+      const r = await fetch(url, { timeout: 30_000, headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error(`ClickDealer GetCampaign HTTP ${r.status}`);
+      const body = await r.json().catch(() => null);
+      if (!body || String(body.success) !== 'true') {
+        throw new Error(`ClickDealer GetCampaign error: ${JSON.stringify(body?.['Possible errors:'] || body)}`);
+      }
+      // GetCampaign returns offers as numeric-keyed properties: {0: {...}, 1: {...}, ...}
+      const batch = Object.keys(body)
+        .filter(k => /^\d+$/.test(k))
+        .sort((a, b) => Number(a) - Number(b))
+        .map(k => body[k])
+        .filter(o => o && o.offer_id != null);
+      all.push(...batch);
+      if (batch.length < PAGE_LIMIT) break;
+      startAtRow += PAGE_LIMIT;
+      await sleep(RATE_LIMIT_MS);
+    }
+    return all;
+  }
+
+  // OfferFeed = full marketplace catalog (8000+ offers, NO tracking URLs).
+  // Operators use this when browsing/searching for new offers to apply for.
+  // Note: imported offers from this list will have empty destination_url
+  // until the operator applies for the offer on ClickDealer's side, then
+  // re-syncs.
+  static async listAllOffers(creds, opts = {}) {
+    if (!creds?.api_key || !creds?.network_id) return [];
     const all = [];
     let startAtRow = 1;
     for (let i = 0; i < 50; i++) {
@@ -281,7 +327,11 @@ class ClickDealerConnector extends BaseConnector {
       allowed_os: osFromPlatforms(platforms),
 
       destination_url: raw.preview_link || null,
-      tracking_url_template: null,  // not in OfferFeed; need GetCampaign after Apply
+      // tracking URL is in GetCampaign response as `default_tracking_link`
+      // (per-affiliate URL, format: https://gotocld.com/?a=<aff>&c=<creative>).
+      // For OfferFeed responses (browse_catalog=true) this field is absent;
+      // null fallback preserves the previous "empty until applied" behavior.
+      tracking_url_template: raw.default_tracking_link || null,
       preview_url: realThumbnailOrNull(raw.thumbnail_image_url),
       creatives: realThumbnailOrNull(raw.thumbnail_image_url)
         ? [{ type: 'image', url: raw.thumbnail_image_url }]
