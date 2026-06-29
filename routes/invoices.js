@@ -760,7 +760,16 @@ function _generatePDF(req, res, next) {
     doubleRule(y);
 
     doc.end();
-  } catch (err) { next(err); }
+  } catch (err) {
+    // If headers haven't been sent we can still hand off to the Express
+    // error handler with a clean JSON response. But once res.setHeader
+    // for Content-Type:application/pdf has fired and doc.pipe(res) is
+    // streaming, writing JSON would corrupt the in-flight download — so
+    // we end the stream instead and only log the error.
+    if (!res.headersSent) return next(err);
+    console.error('[invoice-pdf] mid-stream render error after headers sent:', err);
+    try { res.end(); } catch {}
+  }
 }
 
 module.exports = router;
