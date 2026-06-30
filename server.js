@@ -135,14 +135,22 @@ app.use(cors({
 }));
 
 app.use(morgan('dev'));
+
+// /pb and /postbacks MUST be mounted BEFORE the global JSON/urlencoded body
+// parsers. The route uses safeJsonParser() (see routes/postbacks.js) so a
+// malformed JSON body still returns 200 OK — required because AppsFlyer/Adjust
+// retry on non-2xx for hours. If express.json() runs first at the global level
+// it short-circuits to 400 before /pb ever sees the request, defeating the
+// always-200 guarantee.
+app.use('/pb', require('./routes/postbacks'));
+app.use('/postbacks', require('./routes/postbacks'));   // friendly alias
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Public tracking endpoints (no auth)
 app.use('/track', require('./routes/track'));
 app.use('/pixel.gif', require('./routes/pixel'));
-app.use('/pb', require('./routes/postbacks'));
-app.use('/postbacks', require('./routes/postbacks'));   // friendly alias
 app.use('/acquisition', require('./routes/acquisition')); // Trackier-compatible
 
 // IAB Sellers.json — public, declares every publisher we monetize.  Premium
