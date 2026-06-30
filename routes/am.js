@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db/init');
 const { requireRole } = require('../middleware/auth');
+const { validatePostbackUrl } = require('../utils/validatePostbackUrl');
 
 const router = express.Router();
 
@@ -412,23 +413,29 @@ router.get('/clicks', requireAM, (req, res) => {
 });
 
 // PUT /api/am/publishers/:id/postback — update global postback URL for an assigned publisher
-router.put('/publishers/:id/postback', requireAM, (req, res) => {
-  const am = getAMRecord(req.user.id);
-  if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
+router.put('/publishers/:id/postback', requireAM, async (req, res, next) => {
+  try {
+    const am = getAMRecord(req.user.id);
+    if (!am) return res.status(404).json({ error: 'Account manager profile not found' });
 
-  const pub = db.prepare(`
-    SELECT p.* FROM publishers p
-    JOIN users u ON u.id = p.publisher_user_id
-    WHERE p.id = ? AND (
-      u.account_manager_id = ?
-      OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = u.id AND uam.account_manager_id = ?)
-    )
-  `).get(req.params.id, am.id, am.id);
-  if (!pub) return res.status(403).json({ error: 'Publisher not found or not assigned to you' });
+    const pub = db.prepare(`
+      SELECT p.* FROM publishers p
+      JOIN users u ON u.id = p.publisher_user_id
+      WHERE p.id = ? AND (
+        u.account_manager_id = ?
+        OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = u.id AND uam.account_manager_id = ?)
+      )
+    `).get(req.params.id, am.id, am.id);
+    if (!pub) return res.status(403).json({ error: 'Publisher not found or not assigned to you' });
 
-  const { global_postback_url } = req.body;
-  db.prepare('UPDATE publishers SET global_postback_url = ? WHERE id = ?').run(global_postback_url || '', pub.id);
-  res.json({ success: true });
+    const { global_postback_url } = req.body;
+    // SSRF guard: validate before persisting. Empty string is allowed and clears
+    // the field. See utils/validatePostbackUrl.js for the threat model.
+    const v = await validatePostbackUrl(global_postback_url);
+    if (!v.ok) return res.status(400).json({ error: `Invalid postback URL: ${v.reason}` });
+    db.prepare('UPDATE publishers SET global_postback_url = ? WHERE id = ?').run(v.normalized, pub.id);
+    res.json({ success: true });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
