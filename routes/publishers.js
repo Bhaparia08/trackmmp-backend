@@ -3,6 +3,7 @@ const db = require('../db/init');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { nanoid10 } = require('../utils/clickId');
 const audit = require('../utils/auditLog');
+const { validatePostbackUrl } = require('../utils/validatePostbackUrl');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -100,7 +101,7 @@ router.get('/:id', (req, res) => {
   res.json(p);
 });
 
-router.put('/:id', requireRole('admin', 'account_manager'), (req, res, next) => {
+router.put('/:id', requireRole('admin', 'account_manager'), async (req, res, next) => {
   try {
     const p = isAdmin(req)
       ? db.prepare('SELECT * FROM publishers WHERE id = ?').get(req.params.id)
@@ -112,7 +113,17 @@ router.put('/:id', requireRole('admin', 'account_manager'), (req, res, next) => 
     const emailVal             = 'email'             in body ? (body.email || null)             : p.email;
     const notesVal             = 'notes'             in body ? (body.notes || null)             : p.notes;
     const statusVal            = body.status             !== undefined ? (body.status || p.status)       : p.status;
-    const postbackVal          = 'global_postback_url' in body ? (body.global_postback_url ?? '')        : p.global_postback_url;
+    // SSRF guard: only validate when the caller explicitly supplied the field,
+    // so unrelated edits don't reject a stored legacy value that wouldn't pass
+    // current rules. Empty string still clears the field.
+    let postbackVal;
+    if ('global_postback_url' in body) {
+      const v = await validatePostbackUrl(body.global_postback_url ?? '');
+      if (!v.ok) return res.status(400).json({ error: `Invalid postback URL: ${v.reason}` });
+      postbackVal = v.normalized;
+    } else {
+      postbackVal = p.global_postback_url;
+    }
     const verticalVal          = 'vertical'          in body ? (body.vertical ?? '')            : (p.vertical || '');
     const geoVal               = 'geo'               in body ? (body.geo ?? '')                 : (p.geo || '');
     const websiteUrlVal        = 'website_url'       in body ? (body.website_url ?? '')         : (p.website_url || '');

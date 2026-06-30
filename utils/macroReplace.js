@@ -141,4 +141,36 @@ function macroReplace(url, data) {
   return Object.entries(map).reduce((u, [macro, val]) => u.split(macro).join(val), url);
 }
 
-module.exports = { macroReplace };
+// Allowed macro placeholders, used by utils/validatePostbackUrl.js to reject
+// unknown {...} tokens in user-supplied postback URLs. MUST mirror the keys of
+// `map` inside macroReplace() — when adding a new macro above, add it here too.
+const MACRO_KEYS = new Set([
+  '{click_id}', '{clickid}', '{transaction_id}', '{our_click_id}',
+  '{payout}', '{revenue}', '{currency}', '{event_name}', '{event_value}',
+  '{goal_name}', '{goal_id}', '{status}',
+  '{advertising_id}', '{idfa}', '{idfv}', '{android_id}', '{gps_adid}',
+  '{gaid}', '{google_aid}', '{adid}', '{google_app_set_id}', '{att_status}',
+  '{app_id}', '{app_name}', '{bundle_id}', '{platform}',
+  '{c}', '{campaign_name}', '{af_c_id}', '{campaign_id}',
+  '{af_siteid}', '{site_id}', '{pid}', '{media_source}', '{network_name}',
+  '{af_sub1}', '{sub1}', '{af_sub2}', '{sub2}', '{af_sub3}', '{sub3}',
+  '{af_sub4}', '{sub4}', '{af_sub5}', '{sub5}',
+  '{sub6}', '{sub7}', '{sub8}', '{sub9}', '{sub10}',
+  '{creative_id}', '{ad_id}', '{creative_name}', '{adgroup_name}',
+  '{country_code}', '{country}', '{region}', '{state}', '{city}',
+  '{language}', '{ip}', '{device_type}', '{os}', '{browser}',
+  '{consent}', '{consent_state}', '{gpp}', '{gpp_string}',
+  '{install_unix_ts}', '{click_unix_ts}',
+  '{is_retargeting}', '{blocked_reason}', '{blocked_sub_reason}',
+  '{reftag}', '{tracker_name}', '{is_organic}', '{label}',
+  '{adgroup}', '{creative}',
+  '{branch_click_id}', '{channel}', '{feature}', '{campaign}', '{stage}', '{tags}',
+  '{irclickid}', '{order_id}', '{order_amount}', '{media_partner_id}',
+  '{mid}', '{u1}', '{u2}', '{u3}', '{tr}',
+  '{aff_click_id}', '{affiliate_id}', '{offer_id}',
+  '{publisher_click_id}', '{pub_click_id}', '{cid}',
+  '{externalid}', '{external_id}', '{pub_id}',
+  '{event}', '{event_type}', '{goal}',
+]);
+
+module.exports = { macroReplace, MACRO_KEYS };

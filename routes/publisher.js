@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db/init');
 const { requireRole } = require('../middleware/auth');
+const { validatePostbackUrl } = require('../utils/validatePostbackUrl');
 
 const router = express.Router();
 router.use(requireRole('publisher', 'admin'));
@@ -184,13 +185,20 @@ router.get('/settings', (req, res) => {
 });
 
 // PUT /api/publisher/settings — save publisher postback settings
-router.put('/settings', (req, res) => {
-  const pub = db.prepare('SELECT id FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
-  if (!pub) return res.status(404).json({ error: 'Publisher profile not found' });
-  const { global_postback_url } = req.body;
-  db.prepare('UPDATE publishers SET global_postback_url = ? WHERE id = ?')
-    .run(global_postback_url || '', pub.id);
-  res.json({ ok: true, global_postback_url: global_postback_url || '' });
+router.put('/settings', async (req, res, next) => {
+  try {
+    const pub = db.prepare('SELECT id FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
+    if (!pub) return res.status(404).json({ error: 'Publisher profile not found' });
+    const { global_postback_url } = req.body;
+    // SSRF guard: validate hostname/IP/protocol/macros before persisting. Empty
+    // string is allowed and clears the field. See utils/validatePostbackUrl.js
+    // for the threat model and DNS-rebinding TOCTOU caveat.
+    const v = await validatePostbackUrl(global_postback_url);
+    if (!v.ok) return res.status(400).json({ error: `Invalid postback URL: ${v.reason}` });
+    db.prepare('UPDATE publishers SET global_postback_url = ? WHERE id = ?')
+      .run(v.normalized, pub.id);
+    res.json({ ok: true, global_postback_url: v.normalized });
+  } catch (err) { next(err); }
 });
 
 // GET /api/publisher/payouts — publisher sees their own payout records
