@@ -105,6 +105,13 @@ const migrations = [
     created_by    INTEGER REFERENCES users(id),
     created_at    INTEGER NOT NULL DEFAULT (unixepoch())
   )`,
+  `ALTER TABLE publisher_api_keys ADD COLUMN api_key_hash TEXT`,
+  `ALTER TABLE publisher_api_keys ADD COLUMN api_key_prefix TEXT`,
+  `ALTER TABLE publisher_api_keys ADD COLUMN api_key_last4 TEXT`,
+  `ALTER TABLE publisher_api_keys ADD COLUMN last_rotated_at INTEGER`,
+  `ALTER TABLE publisher_api_keys ADD COLUMN revoked_at INTEGER`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_pub_api_key_hash ON publisher_api_keys(api_key_hash) WHERE api_key_hash IS NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_pub_api_key_status ON publisher_api_keys(status, publisher_id)`,
 
   // Advertiser external API credentials
   `CREATE TABLE IF NOT EXISTS advertiser_api_credentials (
@@ -1131,6 +1138,62 @@ for (const row of missingCamp) fillCamp.run(nanoid20hex(), row.id);
 const missingUsers = db.prepare("SELECT id FROM users WHERE postback_token IS NULL OR postback_token = ''").all();
 const fillUser = db.prepare("UPDATE users SET postback_token = ? WHERE id = ?");
 for (const row of missingUsers) fillUser.run(nanoid20hex(), row.id);
+
+// Publisher API key hardening:
+// Existing rows historically stored plaintext in publisher_api_keys.api_key.
+// Backfill a SHA-256 hash, keep only display metadata, then replace plaintext
+// with an irreversible placeholder because the legacy column is NOT NULL UNIQUE.
+{
+  try {
+    const {
+      hashApiKey,
+      getKeyPrefix,
+      getKeyLast4,
+      redactedApiKeyValue,
+      isRedactedApiKeyValue,
+    } = require('../utils/apiKeySecurity');
+
+    const rows = db.prepare(`
+      SELECT id, api_key, api_key_hash, created_at
+      FROM publisher_api_keys
+      WHERE api_key_hash IS NULL OR api_key_hash = ''
+    `).all();
+
+    const harden = db.prepare(`
+      UPDATE publisher_api_keys
+      SET api_key_hash = ?,
+          api_key_prefix = ?,
+          api_key_last4 = ?,
+          api_key = ?,
+          last_rotated_at = COALESCE(last_rotated_at, ?)
+      WHERE id = ?
+    `);
+    const revokeUnrecoverable = db.prepare(`
+      UPDATE publisher_api_keys
+      SET status = 'revoked',
+          revoked_at = COALESCE(revoked_at, unixepoch())
+      WHERE id = ?
+    `);
+
+    for (const row of rows) {
+      if (!row.api_key || isRedactedApiKeyValue(row.api_key)) {
+        revokeUnrecoverable.run(row.id);
+        continue;
+      }
+      const last4 = getKeyLast4(row.api_key);
+      harden.run(
+        hashApiKey(row.api_key),
+        getKeyPrefix(row.api_key),
+        last4,
+        redactedApiKeyValue(row.id, last4),
+        row.created_at || Math.floor(Date.now() / 1000),
+        row.id
+      );
+    }
+  } catch (e) {
+    console.error('[migration] publisher_api_key_hardening failed:', e.message);
+  }
+}
 
 // Backfill seq_num for existing rows that don't have one yet
 // Users — assign in created_at ASC order so oldest gets seq 1

@@ -7,9 +7,15 @@
 const express = require('express');
 const db      = require('../db/init');
 const { requireAuth } = require('../middleware/auth');
-const { customAlphabet } = require('nanoid');
-
-const nanoid32 = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', 32);
+const {
+  generateApiKey,
+  hashApiKey,
+  getKeyPrefix,
+  getKeyLast4,
+  getKeyPreview,
+  redactedApiKeyValue,
+  temporaryRedactedApiKeyValue,
+} = require('../utils/apiKeySecurity');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -25,6 +31,66 @@ function getAMAdvertiserIds(userId) {
       OR EXISTS (SELECT 1 FROM user_account_managers uam WHERE uam.user_id = u.id AND uam.account_manager_id = ?)
     )
   `).all(am.id, am.id).map(u => u.id);
+}
+
+function serializePublisherApiKey(row, secret) {
+  if (!row) return row;
+  const out = { ...row };
+  delete out.api_key_hash;
+  delete out.api_key;
+  out.api_key_preview = getKeyPreview(row);
+  // Backward compatibility for existing UI screens that render k.api_key.
+  // This is a masked preview unless this response is the one-time create response.
+  out.api_key = out.api_key_preview;
+  out.api_key_masked = true;
+  out.can_reveal = false;
+  if (secret) {
+    out.api_key = secret;
+    out.api_key_preview = getKeyPreview(secret);
+    out.api_key_masked = false;
+    out.can_reveal = true;
+    out.reveal_once = true;
+  }
+  return out;
+}
+
+function canManagePublisherKey(user, row) {
+  if (!row) return false;
+  if (user.role === 'admin') return true;
+  if (user.role === 'publisher') {
+    return row.publisher_user_id === user.id || row.user_id === user.id;
+  }
+  if (user.role === 'account_manager') {
+    const am = db.prepare('SELECT id FROM account_managers WHERE user_id = ?').get(user.id);
+    if (!am) return false;
+    const assigned = db.prepare(`
+      SELECT 1
+      FROM publishers p
+      WHERE p.id = ? AND (
+        p.publisher_user_id IN (
+          SELECT uam.user_id FROM user_account_managers uam WHERE uam.account_manager_id = ?
+        )
+        OR p.user_id IN (
+          SELECT u.created_by FROM users u
+          JOIN user_account_managers uam ON uam.user_id = u.id
+          WHERE uam.account_manager_id = ? AND u.role = 'admin'
+        )
+      )
+    `).get(row.publisher_id, am.id, am.id);
+    return !!assigned;
+  }
+  return false;
+}
+
+function getPublisherApiKeyById(id) {
+  return db.prepare(`
+    SELECT k.*, p.publisher_user_id, p.name AS publisher_name, p.email AS publisher_email,
+           u.name AS created_by_name, u.email AS created_by_email
+    FROM publisher_api_keys k
+    LEFT JOIN publishers p ON p.id = k.publisher_id
+    LEFT JOIN users u ON u.id = k.created_by
+    WHERE k.id = ?
+  `).get(id);
 }
 
 // ─── Publisher API Keys ───────────────────────────────────────────────────────
@@ -59,7 +125,7 @@ router.get('/', (req, res) => {
         ORDER BY k.created_at DESC
       `).all(am.id);
     }
-    return res.json(rows);
+    return res.json(rows.map(r => serializePublisherApiKey(r)));
   }
   if (req.user.role === 'publisher') {
     const pub = db.prepare('SELECT * FROM publishers WHERE publisher_user_id = ?').get(req.user.id);
@@ -71,7 +137,7 @@ router.get('/', (req, res) => {
       WHERE k.publisher_id = ?
       ORDER BY k.created_at DESC
     `).all(pub.id);
-    return res.json(rows);
+    return res.json(rows.map(r => serializePublisherApiKey(r)));
   }
   res.status(403).json({ error: 'Not allowed' });
 });
@@ -116,44 +182,70 @@ router.post('/', (req, res, next) => {
       return res.status(403).json({ error: 'Not allowed' });
     }
 
-    const api_key = nanoid32();
+    const api_key = generateApiKey();
+    const last4 = getKeyLast4(api_key);
     const result = db.prepare(`
-      INSERT INTO publisher_api_keys (publisher_id, user_id, name, api_key, status, created_by)
-      VALUES (?, ?, ?, ?, 'active', ?)
-    `).run(publisher_id, req.user.id, name, api_key, req.user.id);
+      INSERT INTO publisher_api_keys (
+        publisher_id, user_id, name, api_key, api_key_hash, api_key_prefix, api_key_last4,
+        status, created_by, last_rotated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, unixepoch())
+    `).run(
+      publisher_id,
+      req.user.id,
+      name,
+      temporaryRedactedApiKeyValue(last4),
+      hashApiKey(api_key),
+      getKeyPrefix(api_key),
+      last4,
+      req.user.id
+    );
 
-    res.status(201).json(db.prepare('SELECT * FROM publisher_api_keys WHERE id = ?').get(result.lastInsertRowid));
+    db.prepare('UPDATE publisher_api_keys SET api_key = ? WHERE id = ?')
+      .run(redactedApiKeyValue(result.lastInsertRowid, last4), result.lastInsertRowid);
+
+    res.status(201).json(serializePublisherApiKey(getPublisherApiKeyById(result.lastInsertRowid), api_key));
   } catch (err) { next(err); }
 });
 
 // PATCH /api/apikeys/:id — update label or status
 router.patch('/:id', (req, res, next) => {
   try {
-    const row = db.prepare('SELECT * FROM publisher_api_keys WHERE id = ?').get(req.params.id);
+    const row = getPublisherApiKeyById(req.params.id);
     if (!row) return res.status(404).json({ error: 'Not found' });
-    // Admin, AM (who created it), or publisher (who owns it) can update
-    if (req.user.role !== 'admin' && req.user.role !== 'account_manager' && row.user_id !== req.user.id) {
+    if (!canManagePublisherKey(req.user, row)) {
       return res.status(403).json({ error: 'Not allowed' });
     }
 
     const { name, status } = req.body;
-    db.prepare('UPDATE publisher_api_keys SET name=COALESCE(?,name), status=COALESCE(?,status) WHERE id=?')
-      .run(name || null, status || null, row.id);
+    if (status && !['active', 'revoked'].includes(status)) {
+      return res.status(400).json({ error: 'status must be active or revoked' });
+    }
+    if (status === 'active' && row.status === 'revoked') {
+      return res.status(400).json({ error: 'Revoked API keys cannot be reactivated. Generate a new key instead.' });
+    }
+    db.prepare(`
+      UPDATE publisher_api_keys
+      SET name = COALESCE(?, name),
+          status = COALESCE(?, status),
+          api_key_hash = CASE WHEN ? = 'revoked' THEN NULL ELSE api_key_hash END,
+          revoked_at = CASE WHEN ? = 'revoked' THEN COALESCE(revoked_at, unixepoch()) ELSE revoked_at END
+      WHERE id = ?
+    `).run(name || null, status || null, status || null, status || null, row.id);
 
-    res.json(db.prepare('SELECT * FROM publisher_api_keys WHERE id = ?').get(row.id));
+    res.json(serializePublisherApiKey(getPublisherApiKeyById(row.id)));
   } catch (err) { next(err); }
 });
 
 // DELETE /api/apikeys/:id — revoke/delete key
 router.delete('/:id', (req, res, next) => {
   try {
-    const row = db.prepare('SELECT * FROM publisher_api_keys WHERE id = ?').get(req.params.id);
+    const row = getPublisherApiKeyById(req.params.id);
     if (!row) return res.status(404).json({ error: 'Not found' });
-    // Admin, AM, or publisher (who owns it) can revoke
-    if (req.user.role !== 'admin' && req.user.role !== 'account_manager' && row.user_id !== req.user.id) {
+    if (!canManagePublisherKey(req.user, row)) {
       return res.status(403).json({ error: 'Not allowed' });
     }
-    db.prepare("UPDATE publisher_api_keys SET status = 'revoked' WHERE id = ?").run(row.id);
+    db.prepare("UPDATE publisher_api_keys SET status = 'revoked', api_key_hash = NULL, revoked_at = COALESCE(revoked_at, unixepoch()) WHERE id = ?").run(row.id);
     res.json({ success: true });
   } catch (err) { next(err); }
 });
